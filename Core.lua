@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 local Tr = ns.L
 ns.name = ADDON
-ns.version = "0.19.1"
+ns.version = "0.19.2"
 _G.ImpotPointGouv = ns
 
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. Tr("\\media\\")

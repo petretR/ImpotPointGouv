@@ -102,21 +102,20 @@ function LU.BuildPage(page)
     side:SetPoint("TOPLEFT", 0, 0); side:SetPoint("BOTTOMLEFT", 0, 0); side:SetWidth(SIDE_W)
     T.Surface(side, C.surface, 10)
     page.sideBtns = {}
-    local SIDE_ROWS = 23
+    page.collapsed = ns.db.settings.listCollapsed or { level = true, prebis = true, cd = true }
+    ns.db.settings.listCollapsed = page.collapsed
+    local SIDE_ROWS = 22
+    local HEAD_H, ITEM_H = 30, 26
+    page.sideH = 0
     for i = 1, SIDE_ROWS do
         local b = CreateFrame("Button", nil, side)
-        b:SetHeight(21)
-        b:SetPoint("TOPLEFT", 6, -6 - (i - 1) * 22); b:SetPoint("TOPRIGHT", -6, -6 - (i - 1) * 22)
         b.hl = T.Rounded(b, { 1, 1, 1, 0 }, 6, "BACKGROUND")
-        b.t = T.Text(b, 12); b.t:SetPoint("LEFT", 10, 0); b.t:SetWidth(SIDE_W - 60)
-        -- En-tête de groupe : trait or au-dessus et pastille à gauche.
-        b.div = b:CreateTexture(nil, "ARTWORK"); b.div:SetTexture(T.WHITE); b.div:SetHeight(1)
-        b.div:SetPoint("TOPLEFT", 6, 1); b.div:SetPoint("TOPRIGHT", -6, 1); b.div:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.25)
-        b.bar = b:CreateTexture(nil, "ARTWORK"); b.bar:SetTexture(T.WHITE); b.bar:SetSize(3, 11)
-        b.bar:SetPoint("LEFT", 6, 0); b.bar:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
-        b.badge = T.Text(b, 11, { bold = true, justify = "RIGHT", color = VERDICT.buy[2] }); b.badge:SetPoint("RIGHT", -8, 0)
+        b.t = T.Text(b, 12); b.t:SetWidth(SIDE_W - 52); b.t:SetWordWrap(false)
+        b.chev = T.Text(b, 12, { bold = true, color = C.gold, justify = "RIGHT" }); b.chev:SetPoint("RIGHT", -10, 0)
+        b.badge = T.Text(b, 11, { bold = true, justify = "RIGHT", color = VERDICT.buy[2] })
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        b:SetScript("OnEnter", function(self) if self.item and not self.item.header then self.hl:SetColor({ 1, 1, 1, 0.05 }) end
+        b:SetScript("OnEnter", function(self)
+            if self.item and not self.item.new then self.hl:SetColor({ 1, 1, 1, 0.05 }) end
             if self.item and self.item.list and self.item.list.info then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:AddLine(Tr(self.item.list.title), 1, 1, 1)
                 GameTooltip:AddLine(self.item.list.info, 0.75, 0.75, 0.75, true); GameTooltip:Show()
@@ -126,10 +125,14 @@ function LU.BuildPage(page)
             local it = self.item
             if not it then return end
             if it.new then StaticPopup_Show("IMPOTPOINTGOUV_NEWLIST"); return end
-            if it.header then return end
+            if it.header then
+                page.collapsed[it.key] = not page.collapsed[it.key] or nil
+                page:Refresh()
+                return
+            end
             if button == "RightButton" and it.list.custom then
                 local idx = it.list.custom
-                Popup(self, { { "Delete this list", function()
+                Popup(self, { { Tr("Delete this list"), function()
                     LS.DeleteCustom(idx); LU.select = "consum"; ns.UI.Refresh() end, color = C.neg } })
                 return
             end
@@ -141,15 +144,17 @@ function LU.BuildPage(page)
     end
     side:EnableMouseWheel(true)
     side:SetScript("OnMouseWheel", function(_, d)
-        page.sideOffset = math.max(0, math.min(math.max(0, #(page.sideItems or {}) - SIDE_ROWS), page.sideOffset - d * 2))
+        page.sideOffset = math.max(0, math.min(math.max(0, #(page.sideItems or {}) - 1), page.sideOffset - d))
         page:DrawSide()
     end)
+    page.side = side
+    page.HEAD_H, page.ITEM_H = HEAD_H, ITEM_H
 
     -- En-tête de droite
     local main = CreateFrame("Frame", nil, page)
     main:SetPoint("TOPLEFT", SIDE_W + 12, 0); main:SetPoint("BOTTOMRIGHT", 0, 0)
     page.title = T.Text(main, 18, { bold = true }); page.title:SetPoint("TOPLEFT", 0, -2)
-    page.sub = T.Text(main, 11, { color = C.muted }); page.sub:SetPoint("TOPLEFT", page.title, "BOTTOMLEFT", 0, -3)
+    page.sub = T.Text(main, 11, { color = C.muted }); page.sub:SetPoint("TOPLEFT", page.title, "BOTTOMLEFT", 0, -7)
     page.sub:SetPoint("RIGHT", main, "RIGHT", -230, 0); page.sub:SetWordWrap(false)
 
     page.scan = T.Button(main, Tr("Scan list"), 100, 26, function()
@@ -296,25 +301,37 @@ function LU.BuildPage(page)
     -- ---------------------------------------------------------- dessin
     function page:DrawSide()
         local items = self.sideItems or {}
+        local y = -8
+        local sh = self.side:GetHeight()
+        if not sh or sh < 100 then sh = 500 end
+        local maxY = -sh + 8
         for i, b in ipairs(self.sideBtns) do
             local it = items[self.sideOffset + i]
             b.item = it
-            if it then
-                b.t:ClearAllPoints()
-                b.div:SetShown(it.header ~= nil and (self.sideOffset + i) > 1)
-                b.bar:SetShown(it.header ~= nil)
+            local h = it and (it.header and self.HEAD_H or self.ITEM_H) or 0
+            if it and it.header and i > 1 then y = y - 6 end -- un peu d'air avant chaque groupe
+            if it and y - h >= maxY then
+                b:ClearAllPoints()
+                b:SetPoint("TOPLEFT", 6, y); b:SetPoint("TOPRIGHT", -6, y); b:SetHeight(h)
+                y = y - h
+                b.t:ClearAllPoints(); b.badge:ClearAllPoints()
                 if it.header then
-                    b.t:SetPoint("LEFT", 14, 0)
+                    b.t:SetPoint("LEFT", 10, 0)
                     b.t:SetText(Tr(it.header)); T.SetFont(b.t, 11, true); b.t:SetTextColor(unpack(C.gold))
-                    b.badge:SetText(""); b.hl:SetColor({ 1, 1, 1, 0 })
+                    b.chev:SetText(it.open and "–" or "+"); b.chev:Show()
+                    b.badge:SetPoint("RIGHT", b.chev, "LEFT", -8, 0)
+                    b.badge:SetText((not it.open and it.deals > 0) and ("● " .. it.deals) or "")
+                    b.hl:SetColor({ 1, 1, 1, 0.025 })
                 elseif it.new then
-                    b.t:SetPoint("LEFT", 18, 0)
+                    b.t:SetPoint("LEFT", 22, 0)
                     b.t:SetText(Tr("+ New list")); T.SetFont(b.t, 12, false); b.t:SetTextColor(unpack(C.gold))
-                    b.badge:SetText(""); b.hl:SetColor({ 1, 1, 1, 0 })
+                    b.chev:Hide(); b.badge:SetText(""); b.hl:SetColor({ 1, 1, 1, 0 })
                 else
                     local sel = it.list.key == LU.select
-                    b.t:SetPoint("LEFT", 18, 0)
+                    b.t:SetPoint("LEFT", 22, 0)
                     b.t:SetText(Tr(it.list.title)); T.SetFont(b.t, 12, sel); b.t:SetTextColor(unpack(sel and C.text or C.muted))
+                    b.chev:Hide()
+                    b.badge:SetPoint("RIGHT", -10, 0)
                     b.badge:SetText(it.deals > 0 and ("● " .. it.deals) or "")
                     b.hl:SetColor(sel and { C.gold[1], C.gold[2], C.gold[3], 0.14 } or { 1, 1, 1, 0 })
                 end
@@ -387,9 +404,15 @@ function LU.BuildPage(page)
         -- colonne de gauche
         local items = {}
         for _, g in ipairs(groups) do
-            items[#items + 1] = { header = g.title }
-            for _, l in ipairs(g.lists) do items[#items + 1] = { list = l, deals = LS.Deals(l) } end
-            if g.custom then items[#items + 1] = { new = true } end
+            local open = not self.collapsed[g.key]
+            local head = { header = g.title, key = g.key, open = open, deals = 0 }
+            items[#items + 1] = head
+            for _, l in ipairs(g.lists) do
+                local d = LS.Deals(l)
+                head.deals = head.deals + d
+                if open then items[#items + 1] = { list = l, deals = d } end
+            end
+            if g.custom and open then items[#items + 1] = { new = true } end
         end
         self.sideItems = items
         self:DrawSide()
@@ -425,9 +448,9 @@ function LU.BuildPage(page)
         local sub = (Tr("%d items")):format(#data)
         if l.leveling then
             local now, usual, missing = LS.LevelCost(l)
-            sub = sub .. (Tr("  ·  cost now %s, usual %s%s")):format(Money(now), Money(usual), missing > 0 and (Tr("  (%d not priced)")):format(missing) or "")
-            if usual > 0 and now > usual * 1.1 then sub = sub .. Tr("  ·  |cffe0a83dprices are high: wait|r")
-            elseif usual > 0 and now < usual * 0.9 then sub = sub .. Tr("  ·  |cff5cd173good time to buy|r") end
+            sub = sub .. (Tr("  ·  Cost now %s, usual %s%s")):format(Money(now), Money(usual), missing > 0 and (Tr("  (%d not priced)")):format(missing) or "")
+            if usual > 0 and now > usual * 1.1 then sub = sub .. Tr("  ·  |cffe0a83dPrices are high: wait|r")
+            elseif usual > 0 and now < usual * 0.9 then sub = sub .. Tr("  ·  |cff5cd173Good time to buy|r") end
         elseif l.key == "cd" then
             local board = LS.CooldownBoard()
             local parts = {}
@@ -435,14 +458,9 @@ function LU.BuildPage(page)
                 local c = board[k]
                 local ready = c.readyAt <= time()
                 parts[#parts + 1] = ("%s %s %s"):format(c.char, c.cd.n:gsub("^Transmute: ", "T: "),
-                    ready and "|cff5cd173ready|r" or ("in " .. P.Ago(c.readyAt - time()):gsub(" ago", "")))
+                    ready and ("|cff5cd173" .. Tr("ready") .. "|r") or (Tr("in %s")):format((P.Ago(c.readyAt - time()):gsub(" ago", ""))))
             end
-            sub = sub .. "  ·  " .. (#parts > 0 and table.concat(parts, "  ·  ") or "open your crafters' professions once to track their cooldowns")
-        else
-            local res = LS.resolved
-            if res and res.total > 0 and res.found < res.total and (l.key == "enchant" or l.key:find("^pb_")) then
-                sub = sub .. (Tr("  ·  materials known for %d / %d recipes")):format(res.found, res.total)
-            end
+            sub = sub .. "  ·  " .. (#parts > 0 and table.concat(parts, "  ·  ") or Tr("Open your crafters' professions once to track their cooldowns"))
         end
         local sc = P.Scanning and P.Scanning()
         if sc and sc.mode == "list" then sub = (Tr("Scanning %s: %d / %d…")):format(sc.label, sc.i, #sc.ids) end
