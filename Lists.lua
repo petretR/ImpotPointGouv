@@ -47,7 +47,7 @@ function LS.ResolveReagents()
     local function Try(spell)
         if not spell then return end
         total = total + 1
-        if db[spell] then found = found + 1; return end
+        if db[spell] or (D.spellReagents and D.spellReagents[spell]) then found = found + 1; return end
         local r = FromSchematic(spell)
         if r then db[spell] = r; found = found + 1 end
     end
@@ -78,7 +78,7 @@ local function IsVendor(id) return P.IsVendorItem and P.IsVendorItem(id) end
 function LS.ReagentsOf(id)
     local D = Data()
     local it = D.items and D.items[id]
-    local r = (it and it.s and RDB()[it.s]) or ProductIndex()[id] or (D.reagents and D.reagents[id])
+    local r = (it and it.s and (RDB()[it.s] or (D.spellReagents and D.spellReagents[it.s]))) or ProductIndex()[id] or (D.reagents and D.reagents[id])
     if not r then return nil end
     local out = {}
     for _, rg in ipairs(r) do
@@ -164,7 +164,7 @@ function LS.Build()
     local nRes = 0
     for spell, e in pairs(D.ench or {}) do
         if not e.low then
-            local r = RDB()[spell]
+            local r = RDB()[spell] or (D.spellReagents and D.spellReagents[spell])
             if r then
                 nRes = nRes + 1
                 local roles = RolesOf(e.sp)
@@ -572,7 +572,7 @@ function LS.Diag()
     LS.Build()
     local n = 0
     for _, g in ipairs(LS.groups) do for _, l in ipairs(g.lists) do n = n + #l.entries end end
-    ns.Print(("lists: recipe materials from the game for %d / %d recipes · %d items across all lists."):format(found, total, n))
+    ns.Print(("lists: recipe materials known for %d / %d recipes · %d items across all lists."):format(found, total, n))
     local it = Data().items and Data().items[18510] -- Hide of the Wild (recette non connue de vos persos)
     local r = it and FromSchematic(it.s)
     local parts = {}
