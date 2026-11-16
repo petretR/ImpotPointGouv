@@ -1,0 +1,6 @@
+<Bindings>
+	<Binding name="CLICK ImpotPointGouvNextButton:LeftButton" header="IMPOTPOINTGOUV" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK ImpotPointGouvDestroyButton:LeftButton" category="ADDONS">
+	</Binding>
+</Bindings>

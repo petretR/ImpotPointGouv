@@ -1,0 +1,595 @@
+-- ImpotPointGouv : suivi de chaque mouvement d'or et classement par catégorie.
+--
+-- Principe : chaque variation de GetMoney() (PLAYER_MONEY) devient UNE opération.
+-- La somme des opérations = la variation réelle de l'or. On choisit la catégorie :
+--   1. attentes explicites posées par nos hooks (courrier HV, achat HV, dépôt...),
+--      appariées au montant exact quand on le connaît ;
+--   2. sinon le contexte (fenêtre marchand / courrier / HV / butin ouverte...) ;
+--   3. sinon "Autre", éventuellement re-classé une seconde plus tard
+--      (CHAT_MSG_MONEY -> Butin, QUEST_TURNED_IN -> Quêtes).
+local _, ns = ...
+local L = {}
+ns.Ledger = L
+
+local GetTime, time = GetTime, time
+local tinsert, tremove = table.insert, table.remove
+
+local charKey, lastMoney
+local pending = {}       -- attentes { amount?, sign?, k, info, exp, multi }
+local ctx = {}           -- [nom] = instant jusqu'auquel le contexte est actif
+local lastTx, lastTxTime
+
+-- ------------------------------------------------------------ personnage
+function L.CharKey() return charKey end
+
+-- WoW Forever : prénom + nom. UnitName ne donne que le prénom ; on cherche le nom complet ailleurs.
+local function FullFrom(text, first)
+    if type(text) ~= "string" or not first then return nil end
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    local pos = text:find(first, 1, true)
+    if not pos then return nil end
+    local rest = text:sub(pos):gsub("%s*<.*$", ""):gsub("%s+$", "")
+    if rest:find(" ") and #rest > #first then return rest end
+end
+
+function L.DetectFullName(first)
+    local cands = {}
+    if UnitPVPName then cands[#cands + 1] = UnitPVPName("player") end
+    if GetUnitName then cands[#cands + 1] = GetUnitName("player", false) end
+    if UnitFullName then cands[#cands + 1] = (UnitFullName("player")) end
+    for _, t in ipairs(cands) do
+        local full = FullFrom(t, first)
+        if full then return full end
+    end
+end
+
+-- Titre de la fiche personnage (touche C) : affiche le nom complet sur Forever.
+function L.HookCharacterFrame()
+    if L.charHooked or not CharacterFrame then return end
+    L.charHooked = true
+    CharacterFrame:HookScript("OnShow", function()
+        C_Timer.After(0.1, function()
+            local key = UnitGUID("player")
+            local c = key and ns.db.chars[key]
+            if not c then return end
+            local texts = {}
+            local fs = _G.CharacterFrameTitleText
+                or (CharacterFrame.TitleContainer and CharacterFrame.TitleContainer.TitleText)
+            if fs and fs.GetText then texts[#texts + 1] = fs:GetText() end
+            if CharacterFrame.GetTitleText then
+                local t = CharacterFrame:GetTitleText()
+                texts[#texts + 1] = type(t) == "table" and t.GetText and t:GetText() or t
+            end
+            -- Dernier recours : n'importe quel texte de la fiche qui commence par le prénom.
+            for _, region in ipairs({ CharacterFrame:GetRegions() }) do
+                if region.GetObjectType and region:GetObjectType() == "FontString" then texts[#texts + 1] = region:GetText() end
+            end
+            local full
+            for _, t in ipairs(texts) do full = full or FullFrom(t, c.name) end
+            if not full and c.full then
+                -- (silencieux)
+                return
+            end
+            if full and c.full ~= full then
+                c.full = full
+                -- (silencieux)
+                ns.Fire("LEDGER_CHANGED")
+            elseif full and not L.namePrinted then
+                L.namePrinted = true
+                -- (silencieux)
+            end
+        end)
+    end)
+end
+
+-- Métiers du personnage (sans ouvrir de fenêtre) : sert à la page Characters et au guide de démarrage.
+function L.ReadProfessions(c)
+    c = c or (charKey and ns.db.chars[charKey])
+    if not c or not GetProfessions or not GetProfessionInfo then return end
+    local list = {}
+    local ok, p1, p2, arch, fish, cook = pcall(GetProfessions)
+    if not ok then return end
+    for _, i in ipairs({ p1 or 0, p2 or 0, cook or 0, fish or 0 }) do
+        if i and i > 0 then
+            local name, _, rank, maxRank, _, _, line = GetProfessionInfo(i)
+            -- Herboristerie, dépeçage, pêche : pas de recettes à lire.
+            local gather = i == fish or line == 182 or line == 393 or line == 356
+            if name then list[#list + 1] = { name = name, rank = rank, max = maxRank, gather = gather } end
+        end
+    end
+    c.profs = list
+end
+
+local function EnsureChar()
+    local db = ns.db
+    local guid = UnitGUID("player")
+    if not guid then return nil end
+    charKey = guid
+    local c = db.chars[guid]
+    local name = UnitName("player")
+    local realm = GetRealmName and GetRealmName() or ""
+    local _, class = UnitClass("player")
+    local isNew = false
+    if not c then
+        c = { firstSeen = time() }
+        db.chars[guid] = c
+        isNew = true
+    end
+    c.name, c.realm, c.class = name, realm, class
+    local full = L.DetectFullName(name)
+    if full and c.full ~= full then
+        c.full = full
+        -- nom complet enregistré sans message dans le chat
+    end
+    c.lastSeen = time()
+    c.level = UnitLevel and UnitLevel("player") or c.level
+    L.ReadProfessions(c)
+    db.snaps[guid] = db.snaps[guid] or {}
+    return c, isNew
+end
+
+-- ------------------------------------------------------------ enregistrement
+function L.Snapshot(money)
+    local s = ns.db.snaps[charKey]
+    if not s then return end
+    local now = time()
+    local last = s[#s]
+    if last and now - last[1] < 60 then
+        last[2] = money
+    elseif not last or last[2] ~= money then
+        s[#s + 1] = { now, money }
+        if #s > ns.MAX_SNAPS then tremove(s, 1) end
+    end
+    ns.db.chars[charKey].money = money
+    ns.db.chars[charKey].lastSeen = now
+end
+
+function L.AddTx(k, amount, info)
+    local tx = { t = time(), c = charKey, k = k, a = amount }
+    if info then
+        tx.i, tx.q, tx.who = info.i, info.q, info.who
+        tx.gross, tx.cut, tx.dep, tx.unit = info.gross, info.cut, info.dep, info.unit
+        tx.st = info.st
+        -- Détail objet (ventes marchand) : id, qualité, niveau d'objet, lié, classe, valeur HV du moment.
+        tx.id, tx.qu, tx.il, tx.b, tx.cl, tx.mv = info.id, info.qu, info.il, info.b, info.cl, info.mv
+    end
+    -- Où et à quel niveau : pour mesurer l'or par zone et par niveau.
+    if ns.Track then tx.z = ns.Track.Zone() end
+    tx.pl = UnitLevel and UnitLevel("player") or nil
+    local list = ns.db.tx
+    list[#list + 1] = tx
+    if #list > ns.MAX_TX then tremove(list, 1) end
+    lastTx, lastTxTime = tx, GetTime()
+    ns.Fire("TX_ADDED", tx)
+    return tx
+end
+
+-- Attente : la prochaine variation correspondante prendra cette catégorie.
+function L.Expect(e)
+    e.exp = GetTime() + (e.ttl or 6)
+    pending[#pending + 1] = e
+end
+
+local function TakePending(delta)
+    local now = GetTime()
+    for i = #pending, 1, -1 do
+        if pending[i].exp < now then tremove(pending, i) end
+    end
+    for i, e in ipairs(pending) do
+        if e.amount and e.amount == delta then tremove(pending, i); return e end
+    end
+    -- Attentes sans montant : la plus récente gagne (ex. achat juste après une mise en vente).
+    for i = #pending, 1, -1 do
+        local e = pending[i]
+        if not e.amount and e.sign and ((delta > 0) == (e.sign > 0)) then
+            if not e.multi then tremove(pending, i) end
+            return e
+        end
+    end
+end
+
+-- Somme des ventes marchand attendues (dans l'ordre) égale à la variation, quand aucune ne correspond seule.
+local function TakeVendorBatch(delta)
+    local now, sum, picks = GetTime(), 0, {}
+    for _, e in ipairs(pending) do
+        if e.exp >= now and e.amount == delta then return nil end
+    end
+    for i, e in ipairs(pending) do
+        if e.k == "vendor_sell" and e.amount and e.exp >= now then
+            sum = sum + e.amount
+            picks[#picks + 1] = i
+            if sum >= delta then break end
+        end
+    end
+    if sum ~= delta or #picks < 2 then return nil end
+    local out = {}
+    for j = #picks, 1, -1 do table.insert(out, 1, tremove(pending, picks[j])) end
+    return out
+end
+
+local function Active(name) return (ctx[name] or 0) >= GetTime() end
+
+local function Classify(delta)
+    local e = TakePending(delta)
+    if e then return e.k, e.info end
+    if Active("merchant") then
+        if delta > 0 then return "vendor_sell" end
+        if InRepairMode and InRepairMode() then return "repair" end
+        return "vendor_buy"
+    end
+    if Active("mail") then return "mail" end
+    if Active("ah") then return "ah_other" end
+    if Active("loot") then return "loot" end
+    if Active("quest") and delta > 0 then return "quest" end
+    if Active("trainer") and delta < 0 then return "trainer" end
+    if Active("taxi") and delta < 0 then return "travel" end
+    if Active("trade") then return "trade" end
+    return "other"
+end
+L._Classify = Classify -- pour les tests
+
+-- Re-classe une opération "Autre" toute récente quand l'info arrive après l'argent.
+local function Retag(k, amount)
+    if lastTx and lastTx.k == "other" and lastTxTime and GetTime() - lastTxTime <= 2
+        and (not amount or lastTx.a == amount) then
+        lastTx.k = k
+        ns.Fire("LEDGER_CHANGED")
+        return true
+    end
+end
+
+function L.OnMoney()
+    if not charKey then return end
+    local now = GetMoney()
+    if lastMoney == nil then lastMoney = now; L.Snapshot(now); return end
+    local delta = now - lastMoney
+    lastMoney = now
+    if delta == 0 then return end
+    -- Plusieurs ventes au marchand arrivées en une seule variation d'or : une ligne par objet.
+    local batch = delta > 0 and TakeVendorBatch(delta)
+    if batch then
+        for _, e in ipairs(batch) do L.AddTx("vendor_sell", e.amount, e.info) end
+        L.Snapshot(now)
+        ns.Fire("LEDGER_CHANGED")
+        return
+    end
+    local k, info = Classify(delta)
+    L.AddTx(k, delta, info)
+    L.Snapshot(now)
+    ns.Fire("LEDGER_CHANGED")
+end
+
+-- ------------------------------------------------------------ hooks courrier / HV
+local AH_SUBJECT_HINTS = { "Outbid", "Surench", "enchère", "Auction", "Hôtel des ventes", "Hotel des ventes" }
+
+local function ParseCount(subject)
+    if not subject then return nil end
+    local n = subject:match("%((%d+)%)%s*$")
+    return n and tonumber(n) or nil
+end
+
+local function PrepareMail(index)
+    if not index or not GetInboxHeaderInfo then return end
+    local _, _, sender, subject, money, _, daysLeft = GetInboxHeaderInfo(index)
+    -- Heure réelle de la vente : un courrier HV vit 30 jours, daysLeft dit depuis quand il est arrivé.
+    local soldAt = daysLeft and (time() - math.floor(math.max(0, 30 - daysLeft) * 86400)) or nil
+    if not money or money <= 0 then return end
+    local invoiceType, itemName, playerName, bid, _, deposit, consignment, _, _, count
+    if GetInboxInvoiceInfo then
+        invoiceType, itemName, playerName, bid, _, deposit, consignment, _, _, count = GetInboxInvoiceInfo(index)
+    end
+    if invoiceType == "seller" then
+        L.Expect({ amount = money, k = "ah_sale", ttl = 20, info = {
+            i = itemName, who = playerName, q = (count and count > 0 and count) or ParseCount(subject) or 1,
+            gross = bid, cut = consignment, dep = deposit, st = soldAt } })
+        return
+    end
+    local kind, subjItem = ns.AuctionMailKind(subject)
+    if kind == "sale" then
+        L.Expect({ amount = money, k = "ah_sale", ttl = 20, info = { i = itemName or subjItem, q = ParseCount(subject), st = soldAt } })
+        return
+    end
+    itemName = itemName or subjItem
+    local isAH = invoiceType ~= nil or kind ~= nil
+    if not isAH then
+        local hay = (sender or "") .. " " .. (subject or "")
+        for _, hint in ipairs(AH_SUBJECT_HINTS) do
+            if hay:find(hint, 1, true) then isAH = true; break end
+        end
+    end
+    if isAH then
+        L.Expect({ amount = money, k = "ah_refund", ttl = 20, info = { i = itemName, who = sender } })
+    else
+        L.Expect({ amount = money, k = "mail", ttl = 20, info = { who = sender, i = subject } })
+    end
+end
+
+-- Objet revenu de l'HV (expiré / annulé) récupéré au courrier : noté pour le taux de vente.
+local returnedSeen = {}
+function L.NoteReturnedItem(index)
+    if not index or not GetInboxHeaderInfo then return end
+    local _, _, sender, subject, _, _, daysLeft = GetInboxHeaderInfo(index)
+    local kind, item = ns.AuctionMailKind(subject)
+    if kind ~= "expired" and kind ~= "cancelled" then return end
+    local sig = (sender or "") .. (subject or "") .. tostring(daysLeft)
+    if returnedSeen[sig] then return end
+    returnedSeen[sig] = true
+    local count = 1
+    if GetInboxItem then
+        local _, _, _, c = GetInboxItem(index, 1)
+        count = c or 1
+    end
+    L.AddTx(kind == "expired" and "ah_expired" or "ah_cancelled", 0, { i = item, q = count })
+    ns.Fire("LEDGER_CHANGED")
+end
+
+-- L'objet mis en vente : mémorisé dès qu'il est posé dans la case de vente,
+-- car PostAuction vide la case avant que notre hook ne s'exécute.
+local sellItem
+local function CacheSellItem()
+    if not GetAuctionSellItemInfo then return end
+    local name, _, count = GetAuctionSellItemInfo()
+    if name then sellItem = { i = name, q = count } end
+end
+
+local function OnPost(_, _, _, stackSize, numStacks)
+    local info = sellItem and { i = sellItem.i, q = (stackSize and numStacks) and stackSize * numStacks or sellItem.q }
+    L.Expect({ sign = -1, multi = true, k = "ah_deposit", ttl = 15, info = info })
+end
+
+local function OnBid(listType, index, bid)
+    if not bid or bid <= 0 then return end
+    local name, count
+    if GetAuctionItemInfo then
+        local n, _, c = GetAuctionItemInfo(listType, index)
+        name, count = n, c
+    end
+    L.Expect({ amount = -bid, k = "ah_buy", ttl = 15, info = { i = name, q = count } })
+end
+
+local function SafeHook(name, fn)
+    if type(_G[name]) == "function" then hooksecurefunc(name, fn) end
+end
+
+-- ------------------------------------------------------------ événements
+local CONTEXT_EVENTS = {
+    MERCHANT_SHOW = { "merchant", true },      MERCHANT_CLOSED = { "merchant", false },
+    MAIL_SHOW = { "mail", true },              MAIL_CLOSED = { "mail", false },
+    AUCTION_HOUSE_SHOW = { "ah", true },       AUCTION_HOUSE_CLOSED = { "ah", false },
+    LOOT_OPENED = { "loot", true },            LOOT_CLOSED = { "loot", false },
+    QUEST_COMPLETE = { "quest", true },        QUEST_FINISHED = { "quest", false },
+    TRAINER_SHOW = { "trainer", true },        TRAINER_CLOSED = { "trainer", false },
+    TAXIMAP_OPENED = { "taxi", true },         TAXIMAP_CLOSED = { "taxi", false },
+    TRADE_SHOW = { "trade", true },            TRADE_CLOSED = { "trade", false },
+}
+
+local frame = CreateFrame("Frame")
+local function Register(ev) pcall(frame.RegisterEvent, frame, ev) end
+
+Register("ADDON_LOADED")
+Register("PLAYER_ENTERING_WORLD")
+Register("PLAYER_MONEY")
+Register("CHAT_MSG_MONEY")
+Register("QUEST_TURNED_IN")
+Register("NEW_AUCTION_UPDATE")
+Register("PLAYER_LOGOUT")
+Register("SKILL_LINES_CHANGED")
+for ev in pairs(CONTEXT_EVENTS) do Register(ev) end
+
+local started = false
+local function Start()
+    if started then return end
+    local c, isNew = EnsureChar()
+    if not c then return end
+    started = true
+    local money = GetMoney()
+    if not isNew and c.money and c.money ~= money then
+        -- L'or a changé hors de notre vue (addon désactivé, autre PC...).
+        -- Sauf si cette même somme vient d'être enregistrée pour ce perso (solde pas encore sauvegardé) : pas de double compte.
+        local delta, dup = money - c.money, false
+        for i = #ns.db.tx, 1, -1 do
+            local tx = ns.db.tx[i]
+            if time() - tx.t > 6 * 3600 then break end
+            if tx.c == charKey and tx.a == delta and tx.k ~= "offline" then dup = true; break end
+        end
+        if not dup then L.AddTx("offline", delta) end
+    end
+    lastMoney = money
+    L.Snapshot(money)
+    L.HookCharacterFrame()
+    if L.hooked then ns.Fire("LEDGER_READY"); return end
+    L.hooked = true
+
+    SafeHook("TakeInboxMoney", PrepareMail)
+    SafeHook("AutoLootMailItem", PrepareMail)
+    SafeHook("AutoLootMailItem", L.NoteReturnedItem)
+    SafeHook("TakeInboxItem", L.NoteReturnedItem)
+    SafeHook("PlaceAuctionBid", OnBid)
+    SafeHook("PostAuction", OnPost)
+    SafeHook("StartAuction", OnPost)
+    SafeHook("RepairAllItems", function() L.Expect({ sign = -1, k = "repair", ttl = 4 }) end)
+
+    -- HV moderne (C_AuctionHouse), utilisée par WoW Forever.
+    local AHM = C_AuctionHouse
+    if AHM then
+        local lastItemID
+        local function NameOf(id) return id and ((ns.GetItemInfo(id)) or ns.db.items[id]) or nil end
+        local function LocName(loc)
+            if C_Item and C_Item.GetItemName then
+                local ok, n = pcall(C_Item.GetItemName, loc)
+                if ok then return n end
+            end
+        end
+        local function Hook(fname, fn) if type(AHM[fname]) == "function" then hooksecurefunc(AHM, fname, fn) end end
+        Hook("SendSearchQuery", function(itemKey) lastItemID = itemKey and itemKey.itemID end)
+        -- On garde aussi le prix demandé (unit = prix unitaire) pour mesurer les ventes réelles.
+        Hook("PostItem", function(loc, _, qty, _, buyout)
+            L.Expect({ sign = -1, multi = true, k = "ah_deposit", ttl = 10,
+                info = { i = LocName(loc), q = qty, unit = buyout and qty and qty > 0 and math.floor(buyout / qty) or buyout } })
+        end)
+        Hook("PostCommodity", function(loc, _, qty, unitPrice)
+            L.Expect({ sign = -1, multi = true, k = "ah_deposit", ttl = 10, info = { i = LocName(loc), q = qty, unit = unitPrice } })
+        end)
+        Hook("PlaceBid", function(_, bid)
+            if bid and bid > 0 then
+                L.Expect({ amount = -bid, k = "ah_buy", ttl = 15, info = { i = NameOf(lastItemID), q = 1 } })
+            end
+        end)
+        Hook("ConfirmCommoditiesPurchase", function(itemID, qty)
+            L.Expect({ sign = -1, k = "ah_buy", ttl = 15, info = { i = NameOf(itemID), q = qty } })
+        end)
+    end
+    ns.Fire("LEDGER_READY")
+end
+
+frame:SetScript("OnEvent", function(_, event, ...)
+    if event == "ADDON_LOADED" then
+        if ... == ns.name then ns.InitDB(); ns.Fire("DB_READY") end
+        return
+    end
+    if not ns.db then return end
+    if event == "PLAYER_ENTERING_WORLD" then
+        Start()
+    elseif event == "SKILL_LINES_CHANGED" then
+        if started then L.ReadProfessions(); ns.Fire("CHARS_CHANGED") end
+    elseif event == "PLAYER_MONEY" then
+        if not started then Start() else L.OnMoney() end
+    elseif event == "CHAT_MSG_MONEY" then
+        ctx.loot = math.max(ctx.loot or 0, GetTime() + 1.5)
+        Retag("loot")
+    elseif event == "QUEST_TURNED_IN" then
+        local _, _, money = ...
+        if money and money > 0 then
+            if not Retag("quest", money) then L.Expect({ amount = money, k = "quest", ttl = 5 }) end
+        end
+    elseif event == "NEW_AUCTION_UPDATE" then
+        CacheSellItem()
+    elseif event == "PLAYER_LOGOUT" then
+        -- Rien : à la déconnexion le jeu renvoie 0 or ; chaque variation est déjà enregistrée.
+    else
+        local def = CONTEXT_EVENTS[event]
+        if def then
+            -- Fermeture : on garde le contexte 2 s, l'argent arrive souvent juste après.
+            ctx[def[1]] = def[2] and math.huge or (GetTime() + 2)
+        end
+    end
+end)
+
+-- ------------------------------------------------------------ requêtes pour l'UI
+function L.TotalMoney()
+    local total = 0
+    for key, c in pairs(ns.db.chars) do
+        if key == charKey and started then total = total + GetMoney()
+        else total = total + (c.money or 0) end
+    end
+    return total
+end
+
+function L.FirstTime()
+    local first
+    for _, s in pairs(ns.db.snaps) do
+        if s[1] and (not first or s[1][1] < first) then first = s[1][1] end
+    end
+    return first
+end
+
+-- Solde total (tous persos) à l'instant t. Avant le premier relevé d'un perso,
+-- on utilise ce premier relevé (évite un faux "gain" quand un perso est ajouté).
+local function ValueAt(s, t, startIdx)
+    local i = startIdx or 1
+    if not s[1] then return 0, i end
+    if t < s[1][1] then return s[1][2], 1 end
+    while s[i + 1] and s[i + 1][1] <= t do i = i + 1 end
+    return s[i][2], i
+end
+
+-- Série échantillonnée pour le graphique : n points entre t0 et t1.
+function L.BalanceSeries(t0, t1, n)
+    local pts, idx = {}, {}
+    for i = 0, n - 1 do
+        local t = t0 + (t1 - t0) * i / (n - 1)
+        local total = 0
+        for key, s in pairs(ns.db.snaps) do
+            local v
+            v, idx[key] = ValueAt(s, t, idx[key])
+            total = total + v
+        end
+        pts[#pts + 1] = { t, total }
+    end
+    if pts[#pts] then pts[#pts][2] = L.TotalMoney() end
+    return pts
+end
+
+-- Profit HV cumulé sur la période.
+function L.AHProfitSeries(t0, t1, n)
+    local pts = {}
+    local list = ns.db.tx
+    local j, acc = 1, 0
+    while list[j] and list[j].t < t0 do j = j + 1 end
+    for i = 0, n - 1 do
+        local t = t0 + (t1 - t0) * i / (n - 1)
+        while list[j] and list[j].t <= t do
+            local cat = ns.CATEGORIES[list[j].k]
+            if cat and cat.group == "ah" then acc = acc + list[j].a end
+            j = j + 1
+        end
+        pts[#pts + 1] = { t, acc }
+    end
+    return pts
+end
+
+-- Statistiques de la période [t0, maintenant].
+function L.Stats(t0)
+    local st = { byCat = {}, items = {}, sales = 0, salesCount = 0, buys = 0, refunds = 0,
+        deposits = 0, cut = 0, depRefund = 0, ahNet = 0, count = 0 }
+    for _, tx in ipairs(ns.db.tx) do
+        if tx.t >= t0 then
+            st.count = st.count + 1
+            st.byCat[tx.k] = (st.byCat[tx.k] or 0) + tx.a
+            local cat = ns.CATEGORIES[tx.k]
+            if cat and cat.group == "ah" then st.ahNet = st.ahNet + tx.a end
+            if tx.k == "ah_sale" then
+                st.sales = st.sales + tx.a
+                st.salesCount = st.salesCount + 1
+                st.cut = st.cut + (tx.cut or 0)
+                st.depRefund = st.depRefund + (tx.dep or 0)
+                local name = tx.i or "?"
+                local it = st.items[name]
+                if not it then it = { name = name, total = 0, qty = 0, n = 0 }; st.items[name] = it end
+                it.total = it.total + tx.a
+                it.qty = it.qty + (tx.q or 1)
+                it.n = it.n + 1
+            elseif tx.k == "ah_buy" then st.buys = st.buys + tx.a
+            elseif tx.k == "ah_refund" then st.refunds = st.refunds + tx.a
+            elseif tx.k == "ah_deposit" then st.deposits = st.deposits + tx.a
+            end
+        end
+    end
+    -- Commerce : tout ce qui s'achète et se vend (HV + marchand), frais HV compris. Courrier entre vos persos exclu.
+    local TRADE = { ah_sale = true, ah_buy = true, ah_deposit = true, ah_refund = true, ah_other = true,
+        vendor_sell = true, vendor_buy = true }
+    st.trade, st.sold, st.bought, st.soldCount = 0, 0, 0, 0
+    for k, v in pairs(st.byCat) do if TRADE[k] then st.trade = st.trade + v end end
+    st.sold = (st.byCat.ah_sale or 0) + (st.byCat.vendor_sell or 0)
+    st.bought = (st.byCat.ah_buy or 0) + (st.byCat.vendor_buy or 0)
+    for _, tx in ipairs(ns.db.tx) do
+        if tx.t >= t0 and (tx.k == "ah_sale" or tx.k == "vendor_sell") then st.soldCount = st.soldCount + 1 end
+    end
+    -- Taxes = commission HV + dépôts non rendus (expirés / annulés).
+    st.fees = st.cut + math.max(0, -st.deposits - st.depRefund)
+    local top = {}
+    for _, it in pairs(st.items) do top[#top + 1] = it end
+    table.sort(top, function(a, b) return a.total > b.total end)
+    st.top = top
+    return st
+end
+
+function L.Reset()
+    wipe(ns.db.tx)
+    wipe(ns.db.snaps)
+    wipe(ns.db.chars)
+    started = false
+    lastMoney = nil
+    Start()
+    ns.Fire("LEDGER_CHANGED")
+end
