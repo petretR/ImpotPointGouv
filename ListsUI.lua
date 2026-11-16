@@ -102,13 +102,18 @@ function LU.BuildPage(page)
     side:SetPoint("TOPLEFT", 0, 0); side:SetPoint("BOTTOMLEFT", 0, 0); side:SetWidth(SIDE_W)
     T.Surface(side, C.surface, 10)
     page.sideBtns = {}
-    local SIDE_ROWS = 18
+    local SIDE_ROWS = 23
     for i = 1, SIDE_ROWS do
         local b = CreateFrame("Button", nil, side)
-        b:SetHeight(24)
-        b:SetPoint("TOPLEFT", 6, -6 - (i - 1) * 25); b:SetPoint("TOPRIGHT", -6, -6 - (i - 1) * 25)
+        b:SetHeight(21)
+        b:SetPoint("TOPLEFT", 6, -6 - (i - 1) * 22); b:SetPoint("TOPRIGHT", -6, -6 - (i - 1) * 22)
         b.hl = T.Rounded(b, { 1, 1, 1, 0 }, 6, "BACKGROUND")
         b.t = T.Text(b, 12); b.t:SetPoint("LEFT", 10, 0); b.t:SetWidth(SIDE_W - 60)
+        -- En-tête de groupe : trait or au-dessus et pastille à gauche.
+        b.div = b:CreateTexture(nil, "ARTWORK"); b.div:SetTexture(T.WHITE); b.div:SetHeight(1)
+        b.div:SetPoint("TOPLEFT", 6, 1); b.div:SetPoint("TOPRIGHT", -6, 1); b.div:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.25)
+        b.bar = b:CreateTexture(nil, "ARTWORK"); b.bar:SetTexture(T.WHITE); b.bar:SetSize(3, 11)
+        b.bar:SetPoint("LEFT", 6, 0); b.bar:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
         b.badge = T.Text(b, 11, { bold = true, justify = "RIGHT", color = VERDICT.buy[2] }); b.badge:SetPoint("RIGHT", -8, 0)
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b:SetScript("OnEnter", function(self) if self.item and not self.item.header then self.hl:SetColor({ 1, 1, 1, 0.05 }) end
@@ -295,14 +300,20 @@ function LU.BuildPage(page)
             local it = items[self.sideOffset + i]
             b.item = it
             if it then
+                b.t:ClearAllPoints()
+                b.div:SetShown(it.header ~= nil and (self.sideOffset + i) > 1)
+                b.bar:SetShown(it.header ~= nil)
                 if it.header then
-                    b.t:SetText(Tr(it.header)); T.SetFont(b.t, 10, true); b.t:SetTextColor(unpack(C.faint))
+                    b.t:SetPoint("LEFT", 14, 0)
+                    b.t:SetText(Tr(it.header)); T.SetFont(b.t, 11, true); b.t:SetTextColor(unpack(C.gold))
                     b.badge:SetText(""); b.hl:SetColor({ 1, 1, 1, 0 })
                 elseif it.new then
+                    b.t:SetPoint("LEFT", 18, 0)
                     b.t:SetText(Tr("+ New list")); T.SetFont(b.t, 12, false); b.t:SetTextColor(unpack(C.gold))
                     b.badge:SetText(""); b.hl:SetColor({ 1, 1, 1, 0 })
                 else
                     local sel = it.list.key == LU.select
+                    b.t:SetPoint("LEFT", 18, 0)
                     b.t:SetText(Tr(it.list.title)); T.SetFont(b.t, 12, sel); b.t:SetTextColor(unpack(sel and C.text or C.muted))
                     b.badge:SetText(it.deals > 0 and ("● " .. it.deals) or "")
                     b.hl:SetColor(sel and { C.gold[1], C.gold[2], C.gold[3], 0.14 } or { 1, 1, 1, 0 })

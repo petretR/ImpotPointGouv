@@ -242,7 +242,8 @@ function LS.Build()
         for _, rg in ipairs(cd.r or {}) do Add(cds, rg[1], "mat", ALL_ROLES, rg[2]) end
         if cd.item then Add(cds, cd.item, "tool", ALL_ROLES, nil, "Tool") end
     end
-    groups[#groups + 1] = { key = "raid", title = Tr("RAID"), lists = { consum, ench, cds } }
+    groups[#groups + 1] = { key = "raid", title = Tr("CONSUMABLES & ENCHANTS"), lists = { consum, ench } }
+    groups[#groups + 1] = { key = "cd", title = Tr("DAILY COOLDOWNS"), lists = { cds } }
 
     -- Pré-BiS craftés par type d'armure
     local buckets = {

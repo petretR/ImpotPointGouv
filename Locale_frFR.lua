@@ -493,6 +493,8 @@ ns.AddLocale("frFR", {
     ["AH flip"] = "Flip HV",
     ["Vendor flip"] = "Vendor flip",
     [" waiting"] = " en attente",
+    ["CONSUMABLES & ENCHANTS"] = "CONSOMMABLES ET ENCHANTEMENTS",
+    ["DAILY COOLDOWNS"] = "RECHARGES QUOTIDIENNES",
     ["test, Living Crown — recipe data: "] = "test, Living Crown — données de recette : ",
     ["test, Living Crown — pattern tooltip: "] = "test, Living Crown — infobulle du patron : ",
     ["not available"] = "non disponible",

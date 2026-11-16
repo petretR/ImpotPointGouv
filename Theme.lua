@@ -130,7 +130,8 @@ function T.Button(parent, label, width, height, onClick, style)
         if style == "primary" then
             fill:SetColor(self.hover and { 0.95, 0.74, 0.32, 1 } or T.C.gold)
         elseif self.selected then
-            fill:SetColor(T.C.goldSoft); self.ipgBorder:SetColor({ T.C.gold[1], T.C.gold[2], T.C.gold[3], 0.55 })
+            -- Fond opaque (sinon le liseré or, dessiné dessous, transparaît et masque le texte or).
+            fill:SetColor({ 0.235, 0.200, 0.125, 1 }); self.ipgBorder:SetColor({ T.C.gold[1], T.C.gold[2], T.C.gold[3], 0.55 })
             self.text:SetTextColor(unpack(T.C.gold)); return
         else
             fill:SetColor(self.hover and T.C.hover or T.C.surface2)
