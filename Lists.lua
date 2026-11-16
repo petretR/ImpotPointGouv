@@ -147,7 +147,7 @@ local function RolesOf(sp)
 end
 
 local function NewList(key, title, info)
-    return { key = key, title = title, info = info, entries = {}, byId = {} }
+    return { key = key, title = title, info = info, entries = {}, byId = {}, recipes = {} }
 end
 
 local function Add(list, id, kind, roles, qty, note)
@@ -176,6 +176,32 @@ local function AddMats(list, id, roles, depth, mult)
     end
     return true
 end
+
+-- Recette affichée dans la vue "par recette" : produit (ou enchantement) puis ses composants (2 niveaux).
+local function Tree(rg, depth, out, mult)
+    for _, r in ipairs(rg or {}) do
+        if r[1] and not IsVendor(r[1]) then
+            local n = (mult or 1) * (r[2] or 1)
+            out[#out + 1] = { r[1], n, depth }
+            if depth < 2 then Tree(LS.ReagentsOf(r[1]), depth + 1, out, n) end
+        end
+    end
+    return out
+end
+
+local function AddRecipe(list, rec, rg)
+    rec.mats = Tree(rg or (rec.id and LS.ReagentsOf(rec.id)), 1, {})
+    rec.name = rec.name or (rec.id and P.Name(rec.id)) or "?"
+    list.recipes[#list.recipes + 1] = rec
+    for _, m in ipairs(rec.mats) do
+        local e = list.byId[m[1]]
+        if e then
+            e.usedIn = e.usedIn or {}
+            if not e.usedIn[rec.name] then e.usedIn[rec.name] = m[2]; e.usedInN = (e.usedInN or 0) + 1 end
+        end
+    end
+end
+LS.AddRecipe = AddRecipe
 
 local function ArmorBucket(id)
     local classID, subID, _, equipLoc = Instant(id)
@@ -207,10 +233,14 @@ function LS.Build()
             local roles = RolesOf(it.sp)
             Add(consum, id, "product", roles)
             AddMats(consum, id, roles)
+            AddRecipe(consum, { id = id, roles = roles })
         end
     end
     for _, id in ipairs(D.raidConsumables or {}) do
-        if not seen[id] then Add(consum, id, "product", ALL_ROLES); AddMats(consum, id, ALL_ROLES) end
+        if not seen[id] then
+            Add(consum, id, "product", ALL_ROLES); AddMats(consum, id, ALL_ROLES)
+            AddRecipe(consum, { id = id, roles = ALL_ROLES })
+        end
     end
 
     local ench = NewList("enchant", Tr("Enchanting"), "Materials of the enchants used by each spec.")
@@ -227,6 +257,7 @@ function LS.Build()
                         AddMats(ench, rg[1], roles, 1, rg[2])
                     end
                 end
+                AddRecipe(ench, { spell = spell, name = e.n, roles = roles }, r)
             end
         end
     end
@@ -236,14 +267,24 @@ function LS.Build()
         ench.info = ench.info .. Tr(" (Showing the usual raid enchanting materials until the game provides the exact recipes.)")
     end
 
-    local cds = NewList("cd", Tr("Cooldowns"), "Daily or multi-day crafts: limited supply, steadier margins.")
+    -- Recharges, une liste par métier : chaque recharge avec ses composants.
+    local cdLists, cdBy = {}, {}
+    local CD_TITLE = { alch = Tr("Alchemy: transmutes"), tail = Tr("Tailoring: Mooncloth"), lw = Tr("Leatherworking: salt") }
     for _, cd in ipairs(D.cooldowns or {}) do
-        Add(cds, cd.out, "product", ALL_ROLES, nil, cd.n)
-        for _, rg in ipairs(cd.r or {}) do Add(cds, rg[1], "mat", ALL_ROLES, rg[2]) end
-        if cd.item then Add(cds, cd.item, "tool", ALL_ROLES, nil, "Tool") end
+        local l = cdBy[cd.p]
+        if not l then
+            l = NewList("cd_" .. cd.p, CD_TITLE[cd.p] or Tr(LS.PROF_NAME[cd.p] or cd.p), "Daily or multi-day crafts: limited supply, steadier margins.")
+            l.cd, l.prof = true, cd.p
+            cdBy[cd.p] = l
+            cdLists[#cdLists + 1] = l
+        end
+        Add(l, cd.out, "product", ALL_ROLES, nil, cd.n)
+        for _, rg in ipairs(cd.r or {}) do Add(l, rg[1], "mat", ALL_ROLES, rg[2]) end
+        if cd.item then Add(l, cd.item, "tool", ALL_ROLES, nil, "Tool") end
+        AddRecipe(l, { id = cd.out, name = cd.n, roles = ALL_ROLES, cd = cd }, cd.r)
     end
     groups[#groups + 1] = { key = "raid", title = Tr("CONSUMES & ENCHANTS"), lists = { consum, ench } }
-    groups[#groups + 1] = { key = "cd", title = Tr("DAILY COOLDOWNS"), lists = { cds } }
+    groups[#groups + 1] = { key = "cd", title = Tr("DAILY COOLDOWNS"), lists = cdLists }
 
     -- Pré-BiS craftés par type d'armure
     local buckets = {
@@ -260,6 +301,7 @@ function LS.Build()
             local roles = RolesOf(it.sp)
             Add(b, id, "product", roles)
             AddMats(b, id, roles)
+            AddRecipe(b, { id = id, roles = roles })
         end
     end
     groups[#groups + 1] = { key = "prebis", title = Tr("PRE-BIS CRAFTS"),
@@ -385,6 +427,25 @@ function LS.Deals(list)
         if LS.Verdict(e, st) == "buy" then n = n + 1 end
     end
     return n
+end
+
+-- Coût d'une recette (composants directs, prix habituel sinon actuel) et valeur nette du produit.
+function LS.RecipeCost(rec, useNow)
+    local cost, missing = 0, 0
+    for _, m in ipairs(rec.mats or {}) do
+        if m[3] == 1 then
+            local st = P.Stats(m[1])
+            local p = st and ((useNow and st.cur) or st.med or st.cur)
+            if p then cost = cost + p * m[2] else missing = missing + 1 end
+        end
+    end
+    local value
+    if rec.id then
+        local st = P.Stats(rec.id)
+        local v = st and (st.med or st.cur)
+        if v then value = math.floor(v * 0.95) end
+    end
+    return cost, missing, value
 end
 
 -- Coût d'une liste de montée de métier : au prix actuel et au prix habituel.

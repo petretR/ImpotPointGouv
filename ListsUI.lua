@@ -189,16 +189,18 @@ function LU.BuildPage(page)
         prev = b
         page.roleBtns[r[1]] = b
     end
-    page.kindBtns = {}
+    -- Vue : par recette (produit / enchantement puis ses composants) ou liste à plat.
+    page.view = ns.db.settings.listView or "recipe"
+    page.viewBtns = {}
     local kprev
-    for i = 3, 1, -1 do
-        local k = ({ { "all", "All" }, { "product", "Crafted" }, { "mat", "Materials" } })[i]
-        local b = T.Button(main, Tr(k[2]), k[1] == "mat" and 78 or 64, 22, function()
-            page.kind = k[1]; ns.db.settings.listKind = k[1]; page.offset = 0; page:Refresh()
+    for i = 2, 1, -1 do
+        local k = ({ { "recipe", "By recipe" }, { "flat", "Flat list" } })[i]
+        local b = T.Button(main, Tr(k[2]), 84, 22, function()
+            page.view = k[1]; ns.db.settings.listView = k[1]; page.offset = 0; page:Refresh()
         end, "pill")
         if kprev then b:SetPoint("RIGHT", kprev, "LEFT", -4, 0) else b:SetPoint("TOPRIGHT", 0, fy) end
         kprev = b
-        page.kindBtns[k[1]] = b
+        page.viewBtns[k[1]] = b
     end
     -- (Les affaires sont déjà triées en tête de liste : pas de filtre séparé.)
 
@@ -247,6 +249,16 @@ function LU.BuildPage(page)
             self.hl:SetColor({ 1, 1, 1, 0.04 })
             local row = self.row
             if not row then return end
+            if row.head and not row.id then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(Tr(row.rec.name), 1, 1, 1)
+                for _, m in ipairs(row.rec.mats) do
+                    if m[3] == 1 then GameTooltip:AddDoubleLine(P.Name(m[1]), "×" .. m[2], 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
+                end
+                GameTooltip:AddDoubleLine(Tr("Usual price (7 days)"), Money(row.cost), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:Show()
+                return
+            end
             T.ItemTooltip(self, row.id)
             local st = row.st
             GameTooltip:AddLine(" ")
@@ -263,6 +275,14 @@ function LU.BuildPage(page)
             local e = row.e
             if e.qty and e.qty > 0 then GameTooltip:AddDoubleLine(e.range and ("Needed (" .. e.range .. ")") or "Needed", tostring(e.qty), 0.7, 0.7, 0.7, 1, 1, 1) end
             if e.note then GameTooltip:AddLine(e.note, 0.88, 0.66, 0.24) end
+            if e.usedIn and not row.head then
+                local names = {}
+                for n, q in pairs(e.usedIn) do names[#names + 1] = { Tr(n), q } end
+                table.sort(names, function(a, b) return a[1] < b[1] end)
+                GameTooltip:AddLine(Tr("Used in:"), 0.88, 0.66, 0.24)
+                for k = 1, math.min(10, #names) do GameTooltip:AddDoubleLine("  " .. names[k][1], "×" .. names[k][2], 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
+                if #names > 10 then GameTooltip:AddLine(("  +%d"):format(#names - 10), 0.6, 0.6, 0.6) end
+            end
             if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6) end
             local rl = {}
             for _, r2 in ipairs(LS.ROLES) do if e.roles[r2[1]] then rl[#rl + 1] = Tr(r2[2]) end end
@@ -347,13 +367,28 @@ function LU.BuildPage(page)
         for i, r in ipairs(self.rows) do
             local row = data[self.offset + i]
             r.row = row
-            if row then
+            local indent = row and row.depth and (row.depth * 16) or 0
+            r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", 8 + indent, 0)
+            r.name:ClearAllPoints(); r.name:SetPoint("LEFT", 32 + indent, 0); r.name:SetWidth(176 - indent)
+            if row and row.head and not row.id then
+                -- En-tête d'enchantement (pas d'objet) : coût des composants.
+                local rec = row.rec
+                local tex = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(rec.spell)) or "Interface\\Icons\\Trade_Engraving"
+                r.icon:SetTexture(tex)
+                r.name:SetText("|cffece6d6" .. Tr(rec.name) .. "|r")
+                r.now:SetText(Money(row.costNow)); r.usual:SetText(Money(row.cost))
+                for k = 1, 7 do r.bars[k]:Hide() end
+                r.vol:SetText(""); r.sales:SetText(""); r.listed:SetText(""); r.have:SetText("")
+                r.buy:Hide(); r.tag:Show(); r.tag:SetText("")
+                r:Show()
+            elseif row then
                 local id, st, e = row.id, row.st, row.e
                 if not ns.GetItemInfo(id) and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
                 local _, _, icon = LS.Instant(id)
                 r.icon:SetTexture(ns.GetItemIcon(id) or icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                 local name = P.Name(id)
-                if e.kind == "product" then name = "|cffe0a83d" .. name .. "|r" end
+                if row.head or (not row.depth and e.kind == "product") then name = "|cffe0a83d" .. name .. "|r" end
+                if row.depth and row.qty then name = "|cff8a877f" .. row.qty .. "×|r " .. name end
                 r.name:SetText(name)
                 r.now:SetText(st and st.cur and Money(st.cur) or (st and st.med and "|cff6fa8f0none|r" or Money(nil)))
                 r.usual:SetText(Money(st and st.med))
@@ -375,6 +410,7 @@ function LU.BuildPage(page)
                 r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and "unstable" or "")
                 r.sales:SetText(st and st.sales and (st.sales >= 10 and ("%d"):format(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) or "|cff615f5c—|r")
                 r.listed:SetText(st and st.qty and (st.qty >= 10000 and (Tr("%dk")):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
+                for k = 1, 7 do r.bars[k]:Show() end
                 local have = LS.Have(id)
                 if e.qty and e.qty > 0 and self.list and self.list.leveling then
                     r.have:SetText((have >= e.qty and "|cff5cd173" or "") .. have .. "/" .. e.qty .. (have >= e.qty and "|r" or ""))
@@ -389,7 +425,14 @@ function LU.BuildPage(page)
                     r.buy.text:SetText(buying and (b.stage == "confirm" and "Confirm" or "…") or "Buy")
                     r.buy:SetDisabled(b ~= nil and not buying)
                 end
-                if v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
+                if row.head then
+                    -- Recette : gain net par craft (valeur HV après commission − composants).
+                    if row.value and row.missing == 0 then
+                        r.tag:SetText(ns.FormatMoney(row.value - row.cost, { sign = true, color = true, iconSize = 10, short = true }))
+                    else
+                        r.tag:SetText("")
+                    end
+                elseif v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
                 r:Show()
             else
                 r:Hide()
@@ -421,12 +464,13 @@ function LU.BuildPage(page)
         LU.select = l.key
         self.title:SetText(Tr(l.title))
         -- Rôles : seulement pour ce qui dépend des spés (consommables, enchantements, pré-BiS).
-        local showRoles = not (l.leveling or l.custom or l.key == "cd")
-        local showKinds = not (l.leveling or l.custom)
+        local showRoles = not (l.leveling or l.custom or l.cd)
+        local showKinds = not (l.leveling or l.custom) and #l.recipes > 0
         local role = showRoles and self.role or "all"
-        local kind = showKinds and self.kind or "all"
+        local kind = "all"
+        local byRecipe = showKinds and self.view == "recipe"
         for k, btn in pairs(self.roleBtns) do btn:SetSelected(k == self.role); btn:SetShown(showRoles) end
-        for k, btn in pairs(self.kindBtns) do btn:SetSelected(k == self.kind); btn:SetShown(showKinds) end
+        for k, btn in pairs(self.viewBtns) do btn:SetSelected(k == self.view); btn:SetShown(showKinds) end
         self.listFrame:ClearAllPoints()
         self.listFrame:SetPoint("TOPLEFT", 0, (showRoles or showKinds) and -74 or -44)
         self.listFrame:SetPoint("BOTTOMRIGHT", 0, 0)
@@ -446,18 +490,52 @@ function LU.BuildPage(page)
             if a.e.uses ~= b.e.uses then return a.e.uses > b.e.uses end
             return P.Name(a.id) < P.Name(b.id)
         end)
+        if byRecipe then
+            -- Une ligne par recette, puis ses composants en retrait.
+            local recs = {}
+            for _, rec in ipairs(l.recipes) do
+                if role == "all" or (rec.roles and rec.roles[role]) then
+                    local cost, missing, value = LS.RecipeCost(rec)
+                    local costNow = LS.RecipeCost(rec, true)
+                    recs[#recs + 1] = { rec = rec, cost = cost, costNow = costNow, missing = missing, value = value,
+                        gain = (value and missing == 0) and (value - cost) or nil }
+                end
+            end
+            table.sort(recs, function(a, b)
+                if (a.gain ~= nil) ~= (b.gain ~= nil) then return a.gain ~= nil end
+                if a.gain and b.gain and a.gain ~= b.gain then return a.gain > b.gain end
+                return Tr(a.rec.name) < Tr(b.rec.name)
+            end)
+            data = {}
+            for _, x in ipairs(recs) do
+                local head = { head = true, rec = x.rec, id = x.rec.id, cost = x.cost, costNow = x.costNow, missing = x.missing, value = x.value }
+                if x.rec.id then
+                    head.e = l.byId[x.rec.id] or { id = x.rec.id, kind = "product", roles = {}, uses = 1 }
+                    head.st = P.Stats(x.rec.id)
+                end
+                data[#data + 1] = head
+                for _, m in ipairs(x.rec.mats) do
+                    local e = l.byId[m[1]] or { id = m[1], kind = "mat", roles = {}, uses = 1 }
+                    local row = LS.Row(e)
+                    row.depth, row.qty = m[3], m[2]
+                    data[#data + 1] = row
+                end
+            end
+        end
         self.data = data
         self.offset = math.min(self.offset, math.max(0, #data - ROWS))
 
         -- sous-titre
-        local sub = (Tr("%d items")):format(#data)
+        local sub = byRecipe and (Tr("%d recipes")):format(#(function() local n = {} for _, d in ipairs(data) do if d.head then n[#n + 1] = d end end return n end)())
+            or (Tr("%d items")):format(#data)
         if l.leveling then
             local now, usual, missing = LS.LevelCost(l)
             sub = sub .. (Tr("  ·  Cost now %s, usual %s%s")):format(Money(now), Money(usual), missing > 0 and (Tr("  (%d not priced)")):format(missing) or "")
             if usual > 0 and now > usual * 1.1 then sub = sub .. Tr("  ·  |cffe0a83dPrices are high: wait|r")
             elseif usual > 0 and now < usual * 0.9 then sub = sub .. Tr("  ·  |cff5cd173Good time to buy|r") end
-        elseif l.key == "cd" then
-            local board = LS.CooldownBoard()
+        elseif l.cd then
+            local board = {}
+            for _, c in ipairs(LS.CooldownBoard()) do if c.cd.p == l.prof then board[#board + 1] = c end end
             local parts = {}
             for k = 1, math.min(3, #board) do
                 local c = board[k]
