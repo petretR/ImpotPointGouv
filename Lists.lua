@@ -178,19 +178,20 @@ local function AddMats(list, id, roles, depth, mult)
 end
 
 -- Recette affichée dans la vue "par recette" : produit (ou enchantement) puis ses composants (2 niveaux).
-local function Tree(rg, depth, out, mult)
+local function Tree(rg, depth, out, mult, flat)
     for _, r in ipairs(rg or {}) do
         if r[1] and not IsVendor(r[1]) then
             local n = (mult or 1) * (r[2] or 1)
             out[#out + 1] = { r[1], n, depth }
-            if depth < 2 then Tree(LS.ReagentsOf(r[1]), depth + 1, out, n) end
+            if depth < 2 and not flat then Tree(LS.ReagentsOf(r[1]), depth + 1, out, n) end
         end
     end
     return out
 end
 
 local function AddRecipe(list, rec, rg)
-    rec.mats = Tree(rg or (rec.id and LS.ReagentsOf(rec.id)), 1, {})
+    -- Recharges (transmutations…) : composants directs seulement, sinon les essences se "transmutent" en boucle.
+    rec.mats = Tree(rg or (rec.id and LS.ReagentsOf(rec.id)), 1, {}, nil, rec.cd ~= nil)
     rec.name = rec.name or (rec.id and P.Name(rec.id)) or "?"
     list.recipes[#list.recipes + 1] = rec
     for _, m in ipairs(rec.mats) do

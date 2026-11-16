@@ -226,6 +226,10 @@ function LU.BuildPage(page)
         r:SetPoint("TOPLEFT", 6, -26 - (i - 1) * ROW_H); r:SetPoint("TOPRIGHT", -6, -26 - (i - 1) * ROW_H)
         r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         r.hl = T.Rounded(r, { 1, 1, 1, 0 }, 6, "BACKGROUND")
+        -- Ligne de recette : bande de fond + trait or au-dessus, pour séparer chaque recette.
+        r.band = T.Rounded(r, { C.gold[1], C.gold[2], C.gold[3], 0.07 }, 6, "BACKGROUND", -1)
+        r.sep = r:CreateTexture(nil, "ARTWORK"); r.sep:SetTexture(T.WHITE); r.sep:SetHeight(1)
+        r.sep:SetPoint("TOPLEFT", 4, 2); r.sep:SetPoint("TOPRIGHT", -4, 2); r.sep:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.35)
         r.icon = r:CreateTexture(nil, "ARTWORK"); r.icon:SetSize(18, 18); r.icon:SetPoint("LEFT", 8, 0)
         r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
         r.name = T.Text(r, 12); r.name:SetPoint("LEFT", 32, 0); r.name:SetWidth(176); r.name:SetWordWrap(false)
@@ -368,6 +372,9 @@ function LU.BuildPage(page)
             local row = data[self.offset + i]
             r.row = row
             local indent = row and row.depth and (row.depth * 16) or 0
+            local isHead = row and row.head
+            r.band:SetShown(isHead and true or false)
+            r.sep:SetShown(isHead and (self.offset + i) > 1 or false)
             r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", 8 + indent, 0)
             r.name:ClearAllPoints(); r.name:SetPoint("LEFT", 32 + indent, 0); r.name:SetWidth(176 - indent)
             if row and row.head and not row.id then
@@ -386,7 +393,7 @@ function LU.BuildPage(page)
                 if not ns.GetItemInfo(id) and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
                 local _, _, icon = LS.Instant(id)
                 r.icon:SetTexture(ns.GetItemIcon(id) or icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                local name = P.Name(id)
+                local name = (row.head and row.rec and row.rec.cd) and Tr(row.rec.name) or P.Name(id)
                 if row.head or (not row.depth and e.kind == "product") then name = "|cffe0a83d" .. name .. "|r" end
                 if row.depth and row.qty then name = "|cff8a877f" .. row.qty .. "×|r " .. name end
                 r.name:SetText(name)
