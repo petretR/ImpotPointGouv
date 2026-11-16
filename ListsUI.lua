@@ -200,15 +200,13 @@ function LU.BuildPage(page)
         kprev = b
         page.kindBtns[k[1]] = b
     end
-    page.dealBtn = T.Button(main, Tr("Deals only"), 84, 22, function()
-        page.dealsOnly = not page.dealsOnly; page.offset = 0; page:Refresh()
-    end, "pill")
-    page.dealBtn:SetPoint("RIGHT", kprev, "LEFT", -10, 0)
+    -- (Les affaires sont déjà triées en tête de liste : pas de filtre séparé.)
 
     -- Tableau
     local list = CreateFrame("Frame", nil, main)
     T.Surface(list, C.surface, 10)
     list:SetPoint("TOPLEFT", 0, -74); list:SetPoint("BOTTOMRIGHT", 0, 0)
+    page.listFrame = list
     local cols = {
         { "Item", "LEFT", 38 }, { "Now", "RIGHT", -402 }, { "Usual", "RIGHT", -330 }, { "7 days", "LEFT", -316, true },
         { "Sold/day", "RIGHT", -176 }, { "Listed", "RIGHT", -120 }, { "Have", "RIGHT", -82 }, { "", "RIGHT", -8 },
@@ -422,16 +420,23 @@ function LU.BuildPage(page)
         if not l then return end
         LU.select = l.key
         self.title:SetText(Tr(l.title))
-        for k, btn in pairs(self.roleBtns) do btn:SetSelected(k == self.role) end
-        for k, btn in pairs(self.kindBtns) do btn:SetSelected(k == self.kind) end
-        self.dealBtn:SetSelected(self.dealsOnly)
+        -- Rôles : seulement pour ce qui dépend des spés (consommables, enchantements, pré-BiS).
+        local showRoles = not (l.leveling or l.custom or l.key == "cd")
+        local showKinds = not (l.leveling or l.custom)
+        local role = showRoles and self.role or "all"
+        local kind = showKinds and self.kind or "all"
+        for k, btn in pairs(self.roleBtns) do btn:SetSelected(k == self.role); btn:SetShown(showRoles) end
+        for k, btn in pairs(self.kindBtns) do btn:SetSelected(k == self.kind); btn:SetShown(showKinds) end
+        self.listFrame:ClearAllPoints()
+        self.listFrame:SetPoint("TOPLEFT", 0, (showRoles or showKinds) and -74 or -44)
+        self.listFrame:SetPoint("BOTTOMRIGHT", 0, 0)
 
         -- lignes filtrées et triées : affaires, puis produits, puis demande
         local data = {}
         for _, e in ipairs(l.entries) do
-            if (self.role == "all" or e.roles[self.role]) and (self.kind == "all" or e.kind == self.kind or (self.kind == "mat" and e.kind == "tool")) then
+            if (role == "all" or e.roles[role]) and (kind == "all" or e.kind == kind or (kind == "mat" and e.kind == "tool")) then
                 local row = LS.Row(e)
-                if not self.dealsOnly or row.verdict == "buy" then data[#data + 1] = row end
+                data[#data + 1] = row
             end
         end
         local order = { buy = 1, sell = 2, farm = 3 }
@@ -471,7 +476,7 @@ function LU.BuildPage(page)
 
         local anyPrice = false
         for _, row in ipairs(data) do if row.st and row.st.med then anyPrice = true; break end end
-        self.empty:SetText(#data == 0 and (self.dealsOnly and "No deal in this list right now." or "Nothing matches these filters.")
+        self.empty:SetText(#data == 0 and Tr("Nothing matches these filters.")
             or (not anyPrice and "No prices yet. Open the auction house and click Scan list.\nThe usual price and the verdicts get reliable after a few scans on different days." or ""))
         self.empty:SetShown(#data == 0 or not anyPrice)
         self:Draw()

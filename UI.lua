@@ -669,8 +669,7 @@ function UI.Refresh()
     local nChars = 0
     for _ in pairs(ns.db.chars) do nChars = nChars + 1 end
     local first = L.FirstTime()
-    frame.footer:SetText((Tr("Tracking since %s  ·  %d %s  ·  %d transactions recorded")):format(
-        first and date("%d/%m/%Y", first) or "—", nChars, nChars > 1 and "characters" or "character", #ns.db.tx))
+    frame.footer:SetText((Tr("Tracking since %s")):format(first and date("%d/%m/%Y", first) or "—"))
     if current and pages[current] then pages[current]:Refresh() end
 end
 

@@ -497,6 +497,8 @@ ns.AddLocale("frFR", {
     ["Delete this list"] = "Supprimer cette liste",
     ["Open your crafters' professions once to track their cooldowns"] = "Ouvre une fois les métiers de tes crafteurs pour suivre leurs recharges",
     ["ready"] = "prête",
+    ["Tracking since %s"] = "Suivi depuis le %s",
+    ["Nothing matches these filters."] = "Rien ne correspond à ces filtres.",
     ["in %s"] = "dans %s",
     ["DAILY COOLDOWNS"] = "RECHARGES QUOTIDIENNES",
     ["test, Living Crown — recipe data: "] = "test, Living Crown — données de recette : ",
