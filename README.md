@@ -1,60 +1,60 @@
 # ImpotPointGouv
 
-Addon WoW Forever pour faire de l'or en routine : suivi des gains, boîte aux lettres, conseiller de craft, scan et vente à l'HV.
-Inspiré de TSM et Auctionator, avec une interface épurée.
+WoW Forever addon for routine gold making: gold tracking, mailbox, craft advisor, AH scanning and posting.
+Inspired by TSM and Auctionator, with a clean, minimal interface.
 
 ## Installation
 
-1. Télécharger le dépôt (bouton **Code → Download ZIP**) ou le cloner.
-2. Copier le dossier dans `World of Warcraft/_forever_/Interface/AddOns/` en le nommant **`ImpotPointGouv`** (sans suffixe `-main`).
-3. Relancer complètement le jeu (un `/reload` ne charge pas les nouveaux fichiers).
+1. Download the repository (**Code → Download ZIP**) or clone it.
+2. Copy the folder into `World of Warcraft/_forever_/Interface/AddOns/` and name it **`ImpotPointGouv`** (no `-main` suffix).
+3. Fully restart the game (`/reload` does not load new files).
 
-`/ipg` ouvre la fenêtre principale. Au premier lancement, un guide de configuration s'affiche.
+`/ipg` opens the main window. A setup guide shows up on first launch.
 
-## Commandes
+## Commands
 
-| Commande | Effet |
+| Command | What it does |
 |---|---|
-| `/ipg` | Fenêtre principale (bilan, historique, persos, marché, réglages) |
-| `/ipg list` | Routine (liste de courses, envois) |
-| `/ipg de` | Fenêtre de désenchantement |
-| `/ipg sold` | Ventes au marchand des 7 derniers jours, et ce qui valait plus à l'HV |
-| `/ipg report` | Rapport sur 30 jours |
-| `/ipg hints` | Active / coupe les avertissements chez le marchand |
-| `/ipg mail` | Boîte aux lettres de l'addon ou celle de Blizzard |
+| `/ipg` | Main window (overview, history, characters, market, settings) |
+| `/ipg list` | Routine (shopping list, mail sends) |
+| `/ipg de` | Disenchant window |
+| `/ipg sold` | Vendor sales over the last 7 days, and what was worth more at the AH |
+| `/ipg report` | 30-day report |
+| `/ipg hints` | Toggle the warnings shown at vendors |
+| `/ipg mail` | Switch between the addon's mailbox and Blizzard's |
 
-## Organisation du code
+## Code layout
 
-Ordre de chargement : voir `ImpotPointGouv.toc`. Tous les fichiers partagent la table `ns` (`local _, ns = ...`).
+Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, ns = ...`).
 
-| Fichier | Rôle |
+| File | Purpose |
 |---|---|
-| `Core.lua` | Base de données (`ImpotPointGouvDB`), formats d'argent, petit bus d'événements (`ns.On` / `ns.Fire`) |
-| `Ledger.lua` | Registre de l'or : chaque variation est classée (HV, marchand, quête, butin, courrier…) |
-| `Track.lua` | Détail des ventes au marchand, butin, temps par zone/niveau, objets qui ne se vendent pas |
-| `Theme.lua` | Couleurs, boutons, bulles, éléments d'interface |
-| `UI.lua`, `Chart.lua` | Fenêtre principale, onglets, graphique |
-| `Mail.lua` | Boîte aux lettres (onglets Inbox / Send) |
-| `Prices.lua` | Scans HV et historique des prix |
-| `Craft.lua`, `Queue.lua`, `Keep.lua` | Conseiller de craft, file de fabrication, réserves à garder |
-| `Routine.lua`, `Next.lua`, `Preview.lua` | Routine (courses, envois, vente marchand), aperçu avant les actions en lot |
-| `Sell.lua` | Mise en vente et annulation à l'HV |
-| `Market.lua` | Onglet Marché (ce qui se vend, flips) |
-| `Destroy.lua` | Désenchantement |
-| `Inventory.lua`, `Trainer.lua`, `Report.lua`, `Setup.lua` | Inventaire multi-persos, entraîneur, rapport, guide de démarrage |
+| `Core.lua` | Saved data (`ImpotPointGouvDB`), money formatting, small event bus (`ns.On` / `ns.Fire`) |
+| `Ledger.lua` | Gold ledger: every money change is categorized (AH, vendor, quest, loot, mail…) |
+| `Track.lua` | Vendor sale details, loot log, time per zone/level, items that don't sell |
+| `Theme.lua` | Colors, buttons, tooltips, UI widgets |
+| `UI.lua`, `Chart.lua` | Main window, tabs, chart |
+| `Mail.lua` | Mailbox (Inbox / Send tabs) |
+| `Prices.lua` | AH scans and price history |
+| `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
+| `Routine.lua`, `Next.lua`, `Preview.lua` | Routine (shopping, sending, vendor selling), preview before batch actions |
+| `Sell.lua` | AH posting and cancelling |
+| `Market.lua` | Market tab (what sells, flips) |
+| `Destroy.lua` | Disenchanting |
+| `Inventory.lua`, `Trainer.lua`, `Report.lua`, `Setup.lua` | Multi-character inventory, trainer, report, setup guide |
 
-## Contribuer
+## Contributing
 
-1. Faire un fork, puis une branche par sujet (`fix/mail-send`, `feat/weekly-report`…).
-2. Tester en jeu (WoW Forever, client moderne, Lua 5.1).
-3. Ouvrir une Pull Request avec ce qui change et comment tester.
+1. Fork the repo, then create one branch per topic (`fix/mail-send`, `feat/weekly-report`…).
+2. Test in game (WoW Forever, modern client, Lua 5.1).
+3. Open a Pull Request describing what changes and how to test it.
 
-Règles de la maison :
-- Interface en anglais, commentaires du code en français.
-- Peu de texte, des boutons clairs.
-- Les actions protégées du jeu (poster, acheter, envoyer) demandent un clic par action : l'addon prépare, le joueur clique.
-- Jamais de modification des données sauvegardées sans migration (`ns.db.version` dans `Core.lua`).
+House rules:
+- UI text in English; code comments in French.
+- Little text, clear buttons.
+- Protected game actions (posting, buying, sending mail) need one click per action: the addon prepares, the player clicks.
+- Never change the saved data format without a migration (`ns.db.version` in `Core.lua`).
 
-## Licence
+## License
 
-Bibliothèques incluses dans `libs/` : licence Ace3 (voir `libs/LICENSE-Ace3.txt`). Police Inter : SIL OFL (voir `media/fonts/OFL-inter.txt`).
+Libraries bundled in `libs/`: Ace3 license (see `libs/LICENSE-Ace3.txt`). Inter font: SIL OFL (see `media/fonts/OFL-inter.txt`).
