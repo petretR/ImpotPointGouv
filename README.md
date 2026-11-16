@@ -5,8 +5,8 @@ Inspired by TSM and Auctionator, with a clean, minimal interface.
 
 ## Installation
 
-1. Download the repository (**Code → Download ZIP**) or clone it.
-2. Copy the folder into `World of Warcraft/_forever_/Interface/AddOns/` and name it **`ImpotPointGouv`** (no `-main` suffix).
+1. Download `ImpotPointGouv.zip` from the [latest release](../../releases/latest).
+2. Unzip it into `World of Warcraft/_forever_/Interface/AddOns/`.
 3. Fully restart the game (`/reload` does not load new files).
 
 `/ipg` opens the main window. A setup guide shows up on first launch.
@@ -48,12 +48,6 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 1. Fork the repo, then create one branch per topic (`fix/mail-send`, `feat/weekly-report`…).
 2. Test in game (WoW Forever, modern client, Lua 5.1).
 3. Open a Pull Request describing what changes and how to test it.
-
-House rules:
-- UI text in English; code comments in French.
-- Little text, clear buttons.
-- Protected game actions (posting, buying, sending mail) need one click per action: the addon prepares, the player clicks.
-- Never change the saved data format without a migration (`ns.db.version` in `Core.lua`).
 
 ## License
 
