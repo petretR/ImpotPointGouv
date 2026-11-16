@@ -2,6 +2,7 @@
 -- À gauche : les listes (avec le nombre d'affaires). À droite : les objets de la liste choisie,
 -- prix actuel / habituel, courbe 7 jours, ventes estimées, stock, verdict et achat des affaires.
 local _, ns = ...
+local Tr = ns.L
 local T, P, LS = ns.Theme, ns.Prices, ns.Lists
 local C = T.C
 local LU = {}
@@ -61,7 +62,7 @@ local function Popup(anchor, entries)
 end
 
 StaticPopupDialogs["IMPOTPOINTGOUV_NEWLIST"] = {
-    text = "Name of the new list:", button1 = OKAY or "OK", button2 = CANCEL or "Cancel",
+    text = Tr("Name of the new list:"), button1 = OKAY or "OK", button2 = CANCEL or "Cancel",
     hasEditBox = true, maxLetters = 40, timeout = 0, whileDead = true, hideOnEscape = true,
     OnAccept = function(self, data)
         local eb = self.editBox or self.EditBox
@@ -82,7 +83,7 @@ StaticPopupDialogs["IMPOTPOINTGOUV_NEWLIST"] = {
 local function AddToListMenu(id)
     local entries = {}
     for i, cl in ipairs(ns.db.lists or {}) do
-        entries[#entries + 1] = { "Add to " .. cl.name, function() LS.AddToCustom(i, id); ns.UI.Refresh() end }
+        entries[#entries + 1] = { Tr("Add to ") .. cl.name, function() LS.AddToCustom(i, id); ns.UI.Refresh() end }
     end
     entries[#entries + 1] = { "Add to a new list…", function() StaticPopup_Show("IMPOTPOINTGOUV_NEWLIST", nil, nil, { id = id }) end, color = C.gold }
     return entries
@@ -112,7 +113,7 @@ function LU.BuildPage(page)
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b:SetScript("OnEnter", function(self) if self.item and not self.item.header then self.hl:SetColor({ 1, 1, 1, 0.05 }) end
             if self.item and self.item.list and self.item.list.info then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:AddLine(self.item.list.title, 1, 1, 1)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:AddLine(Tr(self.item.list.title), 1, 1, 1)
                 GameTooltip:AddLine(self.item.list.info, 0.75, 0.75, 0.75, true); GameTooltip:Show()
             end end)
         b:SetScript("OnLeave", function(self) GameTooltip:Hide(); page:DrawSide() end)
@@ -146,23 +147,23 @@ function LU.BuildPage(page)
     page.sub = T.Text(main, 11, { color = C.muted }); page.sub:SetPoint("TOPLEFT", page.title, "BOTTOMLEFT", 0, -3)
     page.sub:SetPoint("RIGHT", main, "RIGHT", -230, 0); page.sub:SetWordWrap(false)
 
-    page.scan = T.Button(main, "Scan list", 100, 26, function()
+    page.scan = T.Button(main, Tr("Scan list"), 100, 26, function()
         local sc = P.Scanning and P.Scanning()
         if sc then P.ScanIds(nil) ; return end
-        if not AHOpen() then LU.Msg("Open the auction house to scan this list."); return end
+        if not AHOpen() then LU.Msg(Tr("Open the auction house to scan this list.")); return end
         local l = LS.Get(LU.select)
         if l then P.ScanIds(LS.IdsOf(l), l.title) end
     end, "primary")
     page.scan:SetPoint("TOPRIGHT", 0, 0)
-    page.scan.tooltip = "Checks the live price and quantity of every item in this list (a few seconds per 20 items). Each scan builds the price history: usual price, volatility, sales."
-    page.export = T.Button(main, "→ Auctionator", 112, 26, function()
+    page.scan.tooltip = Tr("Checks the live price and quantity of every item in this list (a few seconds per 20 items). Each scan builds the price history: usual price, volatility, sales.")
+    page.export = T.Button(main, Tr("→ Auctionator"), 112, 26, function()
         local l = LS.Get(LU.select)
         if not l then return end
         local ok, n = LS.ExportAuctionator(l)
-        LU.Msg(ok and (("Auctionator shopping list \"IPG - %s\" created (%d items). Buy from the Buy buttons here: they stop at your limit."):format(l.title, n)) or n)
+        LU.Msg(ok and ((Tr("Auctionator shopping list \"IPG - %s\" created (%d items). Buy from the Buy buttons here: they stop at your limit.")):format(l.title, n)) or n)
     end)
     page.export:SetPoint("RIGHT", page.scan, "LEFT", -6, 0)
-    page.export.tooltip = "Creates an Auctionator shopping list with these items, to look at prices there. Auctionator buys whatever you click: buy deals from here instead."
+    page.export.tooltip = Tr("Creates an Auctionator shopping list with these items, to look at prices there. Auctionator buys whatever you click: buy deals from here instead.")
 
     -- Filtres
     local fy = -44
@@ -171,7 +172,7 @@ function LU.BuildPage(page)
     local roles = { { "all", "All roles" } }
     for _, r in ipairs(LS.ROLES) do roles[#roles + 1] = r end
     for _, r in ipairs(roles) do
-        local b = T.Button(main, r[2], r[1] == "all" and 72 or 62, 22, function()
+        local b = T.Button(main, Tr(r[2]), r[1] == "all" and 72 or 62, 22, function()
             page.role = r[1]; ns.db.settings.listRole = r[1]; page.offset = 0; page:Refresh()
         end, "pill")
         if prev then b:SetPoint("LEFT", prev, "RIGHT", 4, 0) else b:SetPoint("TOPLEFT", 0, fy) end
@@ -182,14 +183,14 @@ function LU.BuildPage(page)
     local kprev
     for i = 3, 1, -1 do
         local k = ({ { "all", "All" }, { "product", "Crafted" }, { "mat", "Materials" } })[i]
-        local b = T.Button(main, k[2], k[1] == "mat" and 78 or 64, 22, function()
+        local b = T.Button(main, Tr(k[2]), k[1] == "mat" and 78 or 64, 22, function()
             page.kind = k[1]; ns.db.settings.listKind = k[1]; page.offset = 0; page:Refresh()
         end, "pill")
         if kprev then b:SetPoint("RIGHT", kprev, "LEFT", -4, 0) else b:SetPoint("TOPRIGHT", 0, fy) end
         kprev = b
         page.kindBtns[k[1]] = b
     end
-    page.dealBtn = T.Button(main, "Deals only", 84, 22, function()
+    page.dealBtn = T.Button(main, Tr("Deals only"), 84, 22, function()
         page.dealsOnly = not page.dealsOnly; page.offset = 0; page:Refresh()
     end, "pill")
     page.dealBtn:SetPoint("RIGHT", kprev, "LEFT", -10, 0)
@@ -232,7 +233,7 @@ function LU.BuildPage(page)
         r.listed = T.Text(r, 12, { justify = "RIGHT", color = C.muted }); r.listed:SetPoint("RIGHT", -114, 0)
         r.have = T.Text(r, 12, { justify = "RIGHT" }); r.have:SetPoint("RIGHT", -76, 0)
         r.tag = T.Text(r, 11, { bold = true, justify = "RIGHT" }); r.tag:SetPoint("RIGHT", -10, 0)
-        r.buy = T.Button(r, "Buy", 60, 20, function() if r.row then LS.Buy(r.row.id) end end, "primary")
+        r.buy = T.Button(r, Tr("Buy"), 60, 20, function() if r.row then LS.Buy(r.row.id) end end, "primary")
         r.buy:SetPoint("RIGHT", -4, 0)
         r:SetScript("OnEnter", function(self)
             self.hl:SetColor({ 1, 1, 1, 0.04 })
@@ -242,23 +243,23 @@ function LU.BuildPage(page)
             local st = row.st
             GameTooltip:AddLine(" ")
             if st and st.med then
-                GameTooltip:AddDoubleLine("Usual price (7 days)", ns.FormatMoney(st.med, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
-                GameTooltip:AddDoubleLine("Low / high", ns.FormatMoney(st.low, { iconSize = 11 }) .. "  /  " .. ns.FormatMoney(st.high, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Usual price (7 days)"), ns.FormatMoney(st.med, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Low / high"), ns.FormatMoney(st.low, { iconSize = 11 }) .. "  /  " .. ns.FormatMoney(st.high, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
                 local mx = LS.BuyMax(st)
-                if mx then GameTooltip:AddDoubleLine("Buy limit", ns.FormatMoney(mx, { iconSize = 11 }), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
-                GameTooltip:AddDoubleLine("Volatility", ("%d %%"):format(math.floor((st.cv or 0) * 100 + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
-                GameTooltip:AddDoubleLine("Price points", tostring(st.n or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+                if mx then GameTooltip:AddDoubleLine(Tr("Buy limit"), ns.FormatMoney(mx, { iconSize = 11 }), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
+                GameTooltip:AddDoubleLine(Tr("Volatility"), ("%d %%"):format(math.floor((st.cv or 0) * 100 + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Price points"), tostring(st.n or 0), 0.7, 0.7, 0.7, 1, 1, 1)
             else
-                GameTooltip:AddLine("No price history yet: scan this list at the AH.", 0.6, 0.6, 0.6, true)
+                GameTooltip:AddLine(Tr("No price history yet: scan this list at the AH."), 0.6, 0.6, 0.6, true)
             end
             local e = row.e
             if e.qty and e.qty > 0 then GameTooltip:AddDoubleLine(e.range and ("Needed (" .. e.range .. ")") or "Needed", tostring(e.qty), 0.7, 0.7, 0.7, 1, 1, 1) end
             if e.note then GameTooltip:AddLine(e.note, 0.88, 0.66, 0.24) end
             if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6) end
             local rl = {}
-            for _, r2 in ipairs(LS.ROLES) do if e.roles[r2[1]] then rl[#rl + 1] = r2[2] end end
-            if #rl > 0 and #rl < 5 then GameTooltip:AddLine("Used by: " .. table.concat(rl, ", "), 0.6, 0.6, 0.6) end
-            GameTooltip:AddLine("Right-click: add to one of your lists", 0.88, 0.66, 0.24)
+            for _, r2 in ipairs(LS.ROLES) do if e.roles[r2[1]] then rl[#rl + 1] = Tr(r2[2]) end end
+            if #rl > 0 and #rl < 5 then GameTooltip:AddLine(Tr("Used by: ") .. table.concat(rl, ", "), 0.6, 0.6, 0.6) end
+            GameTooltip:AddLine(Tr("Right-click: add to one of your lists"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
@@ -295,14 +296,14 @@ function LU.BuildPage(page)
             b.item = it
             if it then
                 if it.header then
-                    b.t:SetText(it.header); T.SetFont(b.t, 10, true); b.t:SetTextColor(unpack(C.faint))
+                    b.t:SetText(Tr(it.header)); T.SetFont(b.t, 10, true); b.t:SetTextColor(unpack(C.faint))
                     b.badge:SetText(""); b.hl:SetColor({ 1, 1, 1, 0 })
                 elseif it.new then
-                    b.t:SetText("+ New list"); T.SetFont(b.t, 12, false); b.t:SetTextColor(unpack(C.gold))
+                    b.t:SetText(Tr("+ New list")); T.SetFont(b.t, 12, false); b.t:SetTextColor(unpack(C.gold))
                     b.badge:SetText(""); b.hl:SetColor({ 1, 1, 1, 0 })
                 else
                     local sel = it.list.key == LU.select
-                    b.t:SetText(it.list.title); T.SetFont(b.t, 12, sel); b.t:SetTextColor(unpack(sel and C.text or C.muted))
+                    b.t:SetText(Tr(it.list.title)); T.SetFont(b.t, 12, sel); b.t:SetTextColor(unpack(sel and C.text or C.muted))
                     b.badge:SetText(it.deals > 0 and ("● " .. it.deals) or "")
                     b.hl:SetColor(sel and { C.gold[1], C.gold[2], C.gold[3], 0.14 } or { 1, 1, 1, 0 })
                 end
@@ -347,7 +348,7 @@ function LU.BuildPage(page)
                 end
                 r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and "unstable" or "")
                 r.sales:SetText(st and st.sales and (st.sales >= 10 and ("%d"):format(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) or "|cff615f5c—|r")
-                r.listed:SetText(st and st.qty and (st.qty >= 10000 and ("%dk"):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
+                r.listed:SetText(st and st.qty and (st.qty >= 10000 and (Tr("%dk")):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
                 local have = LS.Have(id)
                 if e.qty and e.qty > 0 and self.list and self.list.leveling then
                     r.have:SetText((have >= e.qty and "|cff5cd173" or "") .. have .. "/" .. e.qty .. (have >= e.qty and "|r" or ""))
@@ -362,7 +363,7 @@ function LU.BuildPage(page)
                     r.buy.text:SetText(buying and (b.stage == "confirm" and "Confirm" or "…") or "Buy")
                     r.buy:SetDisabled(b ~= nil and not buying)
                 end
-                if v and VERDICT[v] then r.tag:SetText(VERDICT[v][1]); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
+                if v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
                 r:Show()
             else
                 r:Hide()
@@ -386,7 +387,7 @@ function LU.BuildPage(page)
         self.list = l
         if not l then return end
         LU.select = l.key
-        self.title:SetText(l.title)
+        self.title:SetText(Tr(l.title))
         for k, btn in pairs(self.roleBtns) do btn:SetSelected(k == self.role) end
         for k, btn in pairs(self.kindBtns) do btn:SetSelected(k == self.kind) end
         self.dealBtn:SetSelected(self.dealsOnly)
@@ -410,12 +411,12 @@ function LU.BuildPage(page)
         self.offset = math.min(self.offset, math.max(0, #data - ROWS))
 
         -- sous-titre
-        local sub = ("%d items"):format(#data)
+        local sub = (Tr("%d items")):format(#data)
         if l.leveling then
             local now, usual, missing = LS.LevelCost(l)
-            sub = sub .. ("  ·  cost now %s, usual %s%s"):format(Money(now), Money(usual), missing > 0 and ("  (%d not priced)"):format(missing) or "")
-            if usual > 0 and now > usual * 1.1 then sub = sub .. "  ·  |cffe0a83dprices are high: wait|r"
-            elseif usual > 0 and now < usual * 0.9 then sub = sub .. "  ·  |cff5cd173good time to buy|r" end
+            sub = sub .. (Tr("  ·  cost now %s, usual %s%s")):format(Money(now), Money(usual), missing > 0 and (Tr("  (%d not priced)")):format(missing) or "")
+            if usual > 0 and now > usual * 1.1 then sub = sub .. Tr("  ·  |cffe0a83dprices are high: wait|r")
+            elseif usual > 0 and now < usual * 0.9 then sub = sub .. Tr("  ·  |cff5cd173good time to buy|r") end
         elseif l.key == "cd" then
             local board = LS.CooldownBoard()
             local parts = {}
@@ -429,11 +430,11 @@ function LU.BuildPage(page)
         else
             local res = LS.resolved
             if res and res.total > 0 and res.found < res.total and (l.key == "enchant" or l.key:find("^pb_")) then
-                sub = sub .. ("  ·  materials known for %d / %d recipes"):format(res.found, res.total)
+                sub = sub .. (Tr("  ·  materials known for %d / %d recipes")):format(res.found, res.total)
             end
         end
         local sc = P.Scanning and P.Scanning()
-        if sc and sc.mode == "list" then sub = ("Scanning %s: %d / %d…"):format(sc.label, sc.i, #sc.ids) end
+        if sc and sc.mode == "list" then sub = (Tr("Scanning %s: %d / %d…")):format(sc.label, sc.i, #sc.ids) end
         if LU.msg and LU.msgT and GetTime() - LU.msgT < 15 then sub = LU.msg end
         if LS.msg and LS.msgT and GetTime() - LS.msgT < 15 then sub = LS.msg end
         self.sub:SetText(sub)

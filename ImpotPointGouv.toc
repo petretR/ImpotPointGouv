@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: |cffe0a83dImpot|r|cffece6d6PointGouv|r
 ## Notes: Gold tracking, custom mailbox, craft advisor and AH price scanning.
-## Version: 0.18.1
+## Version: 0.19.0
 ## Author: Raf
 ## IconTexture: Interface\AddOns\ImpotPointGouv\media\icon.tga
 ## SavedVariables: ImpotPointGouvDB
@@ -12,6 +12,8 @@ libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
 libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
 
+Locale.lua
+Locale_frFR.lua
 Core.lua
 Ledger.lua
 Theme.lua

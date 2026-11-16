@@ -4,6 +4,7 @@
 -- courrier) ; la nôtre la remplace : onglets Inbox (liste, récupération filtrée) et
 -- Send (destinataire, or, objets des sacs). "Blizzard mailbox" révèle l'originale.
 local _, ns = ...
+local Tr = ns.L
 local T = ns.Theme
 local C = T.C
 local M = {}
@@ -13,15 +14,15 @@ local W, H = 760, 560
 local ROW_H = 40
 
 local KINDS = {
-    sale      = { label = "AH sale",        color = { 0.36, 0.82, 0.45 } },
-    pending   = { label = "Sale pending", color = { 0.88, 0.66, 0.24 } },
-    won       = { label = "AH purchase",        color = { 0.45, 0.70, 0.98 } },
-    expired   = { label = "Expired",          color = { 0.92, 0.58, 0.28 } },
-    cancelled = { label = "Cancelled",          color = { 0.62, 0.60, 0.58 } },
-    outbid    = { label = "Outbid",      color = { 0.55, 0.75, 0.95 } },
+    sale      = { label = Tr("AH sale"),        color = { 0.36, 0.82, 0.45 } },
+    pending   = { label = Tr("Sale pending"), color = { 0.88, 0.66, 0.24 } },
+    won       = { label = Tr("AH purchase"),        color = { 0.45, 0.70, 0.98 } },
+    expired   = { label = Tr("Expired"),          color = { 0.92, 0.58, 0.28 } },
+    cancelled = { label = Tr("Cancelled"),          color = { 0.62, 0.60, 0.58 } },
+    outbid    = { label = Tr("Outbid"),      color = { 0.55, 0.75, 0.95 } },
     cod       = { label = "C.O.D.",    color = { 0.93, 0.36, 0.32 } },
-    gm        = { label = "GM",              color = { 0.80, 0.55, 0.95 } },
-    mail      = { label = "Mail",        color = { 0.75, 0.74, 0.70 } },
+    gm        = { label = Tr("GM"),              color = { 0.80, 0.55, 0.95 } },
+    mail      = { label = Tr("Mail"),        color = { 0.75, 0.74, 0.70 } },
 }
 
 local frame, mailOpen, lastCheck = nil, false, 0
@@ -136,9 +137,9 @@ local function SetStatus(text) if frame then frame.status:SetText(text or "") en
 function Finish(reason)
     if not run then return end
     local gained = GetMoney() - run.startMoney
-    local msg = ("Done: %d mail%s, %s"):format(run.count, run.count > 1 and "s" or "",
+    local msg = (Tr("Done: %d mail%s, %s")):format(run.count, run.count > 1 and "s" or "",
         ns.FormatMoney(gained, { sign = true, color = true, iconSize = 11 }))
-    if run.bagsFull then msg = msg .. "  ·  |cffed5c52bags full, items left in the mailbox|r" end
+    if run.bagsFull then msg = msg .. Tr("  ·  |cffed5c52bags full, items left in the mailbox|r") end
     if reason then msg = reason end
     run = nil
     SetStatus(msg)
@@ -167,7 +168,7 @@ function Step()
             if TakeMail(m, run.mode, run.bagsFull) then
                 run.lastSig, run.tries = m.sig, 0
                 run.count = run.count + 1
-                SetStatus(("Collecting… %d  ·  %s"):format(run.count,
+                SetStatus((Tr("Collecting… %d  ·  %s")):format(run.count,
                     ns.FormatMoney(GetMoney() - run.startMoney, { sign = true, color = true, iconSize = 11 })))
                 C_Timer.After(0.3, Step)
                 M.Refresh(true)
@@ -179,7 +180,7 @@ function Step()
     -- Plus rien de visible : d'autres courriers attendent côté serveur ?
     if total > n then
         local wait = math.max(0, lastCheck + 61 - GetTime())
-        SetStatus(("%d mails waiting on the server, refreshing in %d s…"):format(total - n, math.ceil(wait)))
+        SetStatus((Tr("%d mails waiting on the server, refreshing in %d s…")):format(total - n, math.ceil(wait)))
         if not run.waiting then
             run.waiting = true
             C_Timer.After(wait + 0.5, function()
@@ -196,7 +197,7 @@ function Step()
     if next(run.skip) and (run.passes or 0) < 2 then
         run.passes = (run.passes or 0) + 1
         run.skip = {}
-        SetStatus("Checking for mails the server was slow to hand over…")
+        SetStatus(Tr("Checking for mails the server was slow to hand over…"))
         C_Timer.After(1.5, Step)
         return
     end
@@ -248,10 +249,10 @@ local function Build()
     header:SetScript("OnDragStop", function() frame:StopMovingOrSizing() end)
     local hd = T.Divider(header, 0.07); hd:SetPoint("BOTTOMLEFT"); hd:SetPoint("BOTTOMRIGHT")
     local icon = header:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(30, 30); icon:SetPoint("LEFT", 18, 0)
-    local title = T.Text(header, 17, { bold = true, text = "Mail" })
+    icon:SetTexture(ns.MEDIA .. Tr("icon.tga")); icon:SetSize(30, 30); icon:SetPoint("LEFT", 18, 0)
+    local title = T.Text(header, 17, { bold = true, text = Tr("Mail") })
     title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, 0)
-    local tag = T.Text(header, 11, { color = C.faint, text = "|cffe0a83dImpot|rPointGouv  ·  mailbox" })
+    local tag = T.Text(header, 11, { color = C.faint, text = Tr("|cffe0a83dImpot|rPointGouv  ·  mailbox") })
     tag:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 10, 0)
 
     local close = T.CloseButton(header, function()
@@ -259,14 +260,14 @@ local function Build()
         frame:Hide()
     end)
     close:SetPoint("RIGHT", -12, 0)
-    local blizz = T.Button(header, "Blizzard mailbox", 118, 26, function() ShowBlizzard(false) end)
+    local blizz = T.Button(header, Tr("Blizzard mailbox"), 118, 26, function() ShowBlizzard(false) end)
     blizz:SetPoint("RIGHT", close, "LEFT", -10, 0)
-    blizz.tooltip = "Show the original mailbox. An ImpotPointGouv button brings you back here."
+    blizz.tooltip = Tr("Show the original mailbox. An ImpotPointGouv button brings you back here.")
     -- Onglets
     frame.tabs = {}
     local tx = 230
     for _, d in ipairs({ { "inbox", "Inbox" }, { "send", "Send" } }) do
-        local t = T.Tab(header, d[2], function() M.SetTab(d[1]) end)
+        local t = T.Tab(header, Tr(d[2]), function() M.SetTab(d[1]) end)
         t:SetPoint("BOTTOMLEFT", tx, 0)
         tx = tx + t:GetWidth()
         frame.tabs[d[1]] = t
@@ -290,11 +291,11 @@ local function Build()
     -- Récupération ciblée (comme TSM) : seulement un type de courrier.
     frame.filters = {}
     local fx = pad
-    local lbl = T.Text(frame, 11, { color = C.faint, text = "Collect only:" })
+    local lbl = T.Text(frame, 11, { color = C.faint, text = Tr("Collect only:") })
     lbl:SetPoint("TOPLEFT", pad, -56 - 16 - 74 - 18)
     fx = pad + 80
     for _, d in ipairs({ { "sales", "Sales" }, { "buys", "Purchases" }, { "expired", "Expired / cancelled" }, { "other", "Other mail" } }) do
-        local b = T.Button(frame, d[2], d[1] == "expired" and 140 or 96, 24, function() StartRun(d[1]) end)
+        local b = T.Button(frame, Tr(d[2]), d[1] == "expired" and 140 or 96, 24, function() StartRun(d[1]) end)
         b:SetPoint("TOPLEFT", fx, -56 - 16 - 74 - 12)
         fx = fx + (d[1] == "expired" and 140 or 96) + 6
         frame.filters[d[1]] = b
@@ -309,10 +310,10 @@ local function Build()
     for _, h in ipairs(hdrs) do
         local fs = T.Text(list, 11, { bold = true, color = C.faint, text = h[1] }); fs:SetPoint("TOPLEFT", h[2], -12)
     end
-    local hm = T.Text(list, 11, { bold = true, color = C.faint, text = "Amount", justify = "RIGHT" })
+    local hm = T.Text(list, 11, { bold = true, color = C.faint, text = Tr("Amount"), justify = "RIGHT" })
     hm:SetPoint("TOPRIGHT", -26, -12)
     local div = T.Divider(list); div:SetPoint("TOPLEFT", 10, -30); div:SetPoint("TOPRIGHT", -10, -30)
-    frame.empty = T.Text(list, 13, { color = C.faint, justify = "CENTER", text = "Mailbox empty. Nothing for the tax office to seize." })
+    frame.empty = T.Text(list, 13, { color = C.faint, justify = "CENTER", text = Tr("Mailbox empty. Nothing for the tax office to seize.") })
     frame.empty:SetPoint("CENTER")
 
     frame.rows = {}
@@ -330,19 +331,19 @@ local function Build()
     frame.status:SetWidth(380)
     frame.session = T.Text(frame, 11, { color = C.faint })
     frame.session:SetPoint("BOTTOMLEFT", pad, 8)
-    frame.takeAll = T.Button(frame, "Collect all", 170, 34, function() StartRun("all") end)
+    frame.takeAll = T.Button(frame, Tr("Collect all"), 170, 34, function() StartRun("all") end)
     frame.takeAll:SetPoint("BOTTOMRIGHT", -pad, 16)
-    frame.takeAll.tooltip = "Takes the gold and items from every mail (except C.O.D.)."
-    frame.takeGold = T.Button(frame, "Collect gold", 130, 34, function() StartRun("gold") end)
+    frame.takeAll.tooltip = Tr("Takes the gold and items from every mail (except C.O.D.).")
+    frame.takeGold = T.Button(frame, Tr("Collect gold"), 130, 34, function() StartRun("gold") end)
     frame.takeGold:SetPoint("RIGHT", frame.takeAll, "LEFT", -8, 0)
-    frame.takeGold.tooltip = "Takes only the gold: items stay in the mailbox."
+    frame.takeGold.tooltip = Tr("Takes only the gold: items stay in the mailbox.")
 
     M.BuildSend(frame)
 
     -- Bouton pour revenir depuis la boîte Blizzard
     if MailFrame then
         local reopen
-        reopen = T.Button(MailFrame, "ImpotPointGouv", 120, 22, function()
+        reopen = T.Button(MailFrame, Tr("ImpotPointGouv"), 120, 22, function()
             reopen:Hide(); M.ShowOverlay()
         end, "primary")
         reopen:SetPoint("TOPRIGHT", MailFrame, "TOPRIGHT", -60, -4)
@@ -379,12 +380,12 @@ local function EnsureRows()
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetInboxItem(self.mail.index, self.mail.attach)
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("Click: collect this mail", 0.88, 0.66, 0.24)
+                GameTooltip:AddLine(Tr("Click: collect this mail"), 0.88, 0.66, 0.24)
                 GameTooltip:Show()
             elseif self.mail then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:AddLine(self.mail.subject, 1, 1, 1, true)
-                GameTooltip:AddLine("Click: collect this mail", 0.88, 0.66, 0.24)
+                GameTooltip:AddLine(Tr("Click: collect this mail"), 0.88, 0.66, 0.24)
                 GameTooltip:Show()
             end
         end)
@@ -393,14 +394,14 @@ local function EnsureRows()
             local m = self.mail
             if not m or run then return end
             if m.cod > 0 then
-                ns.Print("C.O.D. mail: open it from the Blizzard mailbox to confirm payment.")
+                ns.Print(Tr("C.O.D. mail: open it from the Blizzard mailbox to confirm payment."))
                 return
             end
             if not TakeMail(m, "all", FreeSlots() == 0) then
                 if m.money == 0 and m.itemCount == 0 then
-                    ns.Print("this mail only contains text: read it from the Blizzard mailbox.")
+                    ns.Print(Tr("this mail only contains text: read it from the Blizzard mailbox."))
                 else
-                    ns.Print("bags full: cannot take the items.")
+                    ns.Print(Tr("bags full: cannot take the items."))
                 end
             end
             C_Timer.After(0.4, function() M.Refresh() end)
@@ -444,23 +445,23 @@ function M.Draw()
             local desc
             if m.kind == "sale" then
                 desc = m.who and ("bought by " .. m.who) or "auction sold"
-                if m.bid and m.bid > 0 then desc = desc .. "  ·  price " .. ns.FormatMoney(m.bid, { iconSize = 9 }) end
+                if m.bid and m.bid > 0 then desc = desc .. Tr("  ·  price ") .. ns.FormatMoney(m.bid, { iconSize = 9 }) end
             elseif m.kind == "pending" then desc = "gold arrives in about an hour"
             elseif m.kind == "expired" then desc = "unsold, item returned"
             elseif m.kind == "cancelled" then desc = "auction cancelled"
             elseif m.kind == "outbid" then desc = "your bid is refunded"
             elseif m.kind == "won" then desc = "item bought at the AH"
-            elseif m.itemCount > 1 then desc = m.itemCount .. " attachments"
+            elseif m.itemCount > 1 then desc = m.itemCount .. Tr(" attachments")
             else desc = (m.item and m.subject ~= name) and m.subject or "" end
             r.desc:SetText(desc)
             r.from:SetText(m.sender)
             r.exp:SetText(ExpireText(m.daysLeft))
             if m.cod > 0 then
-                r.amount:SetText("|cffed5c52CR " .. ns.FormatMoney(-m.cod, { iconSize = 11 }) .. "|r")
+                r.amount:SetText(Tr("|cffed5c52CR ") .. ns.FormatMoney(-m.cod, { iconSize = 11 }) .. "|r")
             elseif m.money > 0 then
                 r.amount:SetText(ns.FormatMoney(m.money, { sign = true, color = true, iconSize = 11 }))
             else
-                r.amount:SetText("|cff615f5c—|r")
+                r.amount:SetText(Tr("|cff615f5c—|r"))
             end
             r:SetAlpha(run and 0.75 or 1)
             r:Show()
@@ -483,15 +484,15 @@ function M.Refresh(quiet)
     end
     local c = frame.cards
     c[1].value:SetText(ns.FormatMoney(gold, { iconSize = 15 }))
-    c[1].sub:SetText(n .. (n > 1 and " mails" or " mail") .. (total > n and ("  ·  +" .. (total - n) .. " en attente") or ""))
+    c[1].sub:SetText(n .. (n > 1 and " mails" or " mail") .. (total > n and ("  ·  +" .. (total - n) .. Tr(" waiting")) or ""))
     c[2].value:SetText(salesN)
     c[2].sub:SetText(salesN > 0 and ns.FormatMoney(salesSum, { iconSize = 10 }) or "no sales")
     c[3].value:SetText(items)
     local free = FreeSlots()
     c[3].sub:SetText(free .. (free > 1 and " free bag slots" or " free bag slot"))
-    if items > free then c[3].sub:SetText("|cffed5c52" .. c[3].sub:GetText() .. "|r") end
+    if items > free then c[3].sub:SetText(Tr("|cffed5c52") .. c[3].sub:GetText() .. "|r") end
     c[4].value:SetText(expired + cancelled)
-    c[4].sub:SetText(expired .. " expired" .. (expired > 1 and "s" or "") .. "  ·  " .. cancelled .. " cancelled" .. (cancelled > 1 and "s" or ""))
+    c[4].sub:SetText(expired .. Tr(" expired") .. (expired > 1 and "s" or "") .. "  ·  " .. cancelled .. Tr(" cancelled") .. (cancelled > 1 and "s" or ""))
 
     local counts = {}
     for _, m in ipairs(mails) do
@@ -507,7 +508,7 @@ function M.Refresh(quiet)
     frame.takeAll:SetDisabled(run ~= nil and run.mode ~= "all")
     frame.takeGold:SetDisabled(run ~= nil and run.mode ~= "gold")
     if sessionStart then
-        frame.session:SetText("Collected since opening: " ..
+        frame.session:SetText(Tr("Collected since opening: ") ..
             ns.FormatMoney(GetMoney() - sessionStart, { sign = true, color = true, iconSize = 10 }))
     end
     if not run and not quiet and (frame.status:GetText() or "") == "" then
@@ -583,7 +584,7 @@ function M.BuildSend(f)
     local pad = 18
 
     -- Colonne gauche : destinataire, or, panier
-    local to = T.Text(p, 12, { bold = true, text = "To" }); to:SetPoint("TOPLEFT", pad, -18)
+    local to = T.Text(p, 12, { bold = true, text = Tr("To") }); to:SetPoint("TOPLEFT", pad, -18)
     p.to = MakeBox(p, 250); p.to:SetPoint("TOPLEFT", pad, -38)
     -- Saisie semi-automatique : vos persos (nom complet) et vos destinataires récents.
     p.sug = CreateFrame("Frame", nil, p)
@@ -609,20 +610,20 @@ function M.BuildSend(f)
         b:SetPoint("TOPLEFT", pad + ((i - 1) % 2) * 128, -70 - math.floor((i - 1) / 2) * 26)
         p.chips[i] = b
     end
-    local gl = T.Text(p, 12, { bold = true, text = "Gold" }); gl:SetPoint("TOPLEFT", pad, -134)
+    local gl = T.Text(p, 12, { bold = true, text = Tr("Gold") }); gl:SetPoint("TOPLEFT", pad, -134)
     p.gold = MakeBox(p, 90); p.gold:SetPoint("TOPLEFT", pad, -154); p.gold:SetNumeric(true)
     local gtag = T.Text(p, 11, { color = C.faint, text = "g" }); gtag:SetPoint("LEFT", p.gold, "RIGHT", 4, 0)
     p.silver = MakeBox(p, 60); p.silver:SetPoint("LEFT", p.gold, "RIGHT", 18, 0); p.silver:SetNumeric(true)
     local stag = T.Text(p, 11, { color = C.faint, text = "s" }); stag:SetPoint("LEFT", p.silver, "RIGHT", 4, 0)
 
-    local quick = T.Text(p, 12, { bold = true, text = "Quick fill" }); quick:SetPoint("TOPLEFT", pad, -194)
-    p.qCrafts = T.Button(p, "Crafts → bank", 122, 24, function() M.QuickFill("crafts") end)
+    local quick = T.Text(p, 12, { bold = true, text = Tr("Quick fill") }); quick:SetPoint("TOPLEFT", pad, -194)
+    p.qCrafts = T.Button(p, Tr("Crafts → bank"), 122, 24, function() M.QuickFill("crafts") end)
     p.qCrafts:SetPoint("TOPLEFT", pad, -214)
-    p.qCrafts.tooltip = "Selects what this character crafted to sell (and enchanting mats if it disenchants), minus your keep amounts, and sets your bank as recipient."
-    p.qReag = T.Button(p, "Reagents → crafter", 122, 24, function() M.QuickFill("reagents") end)
+    p.qCrafts.tooltip = Tr("Selects what this character crafted to sell (and enchanting mats if it disenchants), minus your keep amounts, and sets your bank as recipient.")
+    p.qReag = T.Button(p, Tr("Reagents → crafter"), 122, 24, function() M.QuickFill("reagents") end)
     p.qReag:SetPoint("LEFT", p.qCrafts, "RIGHT", 6, 0)
-    p.qReag.tooltip = "Selects the reagents your crafter is missing for the queue, and sets your crafter as recipient."
-    p.qClear = T.Button(p, "Clear", 70, 24, function() wipe(basket); M.DrawSend() end)
+    p.qReag.tooltip = Tr("Selects the reagents your crafter is missing for the queue, and sets your crafter as recipient.")
+    p.qClear = T.Button(p, Tr("Clear"), 70, 24, function() wipe(basket); M.DrawSend() end)
     p.qClear:SetPoint("TOPLEFT", pad, -244)
 
     p.summary = T.Text(p, 12, { color = C.text, wrap = true, justify = "LEFT" })
@@ -634,7 +635,7 @@ function M.BuildSend(f)
 
     p.status = T.Text(p, 11, { color = C.muted, wrap = true, justify = "LEFT" })
     p.status:SetPoint("BOTTOMLEFT", pad, 64); p.status:SetWidth(250)
-    p.go = T.Button(p, "Send", 250, 36, function() M.DoSend() end, "primary")
+    p.go = T.Button(p, Tr("Send"), 250, 36, function() M.DoSend() end, "primary")
     p.go:SetPoint("BOTTOMLEFT", pad, 16)
     for _, eb in ipairs({ p.gold, p.silver }) do
         eb:SetScript("OnTextChanged", function(_, user) if user then M.DrawSend() end end)
@@ -656,8 +657,8 @@ function M.BuildSend(f)
     -- Colonne droite : objets des sacs (clic = ajouter / retirer)
     local right = Card(p)
     right:SetPoint("TOPLEFT", pad + 270, -14); right:SetPoint("BOTTOMRIGHT", -pad, 16)
-    local rt = T.Text(right, 12, { bold = true, text = "Your bags" }); rt:SetPoint("TOPLEFT", 14, -10)
-    local rh = T.Text(right, 11, { color = C.faint, text = "click to add / remove · soulbound items are hidden" })
+    local rt = T.Text(right, 12, { bold = true, text = Tr("Your bags") }); rt:SetPoint("TOPLEFT", 14, -10)
+    local rh = T.Text(right, 11, { color = C.faint, text = Tr("click to add / remove · soulbound items are hidden") })
     rh:SetPoint("TOPRIGHT", -14, -11)
     p.rows = {}
     for i = 1, 13 do
@@ -689,7 +690,7 @@ function M.BuildSend(f)
         p.offset = math.max(0, math.min(math.max(0, #(p.items or {}) - #p.rows), p.offset - d * 3))
         M.DrawSend()
     end)
-    p.empty = T.Text(right, 12, { color = C.faint, text = "Nothing mailable in your bags." }); p.empty:SetPoint("CENTER")
+    p.empty = T.Text(right, 12, { color = C.faint, text = Tr("Nothing mailable in your bags.") }); p.empty:SetPoint("CENTER")
     -- Indique qu'il y a d'autres objets plus bas (molette).
     p.more = T.Text(right, 11, { color = C.gold, justify = "CENTER" }); p.more:SetPoint("BOTTOM", 0, 8)
     p.track = right:CreateTexture(nil, "ARTWORK"); p.track:SetTexture(T.WHITE); p.track:SetVertexColor(1, 1, 1, 0.05)
@@ -785,8 +786,8 @@ local DrawSendInner
 function M.DrawSend()
     local ok, err = pcall(DrawSendInner)
     if not ok and frame and frame.send then
-        frame.send.status:SetText("|cffed5c52" .. tostring(err):gsub("^.-:%d+: ", "") .. "|r")
-        frame.send.go.text:SetText("Send"); frame.send.go:SetDisabled(false)
+        frame.send.status:SetText(Tr("|cffed5c52") .. tostring(err):gsub("^.-:%d+: ", "") .. "|r")
+        frame.send.go.text:SetText(Tr("Send")); frame.send.go:SetDisabled(false)
     end
 end
 function DrawSendInner()
@@ -819,7 +820,7 @@ function DrawSendInner()
     local extra = #p.items - #p.rows
     if extra > 0 then
         local below = #p.items - p.offset - #p.rows
-        p.more:SetText(below > 0 and ("%d more below · scroll"):format(below) or "scroll up for more")
+        p.more:SetText(below > 0 and (Tr("%d more below · scroll")):format(below) or "scroll up for more")
         local h = p.track:GetHeight() or 0
         local frac = #p.rows / #p.items
         p.thumb:SetHeight(math.max(12, h * frac))
@@ -862,15 +863,15 @@ function DrawSendInner()
     local inLast = att - (mailsN - 1) * MAX
     local left = MAX - inLast
     if stacks == 0 and money == 0 then
-        p.summary:SetText(("|cff615f5cPick items on the right, or use Quick fill.|r\n\nAttachments  |cffece6d60 / %d|r"):format(MAX))
+        p.summary:SetText((Tr("|cff615f5cPick items on the right, or use Quick fill.|r\n\nAttachments  |cffece6d60 / %d|r")):format(MAX))
     else
         local col = left == 0 and "|cffe0a83d" or "|cffece6d6"
-        p.summary:SetText(("%d item%s (%d kind%s)%s\n\nAttachments  %s%d / %d|r%s\n%s"):format(
+        p.summary:SetText((Tr("%d item%s (%d kind%s)%s\n\nAttachments  %s%d / %d|r%s\n%s")):format(
             n, n == 1 and "" or "s", stacks, stacks == 1 and "" or "s",
             money > 0 and ("  +  " .. ns.FormatMoney(money, { iconSize = 11 })) or "",
             col, inLast, MAX, mailsN > 1 and ("  in mail " .. mailsN) or "",
-            mailsN > 1 and ("|cffe0a83d%d mails|r · %d attachments in total"):format(mailsN, att)
-                or (left > 0 and ("|cff5cd173%d slot%s left|r in this mail"):format(left, left == 1 and "" or "s") or "|cffe0a83dmail full|r: more goes in a 2nd mail")))
+            mailsN > 1 and (Tr("|cffe0a83d%d mails|r · %d attachments in total")):format(mailsN, att)
+                or (left > 0 and (Tr("|cff5cd173%d slot%s left|r in this mail")):format(left, left == 1 and "" or "s") or "|cffe0a83dmail full|r: more goes in a 2nd mail")))
     end
     -- Barre de remplissage du courrier en cours.
     p.bar:SetWidth(math.max(1, p.barBg:GetWidth() * (att == 0 and 0 or inLast / MAX)))
@@ -884,7 +885,7 @@ function M.DoSend()
     local p = frame.send
     local name = (p.to:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
     local money = (tonumber(p.gold:GetText() or "") or 0) * 10000 + (tonumber(p.silver:GetText() or "") or 0) * 100
-    if money > GetMoney() then p.status:SetText("|cffed5c52Not enough gold.|r"); return end
+    if money > GetMoney() then p.status:SetText(Tr("|cffed5c52Not enough gold.|r")); return end
     local want = {}
     for id, q in pairs(basket) do want[id] = q end
     if ns.Routine.SendTo(name, want, "items", money > 0 and money or nil) then

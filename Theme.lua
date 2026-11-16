@@ -1,5 +1,6 @@
 -- ImpotPointGouv : thème visuel (panneaux arrondis sombres, accent or, police Inter).
 local _, ns = ...
+local Tr = ns.L
 local T = {}
 ns.Theme = T
 
@@ -20,9 +21,9 @@ T.C = {
 }
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local CIRCLE = ns.MEDIA .. "circle.tga"
-local FONT_REG = ns.MEDIA .. "fonts\\Inter-Regular.ttf"
-local FONT_SEMI = ns.MEDIA .. "fonts\\Inter-SemiBold.ttf"
+local CIRCLE = ns.MEDIA .. Tr("circle.tga")
+local FONT_REG = ns.MEDIA .. Tr("fonts\\Inter-Regular.ttf")
+local FONT_SEMI = ns.MEDIA .. Tr("fonts\\Inter-SemiBold.ttf")
 T.WHITE, T.CIRCLE = WHITE, CIRCLE
 
 -- ------------------------------------------------------------ texte
@@ -113,6 +114,13 @@ function T.Button(parent, label, width, height, onClick, style)
     b.text = T.Text(b, 12, { bold = style ~= "ghost", justify = "CENTER",
         color = style == "primary" and { 0.08, 0.07, 0.05, 1 } or T.C.text })
     b.text:SetPoint("CENTER", 0, 0)
+    -- Le texte traduit peut être plus long : le bouton s'élargit au besoin (jamais ne rétrécit).
+    local setText = b.text.SetText
+    b.text.SetText = function(self, t)
+        setText(self, t)
+        local w = (self:GetStringWidth() or 0) + 18
+        if w > b:GetWidth() then b:SetWidth(w) end
+    end
     b.text:SetText(label)
     b.selected = false
     function b:Refresh()

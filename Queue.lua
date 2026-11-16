@@ -5,6 +5,7 @@
 -- Plan : la file + les crafts intermédiaires nécessaires (ex. Cured Light Hide) quand les fabriquer
 --   coûte moins cher que les acheter, puis la liste de courses (besoin − sacs/banque − alts).
 local _, ns = ...
+local Tr = ns.L
 local T, P, CR, I = ns.Theme, ns.Prices, ns.Craft, ns.Inventory
 local C = T.C
 local Q = {}
@@ -98,7 +99,7 @@ function Q.Add(prof, name, n)
     e.auto = nil
     e.owner = UnitGUID("player")
     db[k] = e.n > 0 and e or nil
-    ns.Print(("queue: %s ×%d"):format(name, e.n))
+    ns.Print((Tr("queue: %s ×%d")):format(name, e.n))
     Q.Refresh()
 end
 
@@ -180,7 +181,7 @@ end
 Q.Cycle = Cycle
 
 local function Ago(sec)
-    if sec < 90 then return sec .. " s" elseif sec < 5400 then return math.floor(sec / 60 + 0.5) .. " min" end
+    if sec < 90 then return sec .. " s" elseif sec < 5400 then return math.floor(sec / 60 + 0.5) .. Tr(" min") end
     return math.floor(sec / 3600 + 0.5) .. " h"
 end
 
@@ -313,14 +314,14 @@ function Q.Target(rec, ev, rules, commit)
     if c.posted > 0 then
         local soldOut = c.sold == c.posted
         if soldOut and c.median and c.median <= FAST then
-            t = math.max(t + step, t * 2); why = ("sold out, %d in ~%s"):format(c.sold, Ago(c.median))
+            t = math.max(t + step, t * 2); why = (Tr("sold out, %d in ~%s")):format(c.sold, Ago(c.median))
         elseif soldOut or (c.pending == 0 and c.sold >= 0.7 * c.posted) then
-            t = t + step; why = soldOut and ("sold out, %d in ~%s"):format(c.sold, Ago(c.median or 0))
-                or ("sold %d/%d"):format(c.sold, c.posted)
+            t = t + step; why = soldOut and (Tr("sold out, %d in ~%s")):format(c.sold, Ago(c.median or 0))
+                or (Tr("sold %d/%d")):format(c.sold, c.posted)
         elseif c.pending == 0 and c.expired > c.sold then
-            t = math.max(lo, t - step); why = ("only %d/%d sold"):format(c.sold, c.posted)
+            t = math.max(lo, t - step); why = (Tr("only %d/%d sold")):format(c.sold, c.posted)
         elseif c.pending == 0 then
-            why = ("sold %d/%d, holding"):format(c.sold, c.posted)
+            why = (Tr("sold %d/%d, holding")):format(c.sold, c.posted)
         end
     end
     t = Clamp(t, lo, rules.maxQty)
@@ -416,10 +417,10 @@ function Q.AutoQueue(allProfs)
         end
     end
     if added > 0 and not Q.IsCrafter(me) then CrafterSet()[me] = true end -- remplir une file fait de vous un crafteur
-    local msg = ("%d craft%s queued%s%s%s."):format(added, added == 1 and "" or "s",
-        cut and (" · capped by budget (%s)"):format(ns.FormatMoney(math.max(0, budget), { iconSize = 10 })) or "",
-        skipped > 0 and (" · %d skipped (flooded market)"):format(skipped) or "",
-        pending > 0 and (" · %d still loading, click again in a second"):format(pending) or "")
+    local msg = (Tr("%d craft%s queued%s%s%s.")):format(added, added == 1 and "" or "s",
+        cut and (Tr(" · capped by budget (%s)")):format(ns.FormatMoney(math.max(0, budget), { iconSize = 10 })) or "",
+        skipped > 0 and (Tr(" · %d skipped (flooded market)")):format(skipped) or "",
+        pending > 0 and (Tr(" · %d still loading, click again in a second")):format(pending) or "")
     -- Crafts pour le marchand : "×30 tant que Linen Cloth ≤ 24c".
     local vendorLines = {}
     for _, c in ipairs(cands) do
@@ -432,21 +433,21 @@ function Q.AutoQueue(allProfs)
                     .. (d.even and d.even[id] and (" (loses money above " .. ns.FormatMoney(d.even[id], { iconSize = 10 }) .. ")") or "")
             end
             if #parts > 0 then
-                vendorLines[#vendorLines + 1] = ("%s ×%d for the vendor, while %s"):format(c.name, db[c.k].n, table.concat(parts, ", "))
+                vendorLines[#vendorLines + 1] = (Tr("%s ×%d for the vendor, while %s")):format(c.name, db[c.k].n, table.concat(parts, ", "))
             end
         end
     end
     -- Achats directs à revendre au marchand repérés au dernier scan.
     local flips = ns.Market and ns.Market.FlipCount and ns.Market.FlipCount() or 0
-    if flips > 0 then msg = msg .. (" · %d vendor flip%s on the AH (Market tab)"):format(flips, flips > 1 and "s" or "") end
+    if flips > 0 then msg = msg .. (Tr(" · %d vendor flip%s on the AH (Market tab)")):format(flips, flips > 1 and "s" or "") end
     -- L'or est réparti sur vos persos : signale s'il faut en envoyer à celui qui achète.
     local need = (Q.Plan().buyCost or 0) - (GetMoney and GetMoney() or 0)
     if need > 0 then
         local rich = Q.RichestAlt()
-        msg = msg .. (" · mail yourself %s%s"):format(ns.FormatMoney(need, { iconSize = 10 }), rich and (" from " .. rich) or "")
+        msg = msg .. (Tr(" · mail yourself %s%s")):format(ns.FormatMoney(need, { iconSize = 10 }), rich and (" from " .. rich) or "")
     end
     if allProfs then msg = msg .. "  (" .. (#profs > 0 and table.concat(profs, ", ") or "open each profession once first") .. ")" end
-    if #vendorLines > 0 then msg = msg .. " · vendor crafts: see chat" end
+    if #vendorLines > 0 then msg = msg .. Tr(" · vendor crafts: see chat") end
     Q.SetStatus(msg)
     for _, l in ipairs(vendorLines) do ns.Print(l) end
     Q.Refresh()
@@ -668,15 +669,15 @@ function Q.CraftNext()
     local c, live, count, blocked, inBank = NextCraft(plan)
     if not c then
         if blocked and inBank then
-            Q.SetStatus(("Reagents for %s are in your bank: take them out to your bags."):format(blocked.name))
+            Q.SetStatus((Tr("Reagents for %s are in your bank: take them out to your bags.")):format(blocked.name))
         elseif blocked and Q.PendingMail() then
-            Q.SetStatus(("Missing reagents for %s: your AH purchases are in the mailbox (%s)."):format(blocked.name, Q.PendingMail()))
+            Q.SetStatus((Tr("Missing reagents for %s: your AH purchases are in the mailbox (%s).")):format(blocked.name, Q.PendingMail()))
         elseif blocked then
-            Q.SetStatus(("Missing reagents for %s: check the shopping list."):format(blocked.name))
+            Q.SetStatus((Tr("Missing reagents for %s: check the shopping list.")):format(blocked.name))
         elseif #plan.crafts > 0 then
-            Q.SetStatus("Nothing to craft in this profession: open the profession of the queued recipes.")
+            Q.SetStatus(Tr("Nothing to craft in this profession: open the profession of the queued recipes."))
         else
-            Q.SetStatus("The queue is empty.")
+            Q.SetStatus(Tr("The queue is empty."))
         end
         return
     end
@@ -687,7 +688,7 @@ function Q.CraftNext()
     elseif DoTradeSkill then
         DoTradeSkill(live.index, count)
     end
-    Q.SetStatus(("Crafting %s ×%d…"):format(c.name, count))
+    Q.SetStatus((Tr("Crafting %s ×%d…")):format(c.name, count))
 end
 
 -- ------------------------------------------------------------ achats HV (marchandises empilables)
@@ -698,13 +699,13 @@ local function ExpectedUnit(id) return P.AHValue(id) end
 function Q.BuyNext()
     local AH = C_AuctionHouse
     if not AH or not AH.StartCommoditiesPurchase then
-        P.Status("Buying from the queue needs the modern auction house.")
+        P.Status(Tr("Buying from the queue needs the modern auction house."))
         return
     end
     if buy and buy.stage == "confirm" then
         local b = buy
         b.stage = "wait"
-        P.Status(("Buying %d× %s…"):format(b.qty, b.name))
+        P.Status((Tr("Buying %d× %s…")):format(b.qty, b.name))
         Q.UpdateBuyButton()
         AH.ConfirmCommoditiesPurchase(b.id, b.qty)
         return
@@ -716,7 +717,7 @@ function Q.BuyNext()
             if not ns.IsCommodity(row.id) then
                 Q.skipBuy = Q.skipBuy or {}
                 Q.skipBuy[row.id] = true
-                P.Status(("%s isn't stackable: buy it from the Buy tab."):format(row.name))
+                P.Status((Tr("%s isn't stackable: buy it from the Buy tab.")):format(row.name))
                 Q.UpdateBuyButton()
                 return
             end
@@ -724,7 +725,7 @@ function Q.BuyNext()
             if mx and AH.SendSearchQuery and AH.MakeItemKey and AH.GetCommoditySearchResultInfo then
                 -- Prix maximum connu : on regarde d'abord combien il en reste à ce prix, et on n'achète que ceux-là.
                 buy = { id = row.id, qty = row.buy, name = row.name, stage = "depth", max = mx }
-                P.Status(("Checking how many %s are listed at %s or less…"):format(row.name, ns.FormatMoney(mx, { iconSize = 10 })))
+                P.Status((Tr("Checking how many %s are listed at %s or less…")):format(row.name, ns.FormatMoney(mx, { iconSize = 10 })))
                 Q.UpdateBuyButton()
                 AH.SendSearchQuery(AH.MakeItemKey(row.id), { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }, false)
                 local my = buy
@@ -732,13 +733,13 @@ function Q.BuyNext()
                 return
             end
             buy = { id = row.id, qty = row.buy, name = row.name, stage = "price" }
-            P.Status(("Getting the price for %d× %s…"):format(row.buy, row.name))
+            P.Status((Tr("Getting the price for %d× %s…")):format(row.buy, row.name))
             Q.UpdateBuyButton()
             AH.StartCommoditiesPurchase(row.id, row.buy)
             return
         end
     end
-    P.Status("Nothing left to buy at the AH for this queue.")
+    P.Status(Tr("Nothing left to buy at the AH for this queue."))
 end
 
 -- Résultat de la recherche : quantité disponible à votre prix maximum ou moins.
@@ -755,14 +756,14 @@ function Q.OnDepth(itemID)
     end
     if cheap == 0 then
         Q.skipBuy = Q.skipBuy or {}; Q.skipBuy[buy.id] = true
-        Q.CancelBuy(("No %s left at %s or less. Scan, then Auto-fill to recalculate."):format(buy.name,
+        Q.CancelBuy((Tr("No %s left at %s or less. Scan, then Auto-fill to recalculate.")):format(buy.name,
             ns.FormatMoney(buy.max, { iconSize = 10 })))
         return
     end
     local qty = math.min(buy.qty, cheap)
     buy.partial = qty < buy.qty
     buy.qty, buy.stage = qty, "price"
-    P.Status(("Getting the price for %d× %s%s…"):format(qty, buy.name, buy.partial and " (all that's left at your max)" or ""))
+    P.Status((Tr("Getting the price for %d× %s%s…")):format(qty, buy.name, buy.partial and " (all that's left at your max)" or ""))
     Q.UpdateBuyButton()
     AH.StartCommoditiesPurchase(buy.id, qty)
 end
@@ -773,7 +774,7 @@ function Q.OnPrice(unit, total)
     -- Garde-fous anti-arnaque : jamais plus cher qu'un marchand, jamais très au-dessus du prix habituel.
     local vb, est = P.VendorBuy(buy.id)
     if vb and unit and unit > vb then
-        Q.CancelBuy(("%s is sold by vendors for %s%s: not bought at the AH (%s each)."):format(buy.name,
+        Q.CancelBuy((Tr("%s is sold by vendors for %s%s: not bought at the AH (%s each).")):format(buy.name,
             ns.FormatMoney(vb, { iconSize = 10 }), est and " (est.)" or "", ns.FormatMoney(unit, { iconSize = 10 })))
         Q.skipBuy = Q.skipBuy or {}; Q.skipBuy[bid] = true
         return
@@ -782,13 +783,13 @@ function Q.OnPrice(unit, total)
     local mx0 = Q.MaxPrice(buy.id)
     local even = Q.BreakEven(bid)
     if unit and even and unit > even then
-        Q.CancelBuy(("%s: %s each, you'd LOSE money above %s. Not bought."):format(buy.name,
+        Q.CancelBuy((Tr("%s: %s each, you'd LOSE money above %s. Not bought.")):format(buy.name,
             ns.FormatMoney(unit, { iconSize = 10 }), ns.FormatMoney(even, { iconSize = 10 })))
         Q.skipBuy = Q.skipBuy or {}; Q.skipBuy[bid] = true
         return
     end
     if unit and ((mx0 and unit > mx0) or (usual and unit > usual * 2)) then
-        Q.CancelBuy(("%s: %s each is %s, not bought. Buy fewer by hand if you still want it."):format(buy.name,
+        Q.CancelBuy((Tr("%s: %s each is %s, not bought. Buy fewer by hand if you still want it.")):format(buy.name,
             ns.FormatMoney(unit, { iconSize = 10 }), mx0 and unit > mx0 and ("above your max " .. ns.FormatMoney(mx0, { iconSize = 10 }))
             or ("over twice the usual " .. ns.FormatMoney(usual, { iconSize = 10 }))))
         Q.skipBuy = Q.skipBuy or {}; Q.skipBuy[bid] = true
@@ -799,11 +800,11 @@ function Q.OnPrice(unit, total)
     local warn = ""
     local mx = Q.MaxPrice(buy.id)
     if mx and unit and unit > mx then
-        warn = ("  |cffed5c52above your max %s: not profitable anymore!|r"):format(ns.FormatMoney(mx, { iconSize = 10 }))
+        warn = (Tr("  |cffed5c52above your max %s: not profitable anymore!|r")):format(ns.FormatMoney(mx, { iconSize = 10 }))
     elseif exp and unit and unit > exp * 1.5 then
-        warn = ("  |cffed5c52%d%% above usual!|r"):format(math.floor((unit / exp - 1) * 100))
+        warn = (Tr("  |cffed5c52%d%% above usual!|r")):format(math.floor((unit / exp - 1) * 100))
     end
-    P.Status(("Buy %d× %s for %s (%s each)? Click Confirm.%s"):format(buy.qty, buy.name,
+    P.Status((Tr("Buy %d× %s for %s (%s each)? Click Confirm.%s")):format(buy.qty, buy.name,
         ns.FormatMoney(total, { iconSize = 10 }), ns.FormatMoney(unit, { iconSize = 10 }), warn))
     Q.UpdateBuyButton()
 end
@@ -827,20 +828,20 @@ function Q.UpdateBuyButton()
         end
     end
     if buy and buy.stage == "confirm" then
-        buyButton.text:SetText("Confirm " .. buy.qty .. "× " .. buy.name)
+        buyButton.text:SetText(Tr("Confirm ") .. buy.qty .. "× " .. buy.name)
     elseif buy then
         buyButton.text:SetText(buy.stage == "depth" and "Checking…" or "…")
     else
         -- Ce que le prochain clic achète, en clair.
-        buyButton.text:SetText(first and ("Buy %d× %s"):format(first.buy, first.name) or "No reagent to buy here")
+        buyButton.text:SetText(first and (Tr("Buy %d× %s")):format(first.buy, first.name) or "No reagent to buy here")
     end
-    buyButton.tooltip = ("%d reagent%s to buy. You confirm the total price; never above the vendor price or your profitable max."):format(n, n == 1 and "" or "s")
+    buyButton.tooltip = (Tr("%d reagent%s to buy. You confirm the total price; never above the vendor price or your profitable max.")):format(n, n == 1 and "" or "s")
     buyButton:SetDisabled(n == 0 and not buy)
 end
 
 ns.On("AH_BAR_READY", function(bar)
     if buyButton then return end
-    buyButton = T.Button(bar, "Buy reagents", 220, 26, function() Q.BuyNext() end)
+    buyButton = T.Button(bar, Tr("Buy reagents"), 220, 26, function() Q.BuyNext() end)
     buyButton:SetPoint("LEFT", bar.scan or bar, bar.scan and "RIGHT" or "LEFT", 6, 0)
     bar.buyButton = buyButton
     bar:SetWidth(790)
@@ -880,7 +881,7 @@ function Q.BuyVendorNeeds(auto, only)
             local unit = (price and stack and stack > 0) and price / stack or 0
             rows[#rows + 1] = { id = w.id, qty = w.qty, value = math.floor(unit * w.qty) }
         end
-        ns.Preview.Show(rows, { title = "Buy from this vendor", sub = "Reagents your craft queue still needs.", confirm = "Buy" },
+        ns.Preview.Show(rows, { title = Tr("Buy from this vendor"), sub = Tr("Reagents your craft queue still needs."), confirm = Tr("Buy") },
             function(chosen)
                 local set = {}
                 for _, r in ipairs(chosen) do set[r.id] = true end
@@ -899,7 +900,7 @@ function Q.BuyVendorNeeds(auto, only)
         local unit = (price and stack and stack > 0) and price / stack or 0
         local cost = unit * w.qty
         if GetMoney() < spent + cost then
-            ns.Print("|cffed5c52not enough gold for all the vendor reagents.|r")
+            ns.Print(Tr("|cffed5c52not enough gold for all the vendor reagents.|r"))
             break
         end
         local left = w.qty
@@ -912,7 +913,7 @@ function Q.BuyVendorNeeds(auto, only)
         total, spent = total + w.qty, spent + cost
     end
     if total > 0 then
-        ns.Print(("%sbought %d vendor reagent%s for your craft queue (%s)."):format(auto and "auto-" or "",
+        ns.Print((Tr("%sbought %d vendor reagent%s for your craft queue (%s).")):format(auto and "auto-" or "",
             total, total > 1 and "s" or "", ns.FormatMoney(spent, { iconSize = 11 })))
     end
     C_Timer.After(0.5, function() if UpdateVendorButton then UpdateVendorButton() end end)
@@ -927,12 +928,12 @@ function UpdateVendorButton()
             Q.BuyVendorNeeds(false)
         end, "primary")
         vendorButton:SetPoint("BOTTOMLEFT", MerchantFrame, "TOPLEFT", 60, 4)
-        vendorButton.tooltip = "Buys every vendor reagent your craft queue still needs."
+        vendorButton.tooltip = Tr("Buys every vendor reagent your craft queue still needs.")
     end
     if #list > 0 then
         local n = 0
         for _, w in ipairs(list) do n = n + w.qty end
-        vendorButton.text:SetText(("Buy queue reagents (%d)"):format(n))
+        vendorButton.text:SetText((Tr("Buy queue reagents (%d)")):format(n))
         vendorButton:Show()
     else
         vendorButton:Hide()
@@ -970,7 +971,7 @@ local function BuildRules(parent)
     f:SetFrameLevel((parent:GetFrameLevel() or 1) + 20)
     f:EnableMouse(true)
     T.Surface(f, C.surface2, 10)
-    local t = T.Text(f, 13, { bold = true, text = "Queue rules" }); t:SetPoint("TOPLEFT", 16, -14)
+    local t = T.Text(f, 13, { bold = true, text = Tr("Queue rules") }); t:SetPoint("TOPLEFT", 16, -14)
     local r = CR.Rules()
     local function Num(k, lo, hi) return function() return r[k] end, function(v) r[k] = math.max(lo, math.min(hi, v)) end end
     local money = function(v) return ns.FormatMoney(v, { iconSize = 10 }) end
@@ -995,7 +996,7 @@ local function BuildRules(parent)
     end
     -- Interrupteur : équipement blanc au prix marchand
     local wy = -44 - #rows * 28
-    local wl = T.Text(f, 12, { color = C.text, text = "White gear: vendor price only" }); wl:SetPoint("TOPLEFT", 16, wy)
+    local wl = T.Text(f, 12, { color = C.text, text = Tr("White gear: vendor price only") }); wl:SetPoint("TOPLEFT", 16, wy)
     local wb
     wb = T.Button(f, "", 70, 20, function()
         r.ignoreWhiteGear = not r.ignoreWhiteGear
@@ -1003,12 +1004,12 @@ local function BuildRules(parent)
     end, "pill")
     wb:SetPoint("TOPRIGHT", -52, wy + 3)
     wb.text:SetText(r.ignoreWhiteGear and "On" or "Off"); wb:SetSelected(r.ignoreWhiteGear)
-    wb.tooltip = "White (common) gear rarely sells on the AH: value it at the vendor price only. Bags, armor kits and reagents are not affected."
+    wb.tooltip = Tr("White (common) gear rarely sells on the AH: value it at the vendor price only. Bags, armor kits and reagents are not affected.")
     local hint = T.Text(f, 11, { color = C.faint, wrap = true, justify = "LEFT",
-        text = "Stock target: starts at 2 (gear: 1), +2 when it sells, ×2 when everything sells within an hour, −2 when it doesn't. Capped by your budget." })
+        text = Tr("Stock target: starts at 2 (gear: 1), +2 when it sells, ×2 when everything sells within an hour, −2 when it doesn't. Capped by your budget.") })
     hint:SetPoint("TOPLEFT", 16, -44 - (#rows + 1) * 28 - 4)
     hint:SetPoint("RIGHT", f, "RIGHT", -16, 0)
-    local done = T.Button(f, "Done", 90, 26, function() f:Hide(); CR.Refresh() end, "primary")
+    local done = T.Button(f, Tr("Done"), 90, 26, function() f:Hide(); CR.Refresh() end, "primary")
     done:SetPoint("BOTTOMRIGHT", -12, 12)
     f:Hide()
     return f
@@ -1025,14 +1026,14 @@ local function Build(panel)
     view:SetPoint("TOPLEFT", 12, -46)
     view:SetPoint("BOTTOMRIGHT", -12, 12)
 
-    local auto = T.Button(view, "Auto-fill", 110, 26, function() Q.AutoQueue(IsShiftKeyDown()) end)
+    local auto = T.Button(view, Tr("Auto-fill"), 110, 26, function() Q.AutoQueue(IsShiftKeyDown()) end)
     auto:SetPoint("TOPLEFT", 0, 0)
-    auto.tooltip = "Fills the queue with what's worth crafting now, in the right quantities and within your budget. Shift-click: all your professions."
-    local clear = T.Button(view, "Clear", 64, 26, function() Q.Clear() end)
+    auto.tooltip = Tr("Fills the queue with what's worth crafting now, in the right quantities and within your budget. Shift-click: all your professions.")
+    local clear = T.Button(view, Tr("Clear"), 64, 26, function() Q.Clear() end)
     clear:SetPoint("LEFT", auto, "RIGHT", 6, 0)
-    local rulesBtn = T.Button(view, "Settings", 80, 26, function() ns.UI.Toggle("settings") end)
+    local rulesBtn = T.Button(view, Tr("Settings"), 80, 26, function() ns.UI.Toggle("settings") end)
     rulesBtn:SetPoint("LEFT", clear, "RIGHT", 6, 0)
-    rulesBtn.tooltip = "Profit, margin, budget, quantities."
+    rulesBtn.tooltip = Tr("Profit, margin, budget, quantities.")
     view.status = T.Text(view, 11, { color = C.muted })
     view.status:SetPoint("TOPLEFT", 2, -34)
     view.status:SetWidth(PW and PW - 30 or 400)
@@ -1040,7 +1041,7 @@ local function Build(panel)
     -- File
     local qc = Card(view)
     qc:SetPoint("TOPLEFT", 0, -52); qc:SetPoint("TOPRIGHT", 0, -52); qc:SetHeight(32 + QROWS * 24 + 6)
-    local qt = T.Text(qc, 12, { bold = true, text = "To craft" }); qt:SetPoint("TOPLEFT", 14, -10)
+    local qt = T.Text(qc, 12, { bold = true, text = Tr("To craft") }); qt:SetPoint("TOPLEFT", 14, -10)
     view.sum = T.Text(qc, 11, { color = C.muted, justify = "RIGHT" }); view.sum:SetPoint("TOPRIGHT", -12, -11)
     view.qrows = {}
     for i = 1, QROWS do
@@ -1066,36 +1067,36 @@ local function Build(panel)
             T.ItemTooltip(self, c.rec.pid)
             if c.inter then
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("Crafted as a reagent for the recipes below it in the queue: not sold, not mailed.", 0.6, 0.85, 0.55, true)
+                GameTooltip:AddLine(Tr("Crafted as a reagent for the recipes below it in the queue: not sold, not mailed."), 0.6, 0.85, 0.55, true)
                 GameTooltip:Show()
                 return
             end
             if c.ev and c.ev.verdict then
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("|cffe0a83dImpot|rPointGouv: " .. c.ev.verdict, 1, 1, 1)
+                GameTooltip:AddLine(Tr("|cffe0a83dImpot|rPointGouv: ") .. c.ev.verdict, 1, 1, 1)
                 if c.ev.profit then
-                    GameTooltip:AddDoubleLine("Profit per craft", ns.FormatMoney(c.ev.profit, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7)
+                    GameTooltip:AddDoubleLine(Tr("Profit per craft"), ns.FormatMoney(c.ev.profit, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7)
                 end
-                if c.prof then GameTooltip:AddDoubleLine("Profession", c.prof, 0.7, 0.7, 0.7, 1, 1, 1) end
+                if c.prof then GameTooltip:AddDoubleLine(Tr("Profession"), c.prof, 0.7, 0.7, 0.7, 1, 1, 1) end
                 local d = ns.db.depth and ns.db.depth[c.rec.pid]
                 if c.ev.channel == "vendor" and not d then
                     GameTooltip:AddLine(" ")
-                    GameTooltip:AddLine(("For the vendor: up to %d per session (Rules)."):format(CR.Rules().vendorCap or 40), 0.88, 0.66, 0.24)
-                    GameTooltip:AddLine("Click Scan at the AH, then Queue profitable: it tells you up to which reagent price it stays profitable.", 0.6, 0.6, 0.6, true)
+                    GameTooltip:AddLine((Tr("For the vendor: up to %d per session (Rules).")):format(CR.Rules().vendorCap or 40), 0.88, 0.66, 0.24)
+                    GameTooltip:AddLine(Tr("Click Scan at the AH, then Queue profitable: it tells you up to which reagent price it stays profitable."), 0.6, 0.6, 0.6, true)
                 elseif d and c.ev.channel == "vendor" then
                     GameTooltip:AddLine(" ")
-                    GameTooltip:AddLine(("Profitable at the vendor up to %d crafts while:"):format(d.n), 0.88, 0.66, 0.24)
+                    GameTooltip:AddLine((Tr("Profitable at the vendor up to %d crafts while:")):format(d.n), 0.88, 0.66, 0.24)
                     for id, mx in pairs(d.max) do
-                        GameTooltip:AddDoubleLine(("  %s (buy %d)"):format(P.Name(id), d.buy[id] or 0),
+                        GameTooltip:AddDoubleLine((Tr("  %s (buy %d)")):format(P.Name(id), d.buy[id] or 0),
                             "≤ " .. ns.FormatMoney(mx, { iconSize = 11 }), 0.8, 0.8, 0.8, 1, 1, 1)
                         if d.even and d.even[id] then
-                            GameTooltip:AddDoubleLine("    loses money above", ns.FormatMoney(d.even[id], { iconSize = 11 }), 0.6, 0.6, 0.6, 0.93, 0.36, 0.32)
+                            GameTooltip:AddDoubleLine(Tr("    loses money above"), ns.FormatMoney(d.even[id], { iconSize = 11 }), 0.6, 0.6, 0.6, 0.93, 0.36, 0.32)
                         end
                     end
-                    GameTooltip:AddLine(("From your scan %s ago."):format(P.Ago(time() - (d.t or time()) + (d.age or 0))), 0.5, 0.5, 0.5)
+                    GameTooltip:AddLine((Tr("From your scan %s ago.")):format(P.Ago(time() - (d.t or time()) + (d.age or 0))), 0.5, 0.5, 0.5)
                 else
                     local st = ns.db.settings.adapt and ns.db.settings.adapt[c.rec.pid]
-                    if st then GameTooltip:AddDoubleLine("Stock target", st.why or tostring(st.t), 0.7, 0.7, 0.7, 1, 1, 1) end
+                    if st then GameTooltip:AddDoubleLine(Tr("Stock target"), st.why or tostring(st.t), 0.7, 0.7, 0.7, 1, 1, 1) end
                 end
             end
             GameTooltip:Show()
@@ -1104,7 +1105,7 @@ local function Build(panel)
         view.qrows[i] = r
     end
     view.qempty = T.Text(qc, 12, { color = C.faint, justify = "CENTER", wrap = true,
-        text = "Empty. Click Auto-fill, or right-click a recipe in the profession window." })
+        text = Tr("Empty. Click Auto-fill, or right-click a recipe in the profession window.") })
     view.qempty:SetPoint("CENTER", 0, -10); view.qempty:SetWidth(320)
     view.qoff = 0
     qc:EnableMouseWheel(true)
@@ -1117,7 +1118,7 @@ local function Build(panel)
     local sc = Card(view)
     sc:SetPoint("TOPLEFT", qc, "BOTTOMLEFT", 0, -10); sc:SetPoint("TOPRIGHT", qc, "BOTTOMRIGHT", 0, -10)
     sc:SetHeight(46 + SROWS * 22 + 6)
-    local st = T.Text(sc, 12, { bold = true, text = "Shopping list" }); st:SetPoint("TOPLEFT", 14, -10)
+    local st = T.Text(sc, 12, { bold = true, text = Tr("Shopping list") }); st:SetPoint("TOPLEFT", 14, -10)
     view.ssum = T.Text(sc, 11, { color = C.muted, justify = "RIGHT" }); view.ssum:SetPoint("TOPRIGHT", -12, -11)
     local cols = { { "Need", 186 }, { "Have", 226 }, { "Alts", 266 }, { "Buy", 306 } }
     for _, c in ipairs(cols) do
@@ -1141,19 +1142,19 @@ local function Build(panel)
             if not row then return end
             T.ItemTooltip(self, row.id)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddDoubleLine("Needed", row.need, 0.7, 0.7, 0.7, 1, 1, 1)
-            GameTooltip:AddDoubleLine("On this character (bags + bank)", row.mine, 0.7, 0.7, 0.7, 1, 1, 1)
+            GameTooltip:AddDoubleLine(Tr("Needed"), row.need, 0.7, 0.7, 0.7, 1, 1, 1)
+            GameTooltip:AddDoubleLine(Tr("On this character (bags + bank)"), row.mine, 0.7, 0.7, 0.7, 1, 1, 1)
             for _, d in ipairs(row.detail or {}) do
                 GameTooltip:AddDoubleLine("  " .. d[1], d[2], 0.7, 0.7, 0.7, 1, 1, 1)
             end
-            if row.fromAlts > 0 then GameTooltip:AddLine("Mail " .. row.fromAlts .. " from your alts.", 0.88, 0.66, 0.24) end
-            if row.src == "craft" then GameTooltip:AddLine("Cheaper to craft: added to the queue automatically.", 0.65, 0.85, 0.55) end
+            if row.fromAlts > 0 then GameTooltip:AddLine(Tr("Mail ") .. row.fromAlts .. Tr(" from your alts."), 0.88, 0.66, 0.24) end
+            if row.src == "craft" then GameTooltip:AddLine(Tr("Cheaper to craft: added to the queue automatically."), 0.65, 0.85, 0.55) end
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function() GameTooltip:Hide() end)
         view.srows[i] = r
     end
-    view.sempty = T.Text(sc, 12, { color = C.faint, justify = "CENTER", text = "Nothing to buy." })
+    view.sempty = T.Text(sc, 12, { color = C.faint, justify = "CENTER", text = Tr("Nothing to buy.") })
     view.sempty:SetPoint("CENTER", 0, -10)
     view.soff = 0
     sc:EnableMouseWheel(true)
@@ -1164,12 +1165,12 @@ local function Build(panel)
 
     view.rules = BuildRules(view)
 
-    view.craft = T.Button(view, "Craft next", 200, 36, function() Q.CraftNext() end, "primary")
+    view.craft = T.Button(view, Tr("Craft next"), 200, 36, function() Q.CraftNext() end, "primary")
     view.craft:HookScript("OnEnter", function(self)
         local key = ns.Next and ns.Next.Key()
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Crafts every queued copy of the next recipe.", 1, 1, 1, true)
-        GameTooltip:AddLine(key and ("\"Next action\" key: " .. key .. " (crafts; disenchants when the Disenchant window is open)")
+        GameTooltip:AddLine(Tr("Crafts every queued copy of the next recipe."), 1, 1, 1, true)
+        GameTooltip:AddLine(key and ("\"Next action\" key: " .. key .. Tr(" (crafts; disenchants when the Disenchant window is open)"))
             or "Tip: bind \"Next action\" in Options > Keybindings > AddOns > ImpotPointGouv to craft and disenchant with one key.",
             0.88, 0.66, 0.24, true)
         GameTooltip:Show()
@@ -1201,7 +1202,7 @@ function Q.Refresh()
         if c then
             r.entry = c
             r.icon:SetTexture(c.rec.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-            r.name:SetText(c.inter and ("|cff9ad98c" .. c.name .. "|r  |cff615f5c· reagent|r") or c.name)
+            r.name:SetText(c.inter and ("|cff9ad98c" .. c.name .. Tr("|r  |cff615f5c· reagent|r")) or c.name)
             r.name:SetWidth(c.inter and 186 or 124) -- pas de bouton keep ni de +/- sur un intermédiaire
             r.keep:SetItem(not c.inter and c.rec.pid or nil)
             r.count:SetText("×" .. c.n)
@@ -1219,7 +1220,7 @@ function Q.Refresh()
         end
     end
     view.qempty:SetShown(#plan.crafts == 0)
-    view.sum:SetText(#plan.crafts > 0 and ("cost %s  ·  profit %s"):format(
+    view.sum:SetText(#plan.crafts > 0 and (Tr("cost %s  ·  profit %s")):format(
         ns.FormatMoney(plan.cost, { short = true, iconSize = 10 }),
         ns.FormatMoney(plan.profit, { sign = true, color = true, short = true, iconSize = 10 })) or "")
 
@@ -1260,7 +1261,7 @@ function Q.Refresh()
 
     local c, _, count, blocked, inBank = NextCraft(plan)
     if c then
-        view.craft.text:SetText(("Craft next:  %s ×%d"):format(c.name, count))
+        view.craft.text:SetText((Tr("Craft next:  %s ×%d")):format(c.name, count))
         view.craft:SetDisabled(false)
     else
         view.craft.text:SetText(blocked and (inBank and ("Reagents in your bank (" .. blocked.name .. ")")
@@ -1312,7 +1313,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2)
         local b = buy
         buy = nil
         if b then
-            P.Status(("Bought %d× %s.%s"):format(b.qty, b.name,
+            P.Status((Tr("Bought %d× %s.%s")):format(b.qty, b.name,
                 b.partial and " That's all at your max price: click Auto-fill to resize the queue." or ""))
         end
         C_Timer.After(0.5, Q.Refresh)

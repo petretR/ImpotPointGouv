@@ -4,6 +4,7 @@
 -- * Chaque opération garde la zone et le niveau du perso ; le temps de jeu est compté par zone et par niveau.
 -- * Chez le marchand : avertit quand un objet vaut nettement plus à l'HV.
 local _, ns = ...
+local Tr = ns.L
 local TR = {}
 ns.Track = TR
 
@@ -160,7 +161,7 @@ function TR.OnVendorSale(tx)
         visit.missed = visit.missed + gain * (tx.q or 1)
         visit.missedN = visit.missedN + 1
         if ns.db.settings.vendorHints ~= false then
-            ns.Print(("%s sold %s  ·  AH ~%s"):format(tx.i or "?", ns.FormatMoney(tx.a, { iconSize = 11 }),
+            ns.Print((Tr("%s sold %s  ·  AH ~%s")):format(tx.i or "?", ns.FormatMoney(tx.a, { iconSize = 11 }),
                 ns.FormatMoney(math.floor(tx.mv * (tx.q or 1)), { iconSize = 11 })))
         end
     end
@@ -180,9 +181,9 @@ end
 
 local function EndVisit()
     if visit and visit.n > 0 then
-        local msg = ("vendor: %d item%s, %s"):format(visit.n, visit.n == 1 and "" or "s", ns.FormatMoney(visit.gold, { iconSize = 11 }))
+        local msg = (Tr("vendor: %d item%s, %s")):format(visit.n, visit.n == 1 and "" or "s", ns.FormatMoney(visit.gold, { iconSize = 11 }))
         if visit.missedN > 0 then
-            msg = msg .. ("  ·  |cffe0a83d%d worth more at the AH (+%s)|r"):format(visit.missedN, ns.FormatMoney(visit.missed, { iconSize = 11 }))
+            msg = msg .. (Tr("  ·  |cffe0a83d%d worth more at the AH (+%s)|r")):format(visit.missedN, ns.FormatMoney(visit.missed, { iconSize = 11 }))
         end
         ns.Print(msg)
     end
@@ -307,13 +308,13 @@ end
 
 function TR.AdviceText(adv)
     if not adv then return nil end
-    local parts = { ("expired %d× in a row"):format(adv.streak) }
-    if adv.lost > 0 then parts[#parts + 1] = ns.FormatMoney(adv.lost, { iconSize = 10 }) .. " deposits lost" end
+    local parts = { (Tr("expired %d× in a row")):format(adv.streak) }
+    if adv.lost > 0 then parts[#parts + 1] = ns.FormatMoney(adv.lost, { iconSize = 10 }) .. Tr(" deposits lost") end
     local what
     if adv.vendor then what = "vendor it (" .. ns.FormatMoney(adv.vendor, { iconSize = 10 }) .. ")"
     elseif adv.pauseUntil then local left = adv.pauseUntil - time()
-        what = left >= 86400 * 1.5 and ("don't repost for %d days"):format(math.floor(left / 86400 + 0.5))
-            or ("don't repost for %dh"):format(math.max(1, math.floor(left / 3600 + 0.5)))
+        what = left >= 86400 * 1.5 and (Tr("don't repost for %d days")):format(math.floor(left / 86400 + 0.5))
+            or (Tr("don't repost for %dh")):format(math.max(1, math.floor(left / 3600 + 0.5)))
     else what = "post 1 at a time" end
     return table.concat(parts, " · "), what
 end
@@ -349,7 +350,7 @@ local function TooltipHint(tt, data)
     local adv = TR.PostAdvice(name, data.id)
     if adv then
         local why, what = TR.AdviceText(adv)
-        tt:AddLine("|cffe0a83dIPG|r  " .. why, 0.93, 0.55, 0.32)
+        tt:AddLine(Tr("|cffe0a83dIPG|r  ") .. why, 0.93, 0.55, 0.32)
         tt:AddLine("      " .. what, 0.93, 0.55, 0.32)
         tt:Show()
         return
@@ -358,7 +359,7 @@ local function TooltipHint(tt, data)
     local vs = select(11, ns.GetItemInfo(link or data.id)) or 0
     local mv = TR.AHValue(data.id, link)
     if TR.BetterAtAH(vs, mv) then
-        tt:AddLine(("|cffe0a83dAH ~%s|r  ·  vendor %s  —  keep it for the AH"):format(
+        tt:AddLine((Tr("|cffe0a83dAH ~%s|r  ·  vendor %s  —  keep it for the AH")):format(
             ns.FormatMoney(mv, { iconSize = 11 }), ns.FormatMoney(vs, { iconSize = 11 })))
         tt:Show()
     end
@@ -385,13 +386,13 @@ function TR.Report(days)
     local list = {}
     for k, e in pairs(byItem) do e.name = k; list[#list + 1] = e end
     table.sort(list, function(a, b) return a.a > b.a end)
-    ns.Print(("vendor sales, last %d days: %d sales, %s"):format(days, n, ns.FormatMoney(total, { iconSize = 11 })))
+    ns.Print((Tr("vendor sales, last %d days: %d sales, %s")):format(days, n, ns.FormatMoney(total, { iconSize = 11 })))
     for i = 1, math.min(10, #list) do
         local e = list[i]
         ns.Print(("  %s ×%d  %s%s"):format(e.name, e.q, ns.FormatMoney(e.a, { iconSize = 11 }),
-            e.miss > 0 and ("  |cffe0a83d(+%s at AH)|r"):format(ns.FormatMoney(e.miss, { iconSize = 11 })) or ""))
+            e.miss > 0 and (Tr("  |cffe0a83d(+%s at AH)|r")):format(ns.FormatMoney(e.miss, { iconSize = 11 })) or ""))
     end
-    if missed > 0 then ns.Print(("|cffe0a83dleft on the table vs the AH: %s|r"):format(ns.FormatMoney(missed, { iconSize = 11 }))) end
+    if missed > 0 then ns.Print((Tr("|cffe0a83dleft on the table vs the AH: %s|r")):format(ns.FormatMoney(missed, { iconSize = 11 }))) end
 end
 
 -- ------------------------------------------------------------ événements
@@ -424,9 +425,9 @@ f:SetScript("OnEvent", function(_, event, ...)
             local names = {}
             for i = 1, math.min(5, #stuck) do
                 local e = stuck[i]
-                names[#names + 1] = ("%s (%d× expired%s)"):format(e.name, e.adv.streak, e.adv.vendor and ", vendor it" or "")
+                names[#names + 1] = (Tr("%s (%d× expired%s)")):format(e.name, e.adv.streak, e.adv.vendor and ", vendor it" or "")
             end
-            ns.Print("|cffe08a52don't repost:|r " .. table.concat(names, ", ") .. (#stuck > 5 and (" +%d"):format(#stuck - 5) or ""))
+            ns.Print(Tr("|cffe08a52don't repost:|r ") .. table.concat(names, ", ") .. (#stuck > 5 and (" +%d"):format(#stuck - 5) or ""))
         end)
     elseif event == "MERCHANT_SHOW" then
         merchantOpen = true; visit = nil

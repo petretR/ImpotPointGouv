@@ -7,6 +7,7 @@
 -- Scans : "Scan professions" (recherche exacte de chaque compo/produit de vos métiers, page par page)
 --   et "Full scan" (toute l'HV en une requête, 15 min de recharge imposée par le jeu).
 local _, ns = ...
+local Tr = ns.L
 local P = {}
 ns.Prices = P
 local T = ns.Theme
@@ -290,9 +291,9 @@ function P.IsVendorItem(id) return id and (ns.db.vendor[id] or P.SEED_VENDOR[id]
 function P.Ago(seconds)
     if not seconds then return "never" end
     if seconds < 90 then return "just now" end
-    if seconds < 3600 then return ("%d min ago"):format(math.floor(seconds / 60)) end
-    if seconds < 86400 * 2 then return ("%dh ago"):format(math.floor(seconds / 3600)) end
-    return ("%dd ago"):format(math.floor(seconds / 86400))
+    if seconds < 3600 then return (Tr("%d min ago")):format(math.floor(seconds / 60)) end
+    if seconds < 86400 * 2 then return (Tr("%dh ago")):format(math.floor(seconds / 3600)) end
+    return (Tr("%dd ago")):format(math.floor(seconds / 86400))
 end
 
 -- ------------------------------------------------------------ marchands
@@ -368,9 +369,9 @@ local function UpdateBar()
     if scan and scan.mode == "items" then
         bar.scan.text:SetText(scan.manual and "Continue" or "Stop")
     elseif scan then
-        bar.scan.text:SetText("Stop")
+        bar.scan.text:SetText(Tr("Stop"))
     else
-        bar.scan.text:SetText("Scan")
+        bar.scan.text:SetText(Tr("Scan"))
     end
 end
 
@@ -381,18 +382,18 @@ function FinishScan(msg)
     -- Après le scan des métiers : profondeur (quantités par prix) des composants, objet par objet.
     if s and not msg and s.mode == "items" and StartDepth and StartDepth(s) then return end
     if s and s.mode == "list" and not msg then
-        msg = ("%s scanned: %d / %d items found."):format(s.label, s.got or 0, #s.ids)
+        msg = (Tr("%s scanned: %d / %d items found.")):format(s.label, s.got or 0, #s.ids)
     end
     if s and s.mode == "depth" and not msg then
-        msg = ("Scan done: %d prices, market depth of %d reagents."):format(s.items or 0, s.got or 0)
+        msg = (Tr("Scan done: %d prices, market depth of %d reagents.")):format(s.items or 0, s.got or 0)
     end
     if s and not msg then
         if s.mode == "full" then
             local n = 0
             for _ in pairs(s.acc) do n = n + 1 end
-            msg = ("Full scan done: %d items recorded."):format(n)
+            msg = (Tr("Full scan done: %d items recorded.")):format(n)
         else
-            msg = ("Profession scan done: %d items, %d listed."):format(#s.queue, s.found or 0)
+            msg = (Tr("Profession scan done: %d items, %d listed.")):format(#s.queue, s.found or 0)
         end
     end
     Status(msg)
@@ -427,7 +428,7 @@ function SendNext(fromClick)
     scan.reqId = (scan.reqId or 0) + 1
     local req = scan.reqId
     scan.ours = true
-    Status(("Profession scan: %d / %d  ·  %s%s"):format(scan.idx, #scan.queue, q.name,
+    Status((Tr("Profession scan: %d / %d  ·  %s%s")):format(scan.idx, #scan.queue, q.name,
         scan.page > 0 and (" (page " .. (scan.page + 1) .. ")") or ""))
     QueryAuctionItems(q.name, nil, nil, scan.page, false, nil, false, true, nil)
     -- Pas de réponse : on réessaie une fois puis on passe à l'objet suivant.
@@ -457,7 +458,7 @@ local function OnItemsPage()
     end
     if scan.idx > #scan.queue then FinishScan(); return end
     if scan.manual then
-        Status(("%d / %d  ·  click Continue for the next search"):format(scan.idx, #scan.queue))
+        Status((Tr("%d / %d  ·  click Continue for the next search")):format(scan.idx, #scan.queue))
     else
         C_Timer.After(0.05, function() SendNext(false) end)
     end
@@ -475,7 +476,7 @@ local function ProcessFull()
             Accumulate(scan.acc, name, count, buyout, id)
         end
         i = last + 1
-        Status(("Full scan: reading %d / %d auctions…"):format(last, n))
+        Status((Tr("Full scan: reading %d / %d auctions…")):format(last, n))
         if i <= n then
             C_Timer.After(0.02, Chunk)
         else
@@ -512,7 +513,7 @@ local function ModernFinalize(found, low, qty)
     scan.idx = scan.idx + 1
     if scan.idx > #scan.queue then FinishScan(); return end
     if scan.manual then
-        Status(("%d / %d  ·  click Continue for the next search"):format(scan.idx, #scan.queue))
+        Status((Tr("%d / %d  ·  click Continue for the next search")):format(scan.idx, #scan.queue))
     else
         C_Timer.After(0.05, function() ModernSend(false) end)
     end
@@ -530,7 +531,7 @@ function ModernSend(fromClick)
     scan.awaiting = true
     scan.reqId = (scan.reqId or 0) + 1
     local req = scan.reqId
-    Status(("Profession scan: %d / %d  ·  %s"):format(scan.idx, #scan.queue, q.name))
+    Status((Tr("Profession scan: %d / %d  ·  %s")):format(scan.idx, #scan.queue, q.name))
     local sorts = {}
     if Enum and Enum.AuctionHouseSortOrder then
         sorts[1] = { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false }
@@ -586,7 +587,7 @@ local function ModernProcessFull()
             Accumulate(scan.acc, name, count or 1, buyout or 0, itemId)
         end
         i = last + 1
-        Status(("Full scan: reading %d / %d auctions…"):format(math.min(i, n), n))
+        Status((Tr("Full scan: reading %d / %d auctions…")):format(math.min(i, n), n))
         if i < n then
             C_Timer.After(0.02, Chunk)
         else
@@ -606,11 +607,11 @@ function P.StartItemScan()
             if IsModern() then ModernSend(true) else SendNext(true) end
             return
         end
-        FinishScan("Scan stopped."); return
+        FinishScan(Tr("Scan stopped.")); return
     end
     local queue = ScanTargets()
     if #queue == 0 then
-        Status("Open your profession windows first so the addon learns your recipes.")
+        Status(Tr("Open your profession windows first so the addon learns your recipes."))
         return
     end
     scan = { mode = "items", queue = queue, idx = 1, page = 0, acc = {} }
@@ -642,7 +643,7 @@ local function DepthNext()
     local function Send()
         if not scan or scan.mode ~= "depth" or scan.ids[scan.i] ~= id then return end
         if AHM.IsThrottledMessageSystemReady and not AHM.IsThrottledMessageSystemReady() then C_Timer.After(0.2, Send); return end
-        Status(("Market depth: %s (%d / %d)…"):format(P.Name(id), scan.i, #scan.ids))
+        Status((Tr("Market depth: %s (%d / %d)…")):format(P.Name(id), scan.i, #scan.ids))
         scan.cur, scan.sent = id, GetTime()
         AHM.SendSearchQuery(AHM.MakeItemKey(id), { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }, false)
         -- Pas de réponse : on passe au suivant.
@@ -665,8 +666,8 @@ end
 -- ------------------------------------------------------------ scan d'une liste (onglet Lists)
 local ListNext
 function P.ScanIds(ids, label)
-    if not IsModern() or not AHM.SendSearchQuery or not AHM.MakeItemKey then Status("List scan needs the auction house."); return false end
-    if scan then FinishScan("Scan stopped."); return false end
+    if not IsModern() or not AHM.SendSearchQuery or not AHM.MakeItemKey then Status(Tr("List scan needs the auction house.")); return false end
+    if scan then FinishScan(Tr("Scan stopped.")); return false end
     if not ids or #ids == 0 then return false end
     scan = { mode = "list", ids = ids, i = 0, got = 0, label = label or "List" }
     UpdateBar()
@@ -768,21 +769,21 @@ end
 -- sinon scan de vos métiers seulement (composants et créations).
 function P.Scan()
     if scan then
-        if scan.mode == "items" then P.StartItemScan() else FinishScan("Scan stopped.") end
+        if scan.mode == "items" then P.StartItemScan() else FinishScan(Tr("Scan stopped.")) end
         return
     end
     if FullReady() then P.StartFullScan() else P.StartItemScan() end
 end
 
 function P.StartFullScan()
-    if scan then FinishScan("Scan stopped."); return end
+    if scan then FinishScan(Tr("Scan stopped.")); return end
     if IsModern() then
         local last = ns.db.scan[Realm()] and ns.db.scan[Realm()].lastFull
         if last and time() - last < 15 * 60 then
-            Status(("Full scan available in ~%d min (game limit)."):format(math.ceil((15 * 60 - (time() - last)) / 60)))
+            Status((Tr("Full scan available in ~%d min (game limit).")):format(math.ceil((15 * 60 - (time() - last)) / 60)))
             return
         end
-        if not AHM.ReplicateItems then Status("Full scan not supported here."); return end
+        if not AHM.ReplicateItems then Status(Tr("Full scan not supported here.")); return end
         scan = { mode = "full", acc = {} }
         UpdateBar()
         local started, my = GetTime(), scan
@@ -794,10 +795,10 @@ function P.StartFullScan()
             if el >= 120 then
                 ns.db.scan[Realm()] = ns.db.scan[Realm()] or {}
                 ns.db.scan[Realm()].fullFail = time()
-                FinishScan("Full scan: no answer in 2 min (server busy or cooldown). Click Scan again: it scans your professions and their market depth.")
+                FinishScan(Tr("Full scan: no answer in 2 min (server busy or cooldown). Click Scan again: it scans your professions and their market depth."))
                 return
             end
-            Status(("Full scan: waiting for the server… %d s"):format(el))
+            Status((Tr("Full scan: waiting for the server… %d s")):format(el))
             C_Timer.After(1, Tick)
         end
         Tick()
@@ -807,14 +808,14 @@ function P.StartFullScan()
     if not canAll then
         local last = ns.db.scan[Realm()] and ns.db.scan[Realm()].lastFull
         local wait = last and math.max(0, 15 * 60 - (time() - last))
-        Status(wait and wait > 0 and ("Full scan available in ~%d min (game limit)."):format(math.ceil(wait / 60))
+        Status(wait and wait > 0 and (Tr("Full scan available in ~%d min (game limit).")):format(math.ceil(wait / 60))
             or "Full scan unavailable right now (game limit).")
         return
     end
     scan = { mode = "full", acc = {} }
     scan.ours = true
     UpdateBar()
-    Status("Full scan: request sent, the server is preparing the list…")
+    Status(Tr("Full scan: request sent, the server is preparing the list…"))
     QueryAuctionItems("", nil, nil, 0, false, nil, true, false, nil)
 end
 
@@ -829,10 +830,10 @@ local function BuildBar()
     bar:SetFrameLevel((host:GetFrameLevel() or 1) + 5)
     T.Surface(bar, C.window, 10, { 1, 1, 1, 0.09 })
     local icon = bar:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(22, 22); icon:SetPoint("TOPLEFT", 10, -8)
-    bar.scan = T.Button(bar, "Scan", 96, 26, function() P.Scan() end)
+    icon:SetTexture(ns.MEDIA .. Tr("icon.tga")); icon:SetSize(22, 22); icon:SetPoint("TOPLEFT", 10, -8)
+    bar.scan = T.Button(bar, Tr("Scan"), 96, 26, function() P.Scan() end)
     bar.scan:SetPoint("LEFT", icon, "RIGHT", 8, 0)
-    bar.scan.tooltip = "Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes: in between, it scans only your professions' reagents and crafts."
+    bar.scan.tooltip = Tr("Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes: in between, it scans only your professions' reagents and crafts.")
     -- Ligne d'état sous les boutons : ce qui vient de se passer, ou ce que l'addon prépare.
     bar.status = T.Text(bar, 11, { color = C.muted })
     bar.status:SetPoint("BOTTOMLEFT", 40, 8)
@@ -841,9 +842,9 @@ local function BuildBar()
     local n = 0
     for _ in pairs(DB()) do n = n + 1 end
     local last = ns.db.scan[Realm()] and ns.db.scan[Realm()].lastFull
-    local txt = ("%d prices known%s"):format(n, last and ("  ·  full scan " .. P.Ago(time() - last)) or "")
+    local txt = (Tr("%d prices known%s")):format(n, last and ("  ·  full scan " .. P.Ago(time() - last)) or "")
     -- Le marché a besoin d'un scan complet à chaque session : on le rappelle.
-    if not last or time() - last > 2 * 3600 then txt = txt .. "  ·  |cffe0a83dclick Scan (Market tab needs one per session)|r" end
+    if not last or time() - last > 2 * 3600 then txt = txt .. Tr("  ·  |cffe0a83dclick Scan (Market tab needs one per session)|r") end
     bar.status:SetText(txt)
     UpdateBar()
     ns.Fire("AH_BAR_READY", bar)
@@ -865,14 +866,14 @@ ev:SetScript("OnEvent", function(_, event, ...)
     elseif event == "AUCTION_HOUSE_SHOW" then
         C_Timer.After(0, BuildBar)
     elseif event == "AUCTION_HOUSE_CLOSED" then
-        if scan then FinishScan("AH closed, scan interrupted.") end
+        if scan then FinishScan(Tr("AH closed, scan interrupted.")) end
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         local addon = ...
         if addon == ns.name and scan and scan.mode == "items" then
             scan.manual = true
             scan.awaiting = false
             UpdateBar()
-            Status("The game requires one click per search: click Continue.")
+            Status(Tr("The game requires one click per search: click Continue."))
         end
     elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" or event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" then
         ModernOnBrowse()

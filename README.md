@@ -11,6 +11,10 @@ Inspired by TSM and Auctionator, with a clean, minimal interface.
 
 Open the main window with the minimap button or `/ipg`. A setup guide shows up on first launch.
 
+## Languages
+
+English and French, picked automatically from the game client language. Translations live in `Locale_frFR.lua` (English text is the key).
+
 ## Commands
 
 | Command | What it does |
@@ -30,6 +34,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 
 | File | Purpose |
 |---|---|
+| `Locale.lua`, `Locale_frFR.lua` | Translation system and French strings |
 | `Core.lua` | Saved data (`ImpotPointGouvDB`), money formatting, small event bus (`ns.On` / `ns.Fire`) |
 | `Ledger.lua` | Gold ledger: every money change is categorized (AH, vendor, quest, loot, mail…) |
 | `Track.lua` | Vendor sale details, loot log, time per zone/level, items that don't sell |

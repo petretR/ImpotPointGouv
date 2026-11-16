@@ -1,31 +1,32 @@
 -- ImpotPointGouv : namespace, base de données, utilitaires.
 local ADDON, ns = ...
+local Tr = ns.L
 ns.name = ADDON
-ns.version = "0.18.1"
+ns.version = "0.19.0"
 _G.ImpotPointGouv = ns
 
-ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
+ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. Tr("\\media\\")
 
 -- Catégories de mouvements d'or. group = "ah" pour tout ce qui touche l'Hôtel des ventes.
 ns.CATEGORIES = {
-    ah_sale     = { label = "AH sales",            group = "ah",     color = {0.36, 0.82, 0.45} },
-    ah_buy      = { label = "AH purchases",            group = "ah",     color = {0.93, 0.42, 0.36} },
-    ah_deposit  = { label = "AH deposits",            group = "ah",     color = {0.85, 0.55, 0.30} },
-    ah_refund   = { label = "AH refunds",    group = "ah",     color = {0.55, 0.75, 0.95} },
-    ah_other    = { label = "AH (other)",           group = "ah",     color = {0.70, 0.62, 0.50} },
-    ah_expired  = { label = "AH expired",           group = "ah",     color = {0.92, 0.58, 0.28} },
-    ah_cancelled= { label = "AH cancelled",         group = "ah",     color = {0.62, 0.60, 0.58} },
-    vendor_sell = { label = "Vendor sales",      group = "vendor", color = {0.60, 0.85, 0.55} },
-    vendor_buy  = { label = "Vendor purchases",      group = "vendor", color = {0.90, 0.55, 0.45} },
-    repair      = { label = "Repairs",          group = "vendor", color = {0.75, 0.50, 0.45} },
-    loot        = { label = "Loot",                group = "loot",   color = {0.95, 0.80, 0.35} },
-    quest       = { label = "Quests",               group = "quest",  color = {0.95, 0.88, 0.50} },
-    trainer     = { label = "Training",           group = "other",  color = {0.65, 0.60, 0.90} },
-    travel      = { label = "Travel",            group = "other",  color = {0.55, 0.70, 0.85} },
-    trade       = { label = "Trades",             group = "other",  color = {0.70, 0.80, 0.80} },
-    mail        = { label = "Mail",             group = "other",  color = {0.75, 0.75, 0.70} },
-    offline     = { label = "Offline change",     group = "other",  color = {0.50, 0.50, 0.50} },
-    other       = { label = "Other",                group = "other",  color = {0.60, 0.60, 0.60} },
+    ah_sale     = { label = Tr("AH sales"),            group = "ah",     color = {0.36, 0.82, 0.45} },
+    ah_buy      = { label = Tr("AH purchases"),            group = "ah",     color = {0.93, 0.42, 0.36} },
+    ah_deposit  = { label = Tr("AH deposits"),            group = "ah",     color = {0.85, 0.55, 0.30} },
+    ah_refund   = { label = Tr("AH refunds"),    group = "ah",     color = {0.55, 0.75, 0.95} },
+    ah_other    = { label = Tr("AH (other)"),           group = "ah",     color = {0.70, 0.62, 0.50} },
+    ah_expired  = { label = Tr("AH expired"),           group = "ah",     color = {0.92, 0.58, 0.28} },
+    ah_cancelled= { label = Tr("AH cancelled"),         group = "ah",     color = {0.62, 0.60, 0.58} },
+    vendor_sell = { label = Tr("Vendor sales"),      group = "vendor", color = {0.60, 0.85, 0.55} },
+    vendor_buy  = { label = Tr("Vendor purchases"),      group = "vendor", color = {0.90, 0.55, 0.45} },
+    repair      = { label = Tr("Repairs"),          group = "vendor", color = {0.75, 0.50, 0.45} },
+    loot        = { label = Tr("Loot"),                group = "loot",   color = {0.95, 0.80, 0.35} },
+    quest       = { label = Tr("Quests"),               group = "quest",  color = {0.95, 0.88, 0.50} },
+    trainer     = { label = Tr("Training"),           group = "other",  color = {0.65, 0.60, 0.90} },
+    travel      = { label = Tr("Travel"),            group = "other",  color = {0.55, 0.70, 0.85} },
+    trade       = { label = Tr("Trades"),             group = "other",  color = {0.70, 0.80, 0.80} },
+    mail        = { label = Tr("Mail"),             group = "other",  color = {0.75, 0.75, 0.70} },
+    offline     = { label = Tr("Offline change"),     group = "other",  color = {0.50, 0.50, 0.50} },
+    other       = { label = Tr("Other"),                group = "other",  color = {0.60, 0.60, 0.60} },
 }
 ns.CATEGORY_ORDER = { "ah_sale", "ah_buy", "ah_deposit", "ah_refund", "ah_other", "ah_expired", "ah_cancelled", "vendor_sell", "vendor_buy",
     "repair", "loot", "quest", "trainer", "travel", "trade", "mail", "offline", "other" }
@@ -107,14 +108,14 @@ function ns.InitDB()
         if not fresh then
             local t, s = RepairLogoutZeros(ns.db)
             if t + s > 0 then
-                ns.repairMsg = ("data repaired: %d false \"Offline change\" removed, %d false zero points removed from the chart."):format(t, s)
+                ns.repairMsg = (Tr("data repaired: %d false \"Offline change\" removed, %d false zero points removed from the chart.")):format(t, s)
             end
         end
         ns.db.version = 2
     end
     if ns.db.version < 3 then
         local n = fresh and 0 or RepairDoubleOffline(ns.db)
-        if n > 0 then ns.repairMsg = ("data repaired: %d \"Offline change\" counted twice removed."):format(n) end
+        if n > 0 then ns.repairMsg = (Tr("data repaired: %d \"Offline change\" counted twice removed.")):format(n) end
         ns.db.version = 3
     end
 end
@@ -152,8 +153,8 @@ function ns.FormatMoney(copper, opts)
     local text = table.concat(parts, " ")
     if neg then text = "−" .. text elseif opts.sign and copper > 0 then text = "+" .. text end
     if opts.color then
-        if copper > 0 then text = "|cff5cd173" .. text .. "|r"
-        elseif copper < 0 then text = "|cffed5c52" .. text .. "|r" end
+        if copper > 0 then text = Tr("|cff5cd173") .. text .. "|r"
+        elseif copper < 0 then text = Tr("|cffed5c52") .. text .. "|r" end
     end
     return text
 end
@@ -162,7 +163,7 @@ end
 function ns.FormatMoneyAxis(copper)
     local v = math.abs(copper)
     local sign = copper < 0 and "−" or ""
-    if v >= 10000000 then return sign .. (("%.1fk g"):format(v / 10000000):gsub("%.0k", "k"))
+    if v >= 10000000 then return sign .. ((Tr("%.1fk g")):format(v / 10000000):gsub("%.0k", "k"))
     elseif v >= 10000 then
         local g = v / 10000
         if g >= 10 or g == math.floor(g) then return sign .. ("%d g"):format(math.floor(g + 0.5)) end

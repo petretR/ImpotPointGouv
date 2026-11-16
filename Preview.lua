@@ -1,6 +1,7 @@
 -- ImpotPointGouv : aperçu avant une action en lot (envoi, vente au marchand, achat chez le marchand).
 -- Une liste à cocher, un total, et un bouton de confirmation : rien ne part sans que vous l'ayez vu.
 local _, ns = ...
+local Tr = ns.L
 local T = ns.Theme
 local C = T.C
 local PV = {}
@@ -56,7 +57,7 @@ local function Build()
         PV.Draw()
     end)
     win.total = T.Text(win, 12, { color = C.text }); win.total:SetPoint("BOTTOMLEFT", 16, 22)
-    win.ok = T.Button(win, "Confirm", 150, 32, function()
+    win.ok = T.Button(win, Tr("Confirm"), 150, 32, function()
         local chosen = {}
         for _, row in ipairs(win.data or {}) do if row.checked then chosen[#chosen + 1] = row end end
         win:Hide()
@@ -105,7 +106,7 @@ function PV.Draw()
         if row.checked then n = n + 1; items = items + (row.qty or 1); value = value + (row.value or 0) end
     end
     local txt = win.opts.total and win.opts.total(n, items, value)
-        or (("%d item%s"):format(items, items == 1 and "" or "s") .. (value > 0 and ("  ·  " .. ns.FormatMoney(value, { iconSize = 11 })) or ""))
+        or ((Tr("%d item%s")):format(items, items == 1 and "" or "s") .. (value > 0 and ("  ·  " .. ns.FormatMoney(value, { iconSize = 11 })) or ""))
     win.total:SetText(txt)
     win.ok.text:SetText(win.opts.confirm or "Confirm")
     win.ok:SetDisabled(n == 0)

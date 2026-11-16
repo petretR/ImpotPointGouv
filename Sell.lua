@@ -3,6 +3,7 @@
 -- votre coût ni sous le prix marchand). Bouton "Cancel" : annule une de vos annonces coupées.
 -- Le jeu exige un clic par mise en vente / annulation : l'addon prépare tout, vous cliquez.
 local _, ns = ...
+local Tr = ns.L
 local T, P, CR = ns.Theme, ns.Prices, ns.Craft
 local C = T.C
 local S = {}
@@ -114,7 +115,7 @@ function S.PriceFor(e)
         target = math.max(P.Market(e.id) or 0, floor * 2) -- personne d'autre en vente
     end
     if target < floor then
-        return nil, ("market %s is below your floor %s"):format(Money(target), Money(floor)), floor
+        return nil, (Tr("market %s is below your floor %s")):format(Money(target), Money(floor)), floor
     end
     return target, nil, floor
 end
@@ -275,7 +276,7 @@ end
 function S.PostNext()
     AH = C_AuctionHouse
     local e, price = S.NextPost()
-    if not e then Status("Nothing to post right now."); return end
+    if not e then Status(Tr("Nothing to post right now.")); return end
     local rules = Rules()
     local st = e.stacks[1]
     local loc = ItemLocation:CreateFromBagAndSlot(st.bag, st.slot)
@@ -286,17 +287,17 @@ function S.PostNext()
         AH.PostItem(loc, rules.postDuration, qty, nil, price)
     end
     posted[e.id] = true
-    Status(("Posted %d× %s at %s each."):format(qty, P.Name(e.id), Money(price)))
+    Status((Tr("Posted %d× %s at %s each.")):format(qty, P.Name(e.id), Money(price)))
     C_Timer.After(1, S.Update)
 end
 
 function S.CancelNext()
     AH = C_AuctionHouse
     local u = S.Undercut()[1]
-    if not u then Status("No undercut auction to cancel."); return end
+    if not u then Status(Tr("No undercut auction to cancel.")); return end
     cancelled[u.a.auctionID] = true
     AH.CancelAuction(u.a.auctionID)
-    Status(("Cancelled %d× %s (was %s, market now %s): it comes back by mail, repost it next time."):format(
+    Status((Tr("Cancelled %d× %s (was %s, market now %s): it comes back by mail, repost it next time.")):format(
         u.a.qty, P.Name(u.a.itemID), Money(u.a.price), Money(u.newPrice + 1)))
     ReadOwned()
     S.Update()
@@ -308,10 +309,10 @@ function S.Update()
     local cands = S.Candidates()
     local e, price = S.NextPost()
     if lookup then
-        postBtn.text:SetText(("Checking prices… %d / %d"):format(lookup.i, #lookup.list))
+        postBtn.text:SetText((Tr("Checking prices… %d / %d")):format(lookup.i, #lookup.list))
         postBtn:SetDisabled(true)
     elseif e then
-        postBtn.text:SetText(("Post %d× %s · %s"):format(S.QtyFor(e),
+        postBtn.text:SetText((Tr("Post %d× %s · %s")):format(S.QtyFor(e),
             P.Name(e.id), ns.FormatMoney(price, { iconSize = 10, short = true })))
         postBtn:SetDisabled(false)
     else
@@ -319,13 +320,13 @@ function S.Update()
         postBtn:SetDisabled(true)
     end
     local under = S.Undercut()
-    cancelBtn.text:SetText(#under > 0 and ("Cancel undercut (%d)"):format(#under) or "No undercut")
+    cancelBtn.text:SetText(#under > 0 and (Tr("Cancel undercut (%d)")):format(#under) or "No undercut")
     cancelBtn:SetDisabled(#under == 0)
 end
 
 local function PostTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Post at the AH", 1, 1, 1)
+    GameTooltip:AddLine(Tr("Post at the AH"), 1, 1, 1)
     local any = false
     for _, e in ipairs(S.Candidates()) do
         any = true
@@ -344,22 +345,22 @@ local function PostTooltip(self)
             GameTooltip:AddDoubleLine(left, why or "", 0.6, 0.6, 0.6, 0.93, 0.36, 0.32)
         end
     end
-    if not any then GameTooltip:AddLine("Your crafts that sell best at the AH and your enchanting mats show up here.", 0.7, 0.7, 0.7, true) end
+    if not any then GameTooltip:AddLine(Tr("Your crafts that sell best at the AH and your enchanting mats show up here."), 0.7, 0.7, 0.7, true) end
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("1c under the cheapest other seller, never under your cost or the vendor price.", 0.6, 0.6, 0.6, true)
-    GameTooltip:AddLine("After an expiry: posts 1 at a time. 2 in a row: paused 1, 2, 4… days. 3: vendor it.", 0.6, 0.6, 0.6, true)
+    GameTooltip:AddLine(Tr("1c under the cheapest other seller, never under your cost or the vendor price."), 0.6, 0.6, 0.6, true)
+    GameTooltip:AddLine(Tr("After an expiry: posts 1 at a time. 2 in a row: paused 1, 2, 4… days. 3: vendor it."), 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
 end
 
 local function CancelTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("Your undercut auctions", 1, 1, 1)
+    GameTooltip:AddLine(Tr("Your undercut auctions"), 1, 1, 1)
     local under = S.Undercut()
     for _, u in ipairs(under) do
         GameTooltip:AddDoubleLine(("%s ×%d"):format(P.Name(u.a.itemID), u.a.qty),
             Money(u.a.price) .. " → " .. Money(u.newPrice), 0.85, 0.85, 0.85, 1, 1, 1)
     end
-    if #under == 0 then GameTooltip:AddLine("None worth cancelling (a cancel loses the deposit).", 0.7, 0.7, 0.7, true) end
+    if #under == 0 then GameTooltip:AddLine(Tr("None worth cancelling (a cancel loses the deposit)."), 0.7, 0.7, 0.7, true) end
     GameTooltip:Show()
 end
 
@@ -368,9 +369,9 @@ ns.On("AH_BAR_READY", function(b)
     bar = b
     AH = C_AuctionHouse
     if not AH or not AH.PostCommodity then return end
-    postBtn = T.Button(b, "Post", 250, 26, function() S.PostNext() end)
+    postBtn = T.Button(b, Tr("Post"), 250, 26, function() S.PostNext() end)
     postBtn:SetScript("OnEnter", function(self) self.hover = true; self:Refresh(); PostTooltip(self) end)
-    cancelBtn = T.Button(b, "No undercut", 150, 26, function() S.CancelNext() end)
+    cancelBtn = T.Button(b, Tr("No undercut"), 150, 26, function() S.CancelNext() end)
     cancelBtn:SetScript("OnEnter", function(self) self.hover = true; self:Refresh(); CancelTooltip(self) end)
     -- Placement : après "Buy …" (ajouté par la file) s'il existe, sinon après Scan.
     C_Timer.After(0, function()

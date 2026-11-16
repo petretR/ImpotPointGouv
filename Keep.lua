@@ -1,6 +1,7 @@
 -- ImpotPointGouv : "garder en sac" (équivalent du Keep Quantity de TSM), par objet.
 -- Utilisé par l'envoi à la banque (n'envoie que l'excédent) et par Queue profitable (réserve perso hors stock à vendre).
 local _, ns = ...
+local Tr = ns.L
 local T = ns.Theme
 local C = T.C
 local K = {}
@@ -28,7 +29,7 @@ local function Build()
     pop.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     pop.name = T.Text(pop, 12, { bold = true }); pop.name:SetPoint("LEFT", pop.icon, "RIGHT", 8, 0); pop.name:SetWidth(200)
     local close = T.CloseButton(pop, function() pop:Hide() end); close:SetPoint("TOPRIGHT", -6, -6)
-    local lbl = T.Text(pop, 11, { color = C.muted, text = "Keep in bags (not sent, not counted for sale)" })
+    local lbl = T.Text(pop, 11, { color = C.muted, text = Tr("Keep in bags (not sent, not counted for sale)") })
     lbl:SetPoint("TOPLEFT", 12, -40)
     pop.value = T.Text(pop, 18, { bold = true, justify = "CENTER" })
     pop.value:SetPoint("TOP", 0, -58); pop.value:SetWidth(60)
@@ -69,7 +70,7 @@ function K.Button(parent)
         local n = K.Get(id)
         self.text:SetText(n > 0 and tostring(n) or "+")
         self.bag:SetDesaturated(n == 0); self.bag:SetAlpha(n > 0 and 1 or 0.55)
-        self.tooltip = n > 0 and ("Keeping %d in your bags (not mailed to the bank, not counted as stock to sell). Click to change."):format(n)
+        self.tooltip = n > 0 and (Tr("Keeping %d in your bags (not mailed to the bank, not counted as stock to sell). Click to change.")):format(n)
             or "Keep some in your bags for yourself (not mailed to the bank, not counted as stock to sell)."
         self:SetShown(id ~= nil)
     end

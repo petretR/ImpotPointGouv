@@ -1,6 +1,7 @@
 -- ImpotPointGouv : raccourci "Next action" — crafte le prochain objet de la file, sinon désenchante le suivant.
 -- Un bouton sécurisé invisible, réglé hors combat sur la prochaine action ; le raccourci clique dessus.
 local _, ns = ...
+local Tr = ns.L
 local N = {}
 ns.Next = N
 
@@ -22,7 +23,7 @@ function N.Arm()
         if c then
             action = "craft"
             macro = "/run ImpotPointGouv.Queue.CraftNext()"
-            N.label = ("craft %s ×%d"):format(c.name, count)
+            N.label = (Tr("craft %s ×%d")):format(c.name, count)
         end
     end
     -- Désenchantement seulement quand la fenêtre Disenchant est ouverte.
@@ -30,8 +31,8 @@ function N.Arm()
         local it, spell = ns.Destroy.NextTarget()
         if it and spell then
             action = "de"
-            macro = ("/cast %s\n/use %d %d"):format(spell, it.bag, it.slot)
-            N.label = "disenchant " .. (it.name or "?")
+            macro = (Tr("/cast %s\n/use %d %d")):format(spell, it.bag, it.slot)
+            N.label = Tr("disenchant ") .. (it.name or "?")
         end
     end
     N.action = action

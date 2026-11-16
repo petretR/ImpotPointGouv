@@ -1,5 +1,6 @@
 -- ImpotPointGouv : conseiller de craft, ancré à droite de la fenêtre de métier.
 local _, ns = ...
+local Tr = ns.L
 local T, P = ns.Theme, ns.Prices
 local C = T.C
 local CR = {}
@@ -393,7 +394,7 @@ function CR.Evaluate(rec)
     if ev.posts14 >= rules.unsoldPosts and ev.sold14 == 0 then
         ev.unsold = true
         ev.verdict, ev.vcolor = "Doesn't sell", { 0.62, 0.60, 0.58 }
-        ev.note = ("Posted %d× in 14 days without a single sale."):format(ev.posts14)
+        ev.note = (Tr("Posted %d× in 14 days without a single sale.")):format(ev.posts14)
     end
     return ev
 end
@@ -455,8 +456,8 @@ local function BuildPanel()
     T.Surface(panel, C.window, 14, { 1, 1, 1, 0.09 })
 
     local icon = panel:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(26, 26); icon:SetPoint("TOPLEFT", 14, -12)
-    panel.title = T.Text(panel, 15, { bold = true, text = "Craft queue" })
+    icon:SetTexture(ns.MEDIA .. Tr("icon.tga")); icon:SetSize(26, 26); icon:SetPoint("TOPLEFT", 14, -12)
+    panel.title = T.Text(panel, 15, { bold = true, text = Tr("Craft queue") })
     panel.title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, 1)
     panel.sub = T.Text(panel, 11, { color = C.faint })
     panel.sub:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 8, -1)
@@ -488,8 +489,8 @@ local function BuildPanel()
     deBtn:SetScript("OnClick", function() if ns.Destroy then ns.Destroy.Toggle() end end)
     deBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:AddLine("Disenchant window", 1, 1, 1)
-        GameTooltip:AddLine("Disenchant the greens in your bags, one key press each (/ipg de).", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(Tr("Disenchant window"), 1, 1, 1)
+        GameTooltip:AddLine(Tr("Disenchant the greens in your bags, one key press each (/ipg de)."), 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     deBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -541,7 +542,7 @@ local function BuildPanel()
             if self.rec and self.rec.pid then
                 T.ItemTooltip(self, self.rec.pid)
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("Click: details   ·   Right-click: add to queue", 0.88, 0.66, 0.24)
+                GameTooltip:AddLine(Tr("Click: details   ·   Right-click: add to queue"), 0.88, 0.66, 0.24)
                 GameTooltip:Show()
             end
         end)
@@ -573,7 +574,7 @@ local function BuildPanel()
         CR.Draw()
     end)
     panel.listEmpty = T.Text(list, 12, { color = C.faint, justify = "CENTER", wrap = true,
-        text = "No readable recipes.\nExpand the profession categories." })
+        text = Tr("No readable recipes.\nExpand the profession categories.") })
     panel.listEmpty:SetPoint("CENTER"); panel.listEmpty:SetWidth(PW - 80)
 
     -- Détail
@@ -588,11 +589,11 @@ local function BuildPanel()
     det.name:SetWidth(PW - 150)
     det.meta = T.Text(det, 11, { color = C.faint }); det.meta:SetPoint("BOTTOMLEFT", det.icon, "BOTTOMRIGHT", 8, -1)
     det.pill = Pill(det, 104); det.pill:SetPoint("TOPRIGHT", -12, -14)
-    det.qbtn = T.Button(det, "+ Queue", 70, 20, function()
+    det.qbtn = T.Button(det, Tr("+ Queue"), 70, 20, function()
         if ns.Queue and selected then ns.Queue.Add(profName, selected, 1) end
     end, "pill")
     det.qbtn:SetPoint("RIGHT", det.pill, "LEFT", -6, 0)
-    det.qbtn.tooltip = "Add one to the craft queue (right-click a recipe in the list does the same)."
+    det.qbtn.tooltip = Tr("Add one to the craft queue (right-click a recipe in the list does the same).")
     det.lines = {}
     for i = 1, 5 do
         local l = CreateFrame("Frame", nil, det)
@@ -629,11 +630,11 @@ local function BuildPanel()
     det.vVendor = KV(-198, "Vendor sale")
     det.vDE = KV(-214, "Disenchanted (≈, mats − 5%)")
     det.vMats = KV(-230, "Mats sold on the AH")
-    det.profitLbl = T.Text(det, 12, { bold = true, text = "Profit" }); det.profitLbl:SetPoint("TOPLEFT", 12, -250)
+    det.profitLbl = T.Text(det, 12, { bold = true, text = Tr("Profit") }); det.profitLbl:SetPoint("TOPLEFT", 12, -250)
     det.vProfit = T.Text(det, 15, { bold = true, justify = "RIGHT" }); det.vProfit:SetPoint("TOPRIGHT", -12, -248)
     det.note = T.Text(det, 11, { color = C.muted, wrap = true }); det.note:SetPoint("TOPLEFT", 12, -270)
     det.note:SetWidth(PW - 48)
-    det.empty = T.Text(det, 12, { color = C.faint, justify = "CENTER", text = "Select a recipe." })
+    det.empty = T.Text(det, 12, { color = C.faint, justify = "CENTER", text = Tr("Select a recipe.") })
     det.empty:SetPoint("CENTER")
     panel:Hide()
 end
@@ -658,7 +659,7 @@ local function DrawDetail()
     det.icon:SetTexture(rec.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
     det.name:SetText(rec.name .. (rec.made > 1 and ("  |cff8a877f×" .. rec.made .. "|r") or ""))
     local meta = {}
-    if ev.listed then meta[#meta + 1] = ev.listed .. " listed" end
+    if ev.listed then meta[#meta + 1] = ev.listed .. Tr(" listed") end
     if ev.sold7 and ev.sold7 > 0 then meta[#meta + 1] = "sold ×" .. ev.sold7 .. " (7d)" end
     local age = rec.pid and P.Age(rec.pid)
     meta[#meta + 1] = "price " .. P.Ago(age)
@@ -687,7 +688,7 @@ local function DrawDetail()
         local vw = w * ev.vendorPart / total
         det.splitV:SetWidth(math.max(0.01, vw)); det.splitM:SetWidth(math.max(0.01, w - vw))
         det.splitV:SetShown(ev.vendorPart > 0); det.splitM:SetShown(ev.marketPart > 0)
-        det.splitTxt:SetText(("|cffe0a83dVendor %d %%|r   ·   |cff8cbff2Market %d %%|r   (fixed part / part that follows the AH)")
+        det.splitTxt:SetText((Tr("|cffe0a83dVendor %d %%|r   ·   |cff8cbff2Market %d %%|r   (fixed part / part that follows the AH)"))
             :format(math.floor(ev.vendorPart / total * 100 + 0.5), math.floor(ev.marketPart / total * 100 + 0.5)))
     else
         det.splitV:Hide(); det.splitM:Hide(); det.splitTxt:SetText("")
@@ -702,10 +703,10 @@ local function DrawDetail()
         det.vProfit:SetText(Money(ev.profit, { sign = true, color = true, iconSize = 13 }) ..
             (ev.margin and ("  |cff8a877f" .. math.floor(ev.margin * 100 + 0.5) .. " %|r") or ""))
     else
-        det.vProfit:SetText("|cff615f5c—|r")
+        det.vProfit:SetText(Tr("|cff615f5c—|r"))
     end
     local note = ev.note or ""
-    if ev.estimated then note = (note ~= "" and note .. " " or "") .. "≈ : estimated vendor price, visit the vendor to learn it." end
+    if ev.estimated then note = (note ~= "" and note .. " " or "") .. Tr("≈ : estimated vendor price, visit the vendor to learn it.") end
     det.note:SetText(note)
 end
 
@@ -727,9 +728,9 @@ function CR.Draw()
                 r.profit:SetText(((ev.channel == "de" and ev.profit > 0) and DE_ICON or "") ..
                     Money(ev.profit, { sign = true, color = true, short = true, iconSize = 10 }))
             elseif rec.enchant and ev.cost > 0 then
-                r.profit:SetText("|cff8a877f" .. Money(ev.cost, { short = true }) .. "|r")
+                r.profit:SetText(Tr("|cff8a877f") .. Money(ev.cost, { short = true }) .. "|r")
             else
-                r.profit:SetText("|cff615f5c—|r")
+                r.profit:SetText(Tr("|cff615f5c—|r"))
             end
             r.sel = (rec.name == selected)
             r.hl:SetColor(r.sel and { C.gold[1], C.gold[2], C.gold[3], 0.12 } or { 1, 1, 1, 0 })
@@ -798,11 +799,11 @@ function CR.Refresh()
     local good = 0
     for _, rec in ipairs(recipes) do if evals[rec] and evals[rec].verdict == "Profitable" then good = good + 1 end end
     if readError then
-        panel.info:SetText("|cffed5c52Error reading recipes:|r " .. readError:gsub("^.-:%d+: ", ""))
+        panel.info:SetText(Tr("|cffed5c52Error reading recipes:|r ") .. readError:gsub("^.-:%d+: ", ""))
     elseif known == 0 then
-        panel.info:SetText("|cffe0a83dNo AH prices yet.|r Open the AH and click \"Scan professions\".")
+        panel.info:SetText(Tr("|cffe0a83dNo AH prices yet.|r Open the AH and click \"Scan professions\"."))
     else
-        panel.info:SetText(("%d recipes  ·  %d profitable  ·  prices updated %s"):format(#recipes, good, P.Ago(newest)))
+        panel.info:SetText((Tr("%d recipes  ·  %d profitable  ·  prices updated %s")):format(#recipes, good, P.Ago(newest)))
     end
     if api and not selected then
         local idx = api.Selected()
@@ -983,18 +984,18 @@ function CR.SideIcon(f)
         b = CreateFrame("Button", nil, f)
         b.art = b:CreateTexture(nil, "ARTWORK")
         b.art:SetAllPoints()
-        b.art:SetTexture(ns.MEDIA .. "icon.tga")
+        b.art:SetTexture(ns.MEDIA .. Tr("icon.tga"))
         b.glow = b:CreateTexture(nil, "OVERLAY")
-        b.glow:SetTexture(ns.MEDIA .. "icon.tga")
+        b.glow:SetTexture(ns.MEDIA .. Tr("icon.tga"))
         b.glow:SetAllPoints()
         b.glow:SetBlendMode("ADD")
         b.glow:SetAlpha(0)
         b:SetScript("OnEnter", function(self)
             self.glow:SetAlpha(0.35)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("|cffe0a83dImpot|rPointGouv")
-            GameTooltip:AddLine("Click: show / hide the craft advisor", 1, 1, 1)
-            GameTooltip:AddLine("Right-click: open the overview", 0.7, 0.7, 0.7)
+            GameTooltip:AddLine(Tr("|cffe0a83dImpot|rPointGouv"))
+            GameTooltip:AddLine(Tr("Click: show / hide the craft advisor"), 1, 1, 1)
+            GameTooltip:AddLine(Tr("Right-click: open the overview"), 0.7, 0.7, 0.7)
             GameTooltip:Show()
         end)
         b:SetScript("OnLeave", function(self) self.glow:SetAlpha(0); GameTooltip:Hide() end)
@@ -1116,7 +1117,7 @@ local function Describe(o)
     local kind = o.GetObjectType and o:GetObjectType() or "?"
     local txt = ""
     if o.GetLeft and o:GetLeft() then
-        txt = (" @%d,%d %dx%d"):format(o:GetLeft(), o:GetBottom() or 0, o:GetWidth() or 0, o:GetHeight() or 0)
+        txt = (Tr(" @%d,%d %dx%d")):format(o:GetLeft(), o:GetBottom() or 0, o:GetWidth() or 0, o:GetHeight() or 0)
     end
     return (name or ("<" .. kind .. ">")) .. txt
 end
@@ -1134,7 +1135,7 @@ local function ShowDiagText(text)
         diagWin:SetScript("OnDragStart", diagWin.StartMoving)
         diagWin:SetScript("OnDragStop", diagWin.StopMovingOrSizing)
         T.Surface(diagWin, C.window, 12, { 1, 1, 1, 0.12 })
-        local title = T.Text(diagWin, 13, { bold = true, text = "ImpotPointGouv diagnostic  ·  Ctrl+A then Ctrl+C to copy" })
+        local title = T.Text(diagWin, 13, { bold = true, text = Tr("ImpotPointGouv diagnostic  ·  Ctrl+A then Ctrl+C to copy") })
         title:SetPoint("TOPLEFT", 14, -12)
         local close = T.CloseButton(diagWin, function() diagWin:Hide() end)
         close:SetPoint("TOPRIGHT", -8, -6)
@@ -1162,7 +1163,7 @@ CR.ShowText = function(text) ShowDiagText(text) end
 function CR.Diag()
     local out = {}
     local function Add(s) out[#out + 1] = s end
-    Add("Version " .. ns.version .. "  ·  Interface " .. tostring(select(4, GetBuildInfo())))
+    Add("Version " .. ns.version .. Tr("  ·  Interface ") .. tostring(select(4, GetBuildInfo())))
     for _, n in ipairs({ "TradeSkillFrame", "ProfessionsFrame", "CraftFrame", "ProfessionsBookFrame" }) do
         local f = _G[n]
         Add(("%s : %s"):format(n, f and (f:IsShown() and "visible" or "exists, hidden") or "missing"))
@@ -1207,7 +1208,7 @@ function CR.Diag()
                     Add("GetRecipeSchematic: " .. table.concat(parts, " | "))
                     for i, slot in ipairs(sch.reagentSlotSchematics or {}) do
                         local r = slot.reagents and slot.reagents[1]
-                        Add(("  slot %d: itemID=%s qty=%s type=%s"):format(i, tostring(r and r.itemID),
+                        Add((Tr("  slot %d: itemID=%s qty=%s type=%s")):format(i, tostring(r and r.itemID),
                             tostring(slot.quantityRequired), tostring(slot.reagentType)))
                     end
                 else
@@ -1232,7 +1233,7 @@ function CR.Diag()
     else
         Add("C_TradeSkillUI : absent")
     end
-    Add("API used: " .. (api and api.key or "none") .. "  ·  recipes read: " .. #recipes)
+    Add("API used: " .. (api and api.key or "none") .. Tr("  ·  recipes read: ") .. #recipes)
     local focus = GetMouseFoci and GetMouseFoci()[1] or (GetMouseFocus and GetMouseFocus())
     local chain = {}
     local f = focus

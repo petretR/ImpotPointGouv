@@ -2,6 +2,7 @@
 -- L'HV ne montre jamais les ventes des autres : on compare deux scans complets successifs, et les
 -- quantités qui ont disparu sont comptées comme vendues (annulations et expirations incluses : estimation).
 local _, ns = ...
+local Tr = ns.L
 local T, P = ns.Theme, ns.Prices
 local C = T.C
 local M = {}
@@ -215,10 +216,10 @@ end
 -- 1er clic : vérifie le prix réel ; 2e clic : confirme. Empilable = lot entier ; équipement = une annonce par clic.
 function M.Buy(row)
     local AH = C_AuctionHouse
-    if not AH or not IsAHOpen() then M.Msg("Open the auction house to buy."); return end
+    if not AH or not IsAHOpen() then M.Msg(Tr("Open the auction house to buy.")); return end
     if mb and mb.stage == "confirm" and mb.id == row.id then
         mb.stage = "wait"
-        M.Msg(("Buying %d× %s…"):format(mb.qty, P.Name(mb.id)))
+        M.Msg((Tr("Buying %d× %s…")):format(mb.qty, P.Name(mb.id)))
         if mb.item then
             AH.PlaceBid(mb.auctionID, mb.price)
             -- Pas d'événement de confirmation fiable pour l'équipement : on considère l'achat fait sans erreur.
@@ -227,7 +228,7 @@ function M.Buy(row)
                 if mb == my and mb.stage == "wait" then
                     Bought(my.id, my.qty)
                     mb = nil
-                    M.Msg(("Bought %s: sell it at any vendor (merchant bar > Sell to vendor)."):format(P.Name(my.id)))
+                    M.Msg((Tr("Bought %s: sell it at any vendor (merchant bar > Sell to vendor).")):format(P.Name(my.id)))
                 end
             end)
         else
@@ -238,14 +239,14 @@ function M.Buy(row)
     if mb then return end
     if ns.IsCommodity(row.id) then
         mb = { id = row.id, qty = row.units, vs = row.vs, stage = "price" }
-        M.Msg(("Getting the price for %d× %s…"):format(row.units, P.Name(row.id)))
+        M.Msg((Tr("Getting the price for %d× %s…")):format(row.units, P.Name(row.id)))
         AH.StartCommoditiesPurchase(row.id, row.units)
     else
         mb = { id = row.id, vs = row.vs, stage = "search", item = true }
-        M.Msg(("Looking for %s under %s…"):format(P.Name(row.id), ns.FormatMoney(row.vs, { iconSize = 10 })))
+        M.Msg((Tr("Looking for %s under %s…")):format(P.Name(row.id), ns.FormatMoney(row.vs, { iconSize = 10 })))
         AH.SendSearchQuery(AH.MakeItemKey(row.id), { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }, false)
         local my = mb
-        C_Timer.After(5, function() if mb == my and mb.stage == "search" then mb = nil; M.Msg("No answer from the AH, click again.") end end)
+        C_Timer.After(5, function() if mb == my and mb.stage == "search" then mb = nil; M.Msg(Tr("No answer from the AH, click again.")) end end)
     end
     ns.Fire("MARKET_CHANGED")
 end
@@ -272,7 +273,7 @@ local function OnItemResults(itemKey)
         local qty = (r and r.quantity) or 1
         if r and r.buyoutAmount and not r.containsOwnerItem and r.buyoutAmount / qty <= mb.vs - 1 then
             mb.auctionID, mb.price, mb.qty, mb.stage = r.auctionID, r.buyoutAmount, qty, "confirm"
-            M.Msg(("Buy %s for %s, vendor pays %s (+%s)? Click Confirm."):format(P.Name(mb.id),
+            M.Msg((Tr("Buy %s for %s, vendor pays %s (+%s)? Click Confirm.")):format(P.Name(mb.id),
                 ns.FormatMoney(r.buyoutAmount, { iconSize = 10 }), ns.FormatMoney(mb.vs * qty, { iconSize = 10 }),
                 ns.FormatMoney(mb.vs * qty - r.buyoutAmount, { iconSize = 10 })))
             return
@@ -281,7 +282,7 @@ local function OnItemResults(itemKey)
     local id = mb.id
     local db = DB()
     if db.flips then db.flips.list[id] = nil end
-    EndBuy(("%s: none left under the vendor price (someone bought it)."):format(P.Name(id)))
+    EndBuy((Tr("%s: none left under the vendor price (someone bought it).")):format(P.Name(id)))
 end
 
 local bev = CreateFrame("Frame")
@@ -295,26 +296,26 @@ bev:SetScript("OnEvent", function(_, event, unit, total)
     if event == "ITEM_SEARCH_RESULTS_UPDATED" then
         OnItemResults(unit)
     elseif event == "UI_ERROR_MESSAGE" and mb.stage == "wait" and mb.item then
-        EndBuy(("Purchase refused: %s"):format(type(total) == "string" and total or tostring(unit)))
+        EndBuy((Tr("Purchase refused: %s")):format(type(total) == "string" and total or tostring(unit)))
     elseif event == "COMMODITY_PRICE_UPDATED" and mb.stage == "price" then
         local gain = mb.vs * mb.qty - (total or math.huge)
         if not total or gain <= 0 then
-            EndBuy(("%s: price went up, no profit left (someone bought them)."):format(P.Name(mb.id)))
+            EndBuy((Tr("%s: price went up, no profit left (someone bought them).")):format(P.Name(mb.id)))
         else
             mb.stage, mb.total = "confirm", total
-            M.Msg(("Buy %d× %s for %s, vendor pays %s (+%s)? Click Confirm."):format(mb.qty, P.Name(mb.id),
+            M.Msg((Tr("Buy %d× %s for %s, vendor pays %s (+%s)? Click Confirm.")):format(mb.qty, P.Name(mb.id),
                 ns.FormatMoney(total, { iconSize = 10 }), ns.FormatMoney(mb.vs * mb.qty, { iconSize = 10 }),
                 ns.FormatMoney(gain, { iconSize = 10 })))
         end
     elseif event == "COMMODITY_PRICE_UNAVAILABLE" then
-        EndBuy("Not available anymore.")
+        EndBuy(Tr("Not available anymore."))
     elseif event == "COMMODITY_PURCHASE_SUCCEEDED" then
         Bought(mb.id, mb.qty)
-        local msg = ("Bought %d× %s: sell them at any vendor (merchant bar > Sell to vendor)."):format(mb.qty, P.Name(mb.id))
+        local msg = (Tr("Bought %d× %s: sell them at any vendor (merchant bar > Sell to vendor).")):format(mb.qty, P.Name(mb.id))
         mb = nil
         M.Msg(msg)
     elseif event == "COMMODITY_PURCHASE_FAILED" then
-        EndBuy("Purchase failed (price changed or not enough gold).")
+        EndBuy(Tr("Purchase failed (price changed or not enough gold)."))
     end
 end)
 
@@ -414,7 +415,7 @@ M.Relation = Relation
 -- ------------------------------------------------------------ page
 local ROWS = 14
 function M.BuildPage(page)
-    local title = T.Text(page, 20, { bold = true, text = "Market" })
+    local title = T.Text(page, 20, { bold = true, text = Tr("Market") })
     title:SetPoint("TOPLEFT", 0, -2)
     page.sub = T.Text(page, 11, { color = C.muted })
     page.sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
@@ -424,16 +425,16 @@ function M.BuildPage(page)
     local prev
     for i = #M.FILTERS, 1, -1 do
         local d = M.FILTERS[i]
-        local b = T.Button(page, d[2], d[1] == "vflip" and 100 or 92, 26, function()
+        local b = T.Button(page, Tr(d[2]), d[1] == "vflip" and 100 or 92, 26, function()
             page.filter = d[1]; ns.db.settings.marketFilter = d[1]; page.offset = 0; page:Refresh()
         end, "pill")
         if prev then b:SetPoint("RIGHT", prev, "LEFT", -6, 0) else b:SetPoint("TOPRIGHT", 0, 0) end
         prev = b
         page.fb[d[1]] = b
     end
-    page.fb.raw.tooltip = "Raw materials (cloth, leather, ore, meat & fish, herbs, elemental, enchanting): what is worth farming."
-    page.fb.flip.tooltip = "Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit)."
-    page.fb.vflip.tooltip = "Listed below what a vendor pays for them: buy, then sell at any vendor. Risk-free while the price holds."
+    page.fb.raw.tooltip = Tr("Raw materials (cloth, leather, ore, meat & fish, herbs, elemental, enchanting): what is worth farming.")
+    page.fb.flip.tooltip = Tr("Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit).")
+    page.fb.vflip.tooltip = Tr("Listed below what a vendor pays for them: buy, then sell at any vendor. Risk-free while the price holds.")
 
     local list = CreateFrame("Frame", nil, page)
     T.Surface(list, C.surface, 10)
@@ -460,7 +461,7 @@ function M.BuildPage(page)
         r.gold = T.Text(r, 12, { justify = "RIGHT" }); r.gold:SetPoint("RIGHT", -242, 0)
         r.listed = T.Text(r, 12, { justify = "RIGHT", color = C.muted }); r.listed:SetPoint("RIGHT", -152, 0)
         r.tag = T.Text(r, 11, { justify = "RIGHT", color = C.gold }); r.tag:SetPoint("RIGHT", -6, 0); r.tag:SetWidth(140)
-        r.buy = T.Button(r, "Buy", 90, 20, function()
+        r.buy = T.Button(r, Tr("Buy"), 90, 20, function()
             if r.row then ns.Market.Buy(r.row) end
         end, "primary")
         r.buy:SetPoint("RIGHT", -6, 0)
@@ -469,17 +470,17 @@ function M.BuildPage(page)
             if not row then return end
             T.ItemTooltip(self, row.id)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddDoubleLine("Sold per day (est.)", ("%.1f"):format(row.rate), 0.7, 0.7, 0.7, 1, 1, 1)
-            if row.market then GameTooltip:AddDoubleLine("Usual price", ns.FormatMoney(row.market, { iconSize = 11 }), 0.7, 0.7, 0.7) end
-            if row.cur then GameTooltip:AddDoubleLine("Lowest now", ns.FormatMoney(row.cur, { iconSize = 11 }), 0.7, 0.7, 0.7) end
+            GameTooltip:AddDoubleLine(Tr("Sold per day (est.)"), ("%.1f"):format(row.rate), 0.7, 0.7, 0.7, 1, 1, 1)
+            if row.market then GameTooltip:AddDoubleLine(Tr("Usual price"), ns.FormatMoney(row.market, { iconSize = 11 }), 0.7, 0.7, 0.7) end
+            if row.cur then GameTooltip:AddDoubleLine(Tr("Lowest now"), ns.FormatMoney(row.cur, { iconSize = 11 }), 0.7, 0.7, 0.7) end
             if row.vs then
-                GameTooltip:AddDoubleLine("Vendor pays", ns.FormatMoney(row.vs, { iconSize = 11 }), 0.7, 0.7, 0.7)
-                GameTooltip:AddDoubleLine(("Buy %d (below vendor price)"):format(row.units), ns.FormatMoney(row.cost, { iconSize = 11 }), 0.7, 0.7, 0.7)
-                GameTooltip:AddDoubleLine("Profit", ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7)
-            elseif row.gain then GameTooltip:AddDoubleLine("Flip gain / unit", ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7) end
+                GameTooltip:AddDoubleLine(Tr("Vendor pays"), ns.FormatMoney(row.vs, { iconSize = 11 }), 0.7, 0.7, 0.7)
+                GameTooltip:AddDoubleLine((Tr("Buy %d (below vendor price)")):format(row.units), ns.FormatMoney(row.cost, { iconSize = 11 }), 0.7, 0.7, 0.7)
+                GameTooltip:AddDoubleLine(Tr("Profit"), ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7)
+            elseif row.gain then GameTooltip:AddDoubleLine(Tr("Flip gain / unit"), ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7) end
             local rel = Relation(row.id)
             if rel then GameTooltip:AddLine(rel, 0.88, 0.66, 0.24) end
-            GameTooltip:AddLine("Estimated from quantities that vanished between your full scans (cancels and expiries count too).", 0.5, 0.5, 0.5, true)
+            GameTooltip:AddLine(Tr("Estimated from quantities that vanished between your full scans (cancels and expiries count too)."), 0.5, 0.5, 0.5, true)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -510,11 +511,11 @@ function M.BuildPage(page)
                     local b = M.Buying()
                     r.buy.text:SetText((b and b.id == row.id) and (b.stage == "confirm" and "Confirm" or "…") or "Buy")
                     r.buy:SetDisabled(not IsAHOpen() or (b ~= nil and b.id ~= row.id))
-                    r.price:SetText(Money(row.cur) .. "  |cff615f5c/ " .. Money(row.vs) .. "|r")
+                    r.price:SetText(Money(row.cur) .. Tr("  |cff615f5c/ ") .. Money(row.vs) .. "|r")
                     r.rate:SetText(tostring(row.units))
                     r.gold:SetText(ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11, short = true }))
                 elseif self.filter == "flip" then
-                    r.price:SetText(Money(row.cur) .. "  |cff615f5c/ " .. Money(row.market) .. "|r")
+                    r.price:SetText(Money(row.cur) .. Tr("  |cff615f5c/ ") .. Money(row.market) .. "|r")
                     r.gold:SetText(ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11, short = true }))
                 else
                     r.price:SetText(Money(row.price))
@@ -545,7 +546,7 @@ function M.BuildPage(page)
         if vf then
             local list, t = M.Flips()
             self.data = list
-            self.sub:SetText(t and (("last scan %s ago  ·  %d flip%s  ·  buy, then Routine > Sell to vendor"):format(
+            self.sub:SetText(t and ((Tr("last scan %s ago  ·  %d flip%s  ·  buy, then Routine > Sell to vendor")):format(
                 P.Ago(time() - t), #list, #list == 1 and "" or "s")) or "no full scan yet")
             self.empty:SetText(t and "Nothing listed below vendor price in your last scan." or "Click Scan at the auction house first.")
             self.empty:SetShown(#list == 0)
@@ -555,11 +556,11 @@ function M.BuildPage(page)
         end
         self.data = M.List(self.filter)
         if (db.scans or 0) < 2 or hours <= 0 then
-            self.sub:SetText(("%d full scan%s"):format(db.scans or 0, (db.scans or 0) == 1 and "" or "s"))
-            self.empty:SetText("Click Scan at the auction house at each session (at least two, a few hours apart).\nSales volumes appear from the second scan and get reliable after a few days.")
+            self.sub:SetText((Tr("%d full scan%s")):format(db.scans or 0, (db.scans or 0) == 1 and "" or "s"))
+            self.empty:SetText(Tr("Click Scan at the auction house at each session (at least two, a few hours apart).\nSales volumes appear from the second scan and get reliable after a few days."))
             self.empty:Show()
         else
-            self.sub:SetText(("%d full scans  ·  %d h observed (7 days)  ·  %d items"):format(db.scans, math.floor(hours + 0.5), #self.data))
+            self.sub:SetText((Tr("%d full scans  ·  %d h observed (7 days)  ·  %d items")):format(db.scans, math.floor(hours + 0.5), #self.data))
             self.empty:SetText(self.filter == "flip" and "No good flip right now." or "Nothing selling here yet.")
             self.empty:SetShown(#self.data == 0)
         end

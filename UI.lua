@@ -1,5 +1,6 @@
 -- ImpotPointGouv : fenêtre principale (Bilan, Transactions, Personnages), minimap, commandes.
 local _, ns = ...
+local Tr = ns.L
 local T, L = ns.Theme, ns.Ledger
 local C = T.C
 local UI = {}
@@ -12,7 +13,7 @@ local RANGES = {
     { key = "24h", label = "24h", secs = 86400, desc = "last 24 hours" },
     { key = "7d",  label = "7d",  secs = 7 * 86400, desc = "last 7 days" },
     { key = "30d", label = "30d", secs = 30 * 86400, desc = "last 30 days" },
-    { key = "all", label = "All", secs = nil, desc = "since tracking began" },
+    { key = "all", label = Tr("All"), secs = nil, desc = "since tracking began" },
 }
 
 local function RangeStart()
@@ -76,7 +77,7 @@ function UI.StockValue()
 end
 
 local function BuildBilan(page)
-    local title = T.Text(page, 20, { bold = true, text = "Overview" })
+    local title = T.Text(page, 20, { bold = true, text = Tr("Overview") })
     title:SetPoint("TOPLEFT", 0, -2)
     page.period = T.Text(page, 12, { color = C.muted })
     page.period:SetPoint("LEFT", title, "RIGHT", 12, -1)
@@ -163,7 +164,7 @@ local function BuildBilan(page)
         row.value = T.Text(row, 12, { justify = "RIGHT" }); row.value:SetPoint("RIGHT", 0, 0)
         page.splitRows[i] = row
     end
-    page.splitEmpty = T.Text(split, 12, { color = C.faint, text = "No gold movement in this period." })
+    page.splitEmpty = T.Text(split, 12, { color = C.faint, text = Tr("No gold movement in this period.") })
     page.splitEmpty:SetPoint("TOPLEFT", 16, -42)
 
     local top = Card(page)
@@ -182,7 +183,7 @@ local function BuildBilan(page)
         page.topRows[i] = row
     end
     page.topEmpty = T.Text(top, 12, { color = C.faint, wrap = true,
-        text = "Your sales show up here as soon as you collect AH gold from your mailbox." })
+        text = Tr("Your sales show up here as soon as you collect AH gold from your mailbox.") })
     page.topEmpty:SetPoint("TOPLEFT", 16, -42)
     page.topEmpty:SetWidth(rightW - 32)
 
@@ -198,26 +199,26 @@ local function BuildBilan(page)
         local c = self.cards
         c[1].value:SetText(ns.FormatMoney(total, { iconSize = 16 }))
         c[1].sub:SetText(ns.FormatMoney(total - startBal, { sign = true, color = true, iconSize = 10 }) ..
-            "  |cff615f5cthis period|r")
+            Tr("  |cff615f5cthis period|r"))
         -- Résultat du commerce (HV + marchand) ; le stock acheté mais pas encore vendu est montré à côté.
         c[2].value:SetText(ns.FormatMoney(st.trade, { sign = true, color = true, iconSize = 16 }))
-        c[2].sub:SetText("bought " .. ns.FormatMoney(-st.bought, { iconSize = 10 }) .. "  ·  fees " .. ns.FormatMoney(st.fees, { iconSize = 10 }))
+        c[2].sub:SetText(Tr("bought ") .. ns.FormatMoney(-st.bought, { iconSize = 10 }) .. Tr("  ·  fees ") .. ns.FormatMoney(st.fees, { iconSize = 10 }))
         local sv, sn = UI.StockValue()
         c[3].value:SetText(ns.FormatMoney(sv, { iconSize = 16 }))
-        c[3].sub:SetText(sn > 0 and ("%d items in bags, bank and AH, at today's prices"):format(sn) or "nothing in stock")
+        c[3].sub:SetText(sn > 0 and (Tr("%d items in bags, bank and AH, at today's prices")):format(sn) or "nothing in stock")
         c[4].value:SetText(ns.FormatMoney(st.sold, { iconSize = 16 }))
         c[4].sub:SetText(st.soldCount == 0 and "no sales" or
-            (st.soldCount .. (st.soldCount > 1 and " sales" or " sale") .. " (AH + vendor)"))
+            (st.soldCount .. (st.soldCount > 1 and " sales" or " sale") .. Tr(" (AH + vendor)")))
 
         local mode = ns.db.settings.chartMode
         for k, b in pairs(self.modeButtons) do b:SetSelected(k == mode) end
         local N = 90
         if mode == "ahprofit" then
-            self.chartTitle:SetText("Cumulative AH profit")
+            self.chartTitle:SetText(Tr("Cumulative AH profit"))
             self.chart:SetData(L.AHProfitSeries(t0, time(), N), { zeroLine = true, color = C.pos, hideFlat = true,
                 emptyText = "No AH activity in this period.\nSell, buy, post: it all gets counted here." })
         else
-            self.chartTitle:SetText("Gold over time")
+            self.chartTitle:SetText(Tr("Gold over time"))
             self.chart:SetData(L.BalanceSeries(t0, time(), N), { hideFlat = true,
                 emptyText = "The tax office just opened your file.\nThe curve will grow as you earn and spend." })
         end
@@ -259,16 +260,16 @@ end
 
 -- ------------------------------------------------------------ page Transactions
 local FILTERS = {
-    { key = "all",    label = "All" },
-    { key = "ah",     label = "Auction House" },
-    { key = "vendor", label = "Vendors" },
-    { key = "loot",   label = "Loot" },
-    { key = "quest",  label = "Quests" },
-    { key = "other",  label = "Other" },
+    { key = "all",    label = Tr("All") },
+    { key = "ah",     label = Tr("Auction House") },
+    { key = "vendor", label = Tr("Vendors") },
+    { key = "loot",   label = Tr("Loot") },
+    { key = "quest",  label = Tr("Quests") },
+    { key = "other",  label = Tr("Other") },
 }
 
 local function BuildTransactions(page)
-    local title = T.Text(page, 20, { bold = true, text = "Transactions" })
+    local title = T.Text(page, 20, { bold = true, text = Tr("Transactions") })
     title:SetPoint("TOPLEFT", 0, -2)
     page.count = T.Text(page, 12, { color = C.muted })
     page.count:SetPoint("LEFT", title, "RIGHT", 12, -1)
@@ -298,7 +299,7 @@ local function BuildTransactions(page)
         local h = T.Text(list, 11, { color = C.faint, bold = true, text = col[1] })
         h:SetPoint("TOPLEFT", col[2], -14)
     end
-    local hm = T.Text(list, 11, { color = C.faint, bold = true, text = "Amount", justify = "RIGHT" })
+    local hm = T.Text(list, 11, { color = C.faint, bold = true, text = Tr("Amount"), justify = "RIGHT" })
     hm:SetPoint("TOPRIGHT", -30, -14)
     local div = T.Divider(list)
     div:SetPoint("TOPLEFT", 12, -34); div:SetPoint("TOPRIGHT", -12, -34)
@@ -337,7 +338,7 @@ local function BuildTransactions(page)
     T.Rounded(thumb, { C.gold[1], C.gold[2], C.gold[3], 0.55 }, 2, "ARTWORK")
 
     page.empty = T.Text(list, 13, { color = C.faint, justify = "CENTER",
-        text = "No transactions yet." })
+        text = Tr("No transactions yet.") })
     page.empty:SetPoint("CENTER", 0, 0)
 
     local filtered = {}
@@ -372,8 +373,8 @@ local function BuildTransactions(page)
                 r.dot:SetVertexColor(cat.color[1], cat.color[2], cat.color[3], 1)
                 r.cat:SetText(cat.label)
                 local d = tx.i or ""
-                if tx.q and tx.q > 1 then d = d .. "  |cff615f5c×" .. tx.q .. "|r" end
-                if tx.who and tx.who ~= "" and tx.k ~= "mail" then d = d .. "  |cff615f5c(" .. tx.who .. ")|r"
+                if tx.q and tx.q > 1 then d = d .. Tr("  |cff615f5c×") .. tx.q .. "|r" end
+                if tx.who and tx.who ~= "" and tx.k ~= "mail" then d = d .. Tr("  |cff615f5c(") .. tx.who .. ")|r"
                 elseif tx.k == "mail" and tx.who then d = tx.who .. (tx.i and ("  |cff615f5c" .. tx.i .. "|r") or "") end
                 r.detail:SetText(d)
                 r.amount:SetText(ns.FormatMoney(tx.a, { sign = true, color = true, iconSize = 11 }))
@@ -407,7 +408,7 @@ end
 
 -- ------------------------------------------------------------ page Personnages
 local function BuildCharacters(page)
-    local title = T.Text(page, 20, { bold = true, text = "Characters" })
+    local title = T.Text(page, 20, { bold = true, text = Tr("Characters") })
     title:SetPoint("TOPLEFT", 0, -2)
     page.sub = T.Text(page, 12, { color = C.muted })
     page.sub:SetPoint("LEFT", title, "RIGHT", 12, -1)
@@ -427,8 +428,8 @@ local function BuildCharacters(page)
         table.sort(chars, function(a, b) return a.money > b.money end)
         local left = ns.Setup and ns.Setup.Remaining() or 0
         self.sub:SetText(#chars .. (#chars > 1 and " characters" or " character")
-            .. (left > 0 and ("  ·  |cffe0a83dsetup: %d step%s left|r"):format(left, left > 1 and "s" or "") or "  ·  |cff5cd173setup complete|r")
-            .. "   |cff8a877f(orange profession: open it once on that character)|r")
+            .. (left > 0 and (Tr("  ·  |cffe0a83dsetup: %d step%s left|r")):format(left, left > 1 and "s" or "") or "  ·  |cff5cd173setup complete|r")
+            .. Tr("   |cff8a877f(orange profession: open it once on that character)|r"))
         local crafter = ns.Queue and ns.Queue.Crafter()
         local bank = ns.db.settings.bankChar
         for i, e in ipairs(chars) do
@@ -447,20 +448,20 @@ local function BuildCharacters(page)
                 r.money = T.Text(r, 14, { bold = true, justify = "RIGHT" }); r.money:SetPoint("TOPRIGHT", -14, -9)
                 r.seen = T.Text(r, 11, { color = C.faint }); r.seen:SetPoint("LEFT", r.realm, "RIGHT", 0, 0)
                 -- Rôles en un clic.
-                r.bankB = T.Button(r, "Bank", 70, 22, function()
+                r.bankB = T.Button(r, Tr("Bank"), 70, 22, function()
                     ns.db.settings.bankChar = (ns.db.settings.bankChar ~= r.key) and r.key or nil
                     if ns.Routine then ns.Routine.Refresh() end
                     ns.Fire("CHARS_CHANGED"); page:Refresh()
                 end, "pill")
                 r.bankB:SetPoint("TOPRIGHT", r, "TOPRIGHT", -150, -6)
-                r.craftB = T.Button(r, "Crafter", 70, 22, function()
+                r.craftB = T.Button(r, Tr("Crafter"), 70, 22, function()
                     ns.Queue.SetCrafter(r.key, not ns.Queue.IsCrafter(r.key))
                     if ns.Routine then ns.Routine.Refresh() end
                     ns.Fire("CHARS_CHANGED"); page:Refresh()
                 end, "pill")
                 r.craftB:SetPoint("RIGHT", r.bankB, "LEFT", -6, 0)
-                r.craftB.tooltip = "Characters who craft (several allowed). Each one has its own queue and shopping list; your bank shops for all of them."
-                r.bankB.tooltip = "The character who buys reagents, posts and collects at the AH. Crafts are mailed to it."
+                r.craftB.tooltip = Tr("Characters who craft (several allowed). Each one has its own queue and shopping list; your bank shops for all of them.")
+                r.bankB.tooltip = Tr("The character who buys reagents, posts and collects at the AH. Crafts are mailed to it.")
                 self.rows[i] = r
             end
             r.key = e.key
@@ -490,7 +491,7 @@ end
 
 -- ------------------------------------------------------------ page Réglages
 local function BuildSettings(page)
-    local title = T.Text(page, 20, { bold = true, text = "Settings" })
+    local title = T.Text(page, 20, { bold = true, text = Tr("Settings") })
     title:SetPoint("TOPLEFT", 0, -2)
     page.items = {}
     local cols = { Card(page), Card(page) }
@@ -498,15 +499,15 @@ local function BuildSettings(page)
     cols[2]:SetPoint("TOPLEFT", page, "TOP", 6, -42); cols[2]:SetPoint("BOTTOMRIGHT", 0, 0)
     local y = { -16, -16 }
     local function Head(col, text)
-        local h = T.Text(cols[col], 13, { bold = true, color = C.gold, text = text })
+        local h = T.Text(cols[col], 13, { bold = true, color = C.gold, text = Tr(text) })
         h:SetPoint("TOPLEFT", 16, y[col]); y[col] = y[col] - 30
     end
     local function Row(col, label, tip)
-        local l = T.Text(cols[col], 12, { text = label }); l:SetPoint("TOPLEFT", 16, y[col] - 4)
+        local l = T.Text(cols[col], 12, { text = Tr(label) }); l:SetPoint("TOPLEFT", 16, y[col] - 4)
         local hit = CreateFrame("Frame", nil, cols[col]); hit:SetAllPoints(l); hit:EnableMouse(true)
         if tip then
             hit:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:AddLine(tip, 1, 1, 1, true); GameTooltip:Show()
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:AddLine(Tr(tip), 1, 1, 1, true); GameTooltip:Show()
             end)
             hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
         end
@@ -519,7 +520,7 @@ local function BuildSettings(page)
         local b
         b = T.Button(cols[col], "", 64, 24, function() set(not get()); page:Refresh() end, "pill")
         b:SetPoint("TOPRIGHT", -16, yy)
-        page.items[#page.items + 1] = function() b.text:SetText(get() and "On" or "Off"); b:SetSelected(get()) end
+        page.items[#page.items + 1] = function() b.text:SetText(get() and Tr("On") or Tr("Off")); b:SetSelected(get()) end
     end
     -- Valeur avec − / +
     local function Stepper(col, label, get, set, step, fmt, tip)
@@ -558,7 +559,7 @@ local function BuildSettings(page)
     Head(2, "Selling at the AH")
     local DUR = { "Short", "Medium", "Long" }
     Stepper(2, "Auction duration", function() return ns.Sell and ns.Sell.Rules().postDuration or 3 end,
-        function(v) R().postDuration = math.max(1, math.min(3, v)) end, 1, function(v) return DUR[v] or "?" end)
+        function(v) R().postDuration = math.max(1, math.min(3, v)) end, 1, function(v) return Tr(DUR[v] or "?") end)
     Stepper(2, "Max items per post (gear, bags)", function() return ns.Sell and ns.Sell.Rules().postCap or 10 end,
         Clamp("postCap", 1, 100), 1, plain, "Stackable items are always posted as one stack.")
     Stepper(2, "Stock target cap", function() return R().maxQty end, Clamp("maxQty", 1, 1000), 10, plain,
@@ -566,9 +567,9 @@ local function BuildSettings(page)
     Toggle(2, "Warn when vendoring AH-worthy loot", function() return st().vendorHints ~= false end,
         function(v) st().vendorHints = v end, "At the vendor: a tooltip line and a chat line when an item is worth much more at the AH. /ipg sold for the week.")
     Head(2, "Data")
-    local setupB = T.Button(cols[2], "Setup guide", 140, 28, function() ns.Setup.Show() end)
+    local setupB = T.Button(cols[2], Tr("Setup guide"), 140, 28, function() ns.Setup.Show() end)
     setupB:SetPoint("TOPLEFT", 16, y[2]); y[2] = y[2] - 38
-    local reset = T.Button(cols[2], "Reset all data", 140, 28, function() StaticPopup_Show("IMPOTPOINTGOUV_RESET") end)
+    local reset = T.Button(cols[2], Tr("Reset all data"), 140, 28, function() StaticPopup_Show("IMPOTPOINTGOUV_RESET") end)
     reset:SetPoint("TOPLEFT", 16, y[2])
     reset.text:SetTextColor(unpack(C.neg))
 
@@ -601,24 +602,24 @@ local function Build()
     hd:SetPoint("BOTTOMLEFT", 0, 0); hd:SetPoint("BOTTOMRIGHT", 0, 0)
 
     local icon = header:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. "icon.tga")
+    icon:SetTexture(ns.MEDIA .. Tr("icon.tga"))
     icon:SetSize(30, 30)
     icon:SetPoint("LEFT", PAD, 0)
-    local name = T.Text(header, 17, { bold = true, text = "|cffe0a83dImpot|r|cffece6d6PointGouv|r" })
+    local name = T.Text(header, 17, { bold = true, text = Tr("|cffe0a83dImpot|r|cffece6d6PointGouv|r") })
     name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, 0)
-    local tag = T.Text(header, 11, { color = C.faint, text = "Your Azeroth tax return" })
+    local tag = T.Text(header, 11, { color = C.faint, text = Tr("Your Azeroth tax return") })
     tag:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 10, 0)
 
     local close = T.CloseButton(header, function() frame:Hide() end)
     close:SetPoint("RIGHT", -12, 0)
-    local deB = T.Button(header, "Disenchant", 96, 26, function() ns.Destroy.Toggle() end)
+    local deB = T.Button(header, Tr("Disenchant"), 96, 26, function() ns.Destroy.Toggle() end)
     deB:SetPoint("RIGHT", close, "LEFT", -10, 0)
-    deB.tooltip = "Disenchant the greens in your bags, one key press each."
-    local rtB = T.Button(header, "Routine", 84, 26, function() ns.Routine.Toggle() end)
+    deB.tooltip = Tr("Disenchant the greens in your bags, one key press each.")
+    local rtB = T.Button(header, Tr("Routine"), 84, 26, function() ns.Routine.Toggle() end)
     rtB:SetPoint("RIGHT", deB, "LEFT", -6, 0)
     -- Disenchant seulement sur un personnage enchanteur ; sinon Routine prend sa place.
     frame.deB, frame.rtB, frame.closeB = deB, rtB, close
-    rtB.tooltip = "Your daily loop: craft queue, shopping list, Auctionator export, mail buttons."
+    rtB.tooltip = Tr("Your daily loop: craft queue, shopping list, Auctionator export, mail buttons.")
 
     local tabDefs = {
         { "bilan", "Overview" }, { "lists", "Lists" }, { "market", "Market" }, { "tx", "History" },
@@ -626,7 +627,7 @@ local function Build()
     }
     local x = 226
     for _, d in ipairs(tabDefs) do
-        local t = T.Tab(header, d[2], function() ShowPage(d[1]) end)
+        local t = T.Tab(header, Tr(d[2]), function() ShowPage(d[1]) end)
         t:SetPoint("BOTTOMLEFT", x, 0)
         x = x + t:GetWidth()
         if d[3] then t.disabled = true; t.tooltip = d[3]; t:SetSelected(false) end
@@ -670,7 +671,7 @@ function UI.Refresh()
     local nChars = 0
     for _ in pairs(ns.db.chars) do nChars = nChars + 1 end
     local first = L.FirstTime()
-    frame.footer:SetText(("Tracking since %s  ·  %d %s  ·  %d transactions recorded"):format(
+    frame.footer:SetText((Tr("Tracking since %s  ·  %d %s  ·  %d transactions recorded")):format(
         first and date("%d/%m/%Y", first) or "—", nChars, nChars > 1 and "characters" or "character", #ns.db.tx))
     if current and pages[current] then pages[current]:Refresh() end
 end
@@ -702,9 +703,9 @@ function UI.UpdateMinimap()
 end
 
 StaticPopupDialogs["IMPOTPOINTGOUV_RESET"] = {
-    text = "ImpotPointGouv: erase all history (transactions, charts, characters)?\nThis cannot be undone.",
+    text = Tr("ImpotPointGouv: erase all history (transactions, charts, characters)?\nThis cannot be undone."),
     button1 = "Erase all", button2 = "Cancel",
-    OnAccept = function() L.Reset(); ns.Print("history erased. The tax office starts over.") end,
+    OnAccept = function() L.Reset(); ns.Print(Tr("history erased. The tax office starts over.")) end,
     timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
 }
 
@@ -713,21 +714,21 @@ ns.On("LEDGER_READY", function()
     UI.ready = true
     if LDB and LDBIcon then
         local obj = LDB:NewDataObject(ns.name, {
-            type = "launcher", label = "ImpotPointGouv", text = "ImpotPointGouv",
-            icon = ns.MEDIA .. "icon.tga",
+            type = "launcher", label = Tr("ImpotPointGouv"), text = Tr("ImpotPointGouv"),
+            icon = ns.MEDIA .. Tr("icon.tga"),
             OnClick = function(self, button)
                 if button == "RightButton" then UI.Menu(self) else UI.Toggle() end
             end,
             OnTooltipShow = function(tt)
-                tt:AddLine("|cffe0a83dImpot|rPointGouv")
-                tt:AddDoubleLine("Total gold", ns.FormatMoney(L.TotalMoney(), { iconSize = 12 }), 0.7, 0.7, 0.7, 1, 1, 1)
+                tt:AddLine(Tr("|cffe0a83dImpot|rPointGouv"))
+                tt:AddDoubleLine(Tr("Total gold"), ns.FormatMoney(L.TotalMoney(), { iconSize = 12 }), 0.7, 0.7, 0.7, 1, 1, 1)
                 local st = L.Stats(time() - 86400)
-                tt:AddDoubleLine("AH profit (24h)", ns.FormatMoney(st.ahNet, { sign = true, color = true, iconSize = 12 }),
+                tt:AddDoubleLine(Tr("AH profit (24h)"), ns.FormatMoney(st.ahNet, { sign = true, color = true, iconSize = 12 }),
                     0.7, 0.7, 0.7, 1, 1, 1)
                 local left = ns.Setup and ns.Setup.Remaining() or 0
-                if left > 0 then tt:AddLine(("Setup: %d step%s left (menu > Setup guide)"):format(left, left > 1 and "s" or ""), 0.88, 0.66, 0.24) end
+                if left > 0 then tt:AddLine((Tr("Setup: %d step%s left (menu > Setup guide)")):format(left, left > 1 and "s" or ""), 0.88, 0.66, 0.24) end
                 tt:AddLine(" ")
-                tt:AddLine("Left-click: overview   ·   Right-click: menu", 0.55, 0.55, 0.55)
+                tt:AddLine(Tr("Left-click: overview   ·   Right-click: menu"), 0.55, 0.55, 0.55)
             end,
         })
         LDBIcon:Register(ns.name, obj, ns.db.settings.minimap)
@@ -742,7 +743,7 @@ ns.On("LEDGER_READY", function()
     end
     if ns.db.settings.firstRun then
         ns.db.settings.firstRun = false
-        ns.Print("the tax office has opened your file. Type |cffece6d6/impot|r or |cffece6d6/ipg|r to see your overview.")
+        ns.Print(Tr("the tax office has opened your file. Type |cffece6d6/impot|r or |cffece6d6/ipg|r to see your overview."))
     end
 end)
 
@@ -773,7 +774,7 @@ function UI.Menu(anchor)
             b:SetHeight(26)
             b:SetPoint("TOPLEFT", 8, -8 - (i - 1) * 28); b:SetPoint("TOPRIGHT", -8, -8 - (i - 1) * 28)
             local hl = T.Rounded(b, { 1, 1, 1, 0 }, 6, "BACKGROUND")
-            local t = T.Text(b, 12, { text = e[1] }); t:SetPoint("LEFT", 10, 0)
+            local t = T.Text(b, 12, { text = Tr(e[1]) }); t:SetPoint("LEFT", 10, 0)
             b:SetScript("OnEnter", function() hl:SetColor({ C.gold[1], C.gold[2], C.gold[3], 0.18 }) end)
             b:SetScript("OnLeave", function() hl:SetColor({ 1, 1, 1, 0 }) end)
             b:SetScript("OnClick", function() menu:Hide(); e[2]() end)
@@ -799,7 +800,7 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
     elseif msg == "persos" or msg == "chars" then UI.Toggle("chars")
     elseif msg == "vendor" then
         ns.db.settings.autoVendorBuy = ns.db.settings.autoVendorBuy == false
-        ns.Print("auto-buy of vendor reagents " .. (ns.db.settings.autoVendorBuy and "on." or "off."))
+        ns.Print(Tr("auto-buy of vendor reagents ") .. (ns.db.settings.autoVendorBuy and "on." or "off."))
     elseif msg == "list" or msg == "routine" then
         ns.Routine.Toggle()
     elseif msg == "lists" or msg == "listes" then
@@ -808,7 +809,7 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
         ns.Track.Report(7)
     elseif msg == "hints" then
         ns.db.settings.vendorHints = ns.db.settings.vendorHints == false
-        ns.Print("\"worth more at the AH\" warnings at the vendor " .. (ns.db.settings.vendorHints ~= false and "on." or "off."))
+        ns.Print(Tr("\"worth more at the AH\" warnings at the vendor ") .. (ns.db.settings.vendorHints ~= false and "on." or "off."))
     elseif msg == "report" then
         ns.Report.Show(30)
     elseif msg == "de" or msg == "disenchant" then
@@ -817,10 +818,10 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
         ns.Craft.Diag()
     elseif msg == "profit" then
         ns.db.settings.inlineProfit = ns.db.settings.inlineProfit == false
-        ns.Print("profit in the recipe list " .. (ns.db.settings.inlineProfit and "shown." or "hidden."))
+        ns.Print(Tr("profit in the recipe list ") .. (ns.db.settings.inlineProfit and "shown." or "hidden."))
     elseif msg == "courrier" or msg == "mail" then
         ns.db.settings.mailOverlay = ns.db.settings.mailOverlay == false
-        ns.Print("ImpotPointGouv mailbox " .. (ns.db.settings.mailOverlay and "enabled." or "disabled (Blizzard mailbox)."))
+        ns.Print(Tr("ImpotPointGouv mailbox ") .. (ns.db.settings.mailOverlay and "enabled." or "disabled (Blizzard mailbox)."))
     elseif msg == "minimap" then
         ns.db.settings.minimap.hide = not ns.db.settings.minimap.hide
         UI.UpdateMinimap()

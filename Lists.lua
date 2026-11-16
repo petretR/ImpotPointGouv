@@ -4,6 +4,7 @@
 -- * Pour chaque objet : prix habituel, bas/haut, volatilité, ventes estimées, et un verdict
 --   (acheter / vendre / farmer). L'achat ne prend que les unités sous le seuil, vérifié au prix en direct.
 local _, ns = ...
+local Tr = ns.L
 local P = ns.Prices
 local LS = {}
 ns.Lists = LS
@@ -40,19 +41,65 @@ local function FromSchematic(spellID)
     return #out > 0 and out or nil
 end
 
+-- Nom d'objet -> id, à partir de tout ce que l'addon connaît (noms dans la langue du jeu).
+local nameIndex
+local function NameIndex()
+    if nameIndex then return nameIndex end
+    nameIndex = {}
+    local function Put(id)
+        local n = id and ns.GetItemInfo(id)
+        if n then nameIndex[n] = id end
+    end
+    for id, n in pairs(ns.db.items or {}) do nameIndex[n] = id end
+    local D = Data()
+    for id in pairs(D.items or {}) do Put(id) end
+    for _, r in pairs(D.spellReagents or {}) do for _, rg in ipairs(r) do Put(rg[1]) end end
+    for _, r in pairs(D.reagents or {}) do for _, rg in ipairs(r) do Put(rg[1]) end end
+    for _, rows in pairs(D.level or {}) do for _, row in ipairs(rows) do Put(row[3]) end end
+    return nameIndex
+end
+
+-- Secours : l'infobulle de l'objet recette (patron, formule…) affiche "Composants : X (2), Y".
+local function FromRecipeTooltip(rec)
+    if not rec or not C_TooltipInfo or not C_TooltipInfo.GetItemByID then return nil end
+    local ok, data = pcall(C_TooltipInfo.GetItemByID, rec)
+    if not ok or type(data) ~= "table" or not data.lines then
+        if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, rec) end
+        return nil
+    end
+    local head = SPELL_REAGENTS and SPELL_REAGENTS:gsub("%%s", ""):gsub("[:：]%s*$", ""):gsub("%s+$", "") or nil
+    for _, line in ipairs(data.lines) do
+        local t = line.leftText and line.leftText:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        local list = t and ((head and head ~= "" and t:match("^" .. head:gsub("%p", "%%%0") .. "%s*[:：]%s*(.+)$"))
+            or t:match("^Reagents%s*:%s*(.+)$") or t:match("^Composants%s*:%s*(.+)$"))
+        if list then
+            local out, idx, miss = {}, NameIndex(), 0
+            for part in (list .. ","):gmatch("%s*(.-)%s*,") do
+                local name, n = part:match("^(.-)%s*%((%d+)%)$")
+                name = name or part
+                local id = idx[name]
+                if id then out[#out + 1] = { id, tonumber(n) or 1 } elseif name ~= "" then miss = miss + 1 end
+            end
+            if #out > 0 and miss == 0 then return out end
+            return nil
+        end
+    end
+end
+
 -- Demande au jeu les composants de toutes les recettes des listes. Renvoie trouvés, total.
 function LS.ResolveReagents()
     local db, D = RDB(), Data()
     local found, total = 0, 0
-    local function Try(spell)
+    nameIndex = nil
+    local function Try(spell, rec)
         if not spell then return end
         total = total + 1
         if db[spell] or (D.spellReagents and D.spellReagents[spell]) then found = found + 1; return end
-        local r = FromSchematic(spell)
+        local r = FromSchematic(spell) or FromRecipeTooltip(rec)
         if r then db[spell] = r; found = found + 1 end
     end
-    for _, it in pairs(D.items or {}) do Try(it.s) end
-    for spell in pairs(D.ench or {}) do Try(spell) end
+    for _, it in pairs(D.items or {}) do Try(it.s, it.rec) end
+    for spell, e in pairs(D.ench or {}) do Try(spell, e.rec) end
     for _, cd in ipairs(D.cooldowns or {}) do Try(cd.s) end
     LS.resolved = { found = found, total = total, t = time() }
     LS.dirty = true
@@ -146,10 +193,16 @@ function LS.Build()
     local groups = {}
 
     -- Raid : consommables, enchantements, recharges
-    local consum = NewList("consum", "Consumables", "Flasks, elixirs, potions, food, weapon oils and stones, armor kits, and what they're made of.")
+    local consum = NewList("consum", Tr("Consumables"), "Flasks, elixirs, potions, food, weapon oils and stones, armor kits, and what they're made of.")
     local seen = {}
+    local function IsGear(id, it)
+        if not it.g then return false end
+        local classID = Instant(id)
+        return classID ~= 0 and classID ~= 7 and classID ~= 8
+    end
+    LS._IsGear = IsGear
     for id, it in pairs(D.items or {}) do
-        if not it.g and not it.low then
+        if not IsGear(id, it) and not it.low then
             seen[id] = true
             local roles = RolesOf(it.sp)
             Add(consum, id, "product", roles)
@@ -160,7 +213,7 @@ function LS.Build()
         if not seen[id] then Add(consum, id, "product", ALL_ROLES); AddMats(consum, id, ALL_ROLES) end
     end
 
-    local ench = NewList("enchant", "Enchanting", "Materials of the enchants used by each spec.")
+    local ench = NewList("enchant", Tr("Enchanting"), "Materials of the enchants used by each spec.")
     local nRes = 0
     for spell, e in pairs(D.ench or {}) do
         if not e.low then
@@ -180,35 +233,35 @@ function LS.Build()
     -- Enchantements dont le jeu n'a pas encore donné les composants : matériaux de raid habituels.
     if nRes == 0 then
         for _, id in ipairs(D.enchantMats or {}) do Add(ench, id, "mat", ALL_ROLES) end
-        ench.info = ench.info .. " (Showing the usual raid enchanting materials until the game provides the exact recipes.)"
+        ench.info = ench.info .. Tr(" (Showing the usual raid enchanting materials until the game provides the exact recipes.)")
     end
 
-    local cds = NewList("cd", "Cooldowns", "Daily or multi-day crafts: limited supply, steadier margins.")
+    local cds = NewList("cd", Tr("Cooldowns"), "Daily or multi-day crafts: limited supply, steadier margins.")
     for _, cd in ipairs(D.cooldowns or {}) do
         Add(cds, cd.out, "product", ALL_ROLES, nil, cd.n)
         for _, rg in ipairs(cd.r or {}) do Add(cds, rg[1], "mat", ALL_ROLES, rg[2]) end
         if cd.item then Add(cds, cd.item, "tool", ALL_ROLES, nil, "Tool") end
     end
-    groups[#groups + 1] = { key = "raid", title = "RAID", lists = { consum, ench, cds } }
+    groups[#groups + 1] = { key = "raid", title = Tr("RAID"), lists = { consum, ench, cds } }
 
     -- Pré-BiS craftés par type d'armure
     local buckets = {
-        cloth = NewList("pb_cloth", "Cloth", "Crafted pre-raid gear (cloth) and its materials."),
-        leather = NewList("pb_leather", "Leather", "Crafted pre-raid gear (leather) and its materials."),
-        mail = NewList("pb_mail", "Mail", "Crafted pre-raid gear (mail) and its materials."),
-        plate = NewList("pb_plate", "Plate", "Crafted pre-raid gear (plate) and its materials."),
-        weapon = NewList("pb_weapon", "Weapons & shields", "Crafted pre-raid weapons, shields and off-hands."),
-        other = NewList("pb_other", "Cloaks, trinkets, relics", "Crafted cloaks, trinkets, relics and engineering items."),
+        cloth = NewList("pb_cloth", Tr("Cloth"), "Crafted pre-raid gear (cloth) and its materials."),
+        leather = NewList("pb_leather", Tr("Leather"), "Crafted pre-raid gear (leather) and its materials."),
+        mail = NewList("pb_mail", Tr("Mail"), "Crafted pre-raid gear (mail) and its materials."),
+        plate = NewList("pb_plate", Tr("Plate"), "Crafted pre-raid gear (plate) and its materials."),
+        weapon = NewList("pb_weapon", Tr("Weapons & shields"), "Crafted pre-raid weapons, shields and off-hands."),
+        other = NewList("pb_other", Tr("Cloaks, trinkets, relics"), "Crafted cloaks, trinkets, relics and engineering items."),
     }
     for id, it in pairs(D.items or {}) do
-        if it.g then
+        if IsGear(id, it) then
             local b = buckets[ArmorBucket(id)]
             local roles = RolesOf(it.sp)
             Add(b, id, "product", roles)
             AddMats(b, id, roles)
         end
     end
-    groups[#groups + 1] = { key = "prebis", title = "PRE-BIS CRAFTS",
+    groups[#groups + 1] = { key = "prebis", title = Tr("PRE-BIS CRAFTS"),
         lists = { buckets.cloth, buckets.leather, buckets.mail, buckets.plate, buckets.weapon, buckets.other } }
 
     -- Montée de métier 1-300 (quantités)
@@ -216,7 +269,8 @@ function LS.Build()
     for _, prof in ipairs({ "alch", "bs", "ench", "eng", "lw", "tail", "cook", "fa" }) do
         local rows = D.level and D.level[prof]
         if rows then
-            local l = NewList("lv_" .. prof, LS.PROF_NAME[prof] .. " 1-300", "Shopping list to level " .. LS.PROF_NAME[prof] .. " to 300 (vendor items left out).")
+            local pn = Tr(LS.PROF_NAME[prof])
+            local l = NewList("lv_" .. prof, pn .. " 1-300", Tr("Shopping list to level %s to 300 (vendor items left out)."):format(pn))
             l.leveling = true
             for _, row in ipairs(rows) do
                 Add(l, row[3], "mat", ALL_ROLES, row[2])
@@ -226,7 +280,7 @@ function LS.Build()
             lv[#lv + 1] = l
         end
     end
-    groups[#groups + 1] = { key = "level", title = "PROFESSION LEVELING", lists = lv }
+    groups[#groups + 1] = { key = "level", title = Tr("PROFESSION LEVELING"), lists = lv }
 
     -- Listes perso
     local mine = {}
@@ -236,7 +290,7 @@ function LS.Build()
         for _, id in ipairs(cl.ids or {}) do Add(l, id, "mat", ALL_ROLES) end
         mine[#mine + 1] = l
     end
-    groups[#groups + 1] = { key = "mine", title = "MY LISTS", lists = mine, custom = true }
+    groups[#groups + 1] = { key = "mine", title = Tr("MY LISTS"), lists = mine, custom = true }
 
     LS.groups = groups
     LS.byKey = {}
@@ -374,23 +428,23 @@ local function AHOpen() return AuctionHouseFrame and AuctionHouseFrame:IsShown()
 
 function LS.Buy(id)
     local AH = C_AuctionHouse
-    if not AH or not AHOpen() then BuyMsg("Open the auction house to buy."); return end
+    if not AH or not AHOpen() then BuyMsg(Tr("Open the auction house to buy.")); return end
     if buy and buy.id == id and buy.stage == "confirm" then
         buy.stage = "wait"
-        BuyMsg(("Buying %d× %s…"):format(buy.qty, P.Name(id)))
+        BuyMsg((Tr("Buying %d× %s…")):format(buy.qty, P.Name(id)))
         AH.ConfirmCommoditiesPurchase(id, buy.qty)
         return
     end
     if buy then return end
-    if not ns.IsCommodity(id) then BuyMsg("Only stackable items can be bought from here: use the AH for gear."); return end
+    if not ns.IsCommodity(id) then BuyMsg(Tr("Only stackable items can be bought from here: use the AH for gear.")); return end
     local st = P.Stats(id)
     local max = LS.BuyMax(st)
-    if not max then BuyMsg("Not enough price history yet: scan this list a few times first."); return end
+    if not max then BuyMsg(Tr("Not enough price history yet: scan this list a few times first.")); return end
     buy = { id = id, max = max, stage = "book" }
-    BuyMsg(("Checking live listings of %s under %s…"):format(P.Name(id), ns.FormatMoney(max, { iconSize = 10 })))
+    BuyMsg((Tr("Checking live listings of %s under %s…")):format(P.Name(id), ns.FormatMoney(max, { iconSize = 10 })))
     AH.SendSearchQuery(AH.MakeItemKey(id), { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }, false)
     local my = buy
-    C_Timer.After(5, function() if buy == my and buy.stage == "book" then buy = nil; BuyMsg("No answer from the AH, click again.") end end)
+    C_Timer.After(5, function() if buy == my and buy.stage == "book" then buy = nil; BuyMsg(Tr("No answer from the AH, click again.")) end end)
 end
 
 local function EndBuy(msg)
@@ -400,7 +454,7 @@ local function EndBuy(msg)
     buy = nil
     if msg then BuyMsg(msg) end
 end
-LS.CancelBuy = function() EndBuy("Purchase cancelled.") end
+LS.CancelBuy = function() EndBuy(Tr("Purchase cancelled.")) end
 
 local bev = CreateFrame("Frame")
 for _, e in ipairs({ "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE",
@@ -426,27 +480,27 @@ bev:SetScript("OnEvent", function(_, event, a1, a2)
             local cut = math.max(1, math.ceil((cost - budget) / avg))
             units = units - cut; cost = math.floor(avg * units)
         end
-        if units <= 0 then EndBuy(("%s: nothing left under %s (or over your budget)."):format(P.Name(buy.id), ns.FormatMoney(buy.max, { iconSize = 10 }))); return end
+        if units <= 0 then EndBuy((Tr("%s: nothing left under %s (or over your budget).")):format(P.Name(buy.id), ns.FormatMoney(buy.max, { iconSize = 10 }))); return end
         buy.qty, buy.stage = units, "price"
         AH.StartCommoditiesPurchase(buy.id, units)
     elseif event == "COMMODITY_PRICE_UPDATED" and buy.stage == "price" then
         local total = a2
         if not total or total / buy.qty > buy.max then
-            EndBuy(("%s: the price moved above your limit, nothing bought."):format(P.Name(buy.id)))
+            EndBuy((Tr("%s: the price moved above your limit, nothing bought.")):format(P.Name(buy.id)))
             return
         end
         buy.stage, buy.total = "confirm", total
-        BuyMsg(("Buy %d× %s for %s (%s each, limit %s)? Click Confirm."):format(buy.qty, P.Name(buy.id),
+        BuyMsg((Tr("Buy %d× %s for %s (%s each, limit %s)? Click Confirm.")):format(buy.qty, P.Name(buy.id),
             ns.FormatMoney(total, { iconSize = 10 }), ns.FormatMoney(math.floor(total / buy.qty), { iconSize = 10 }),
             ns.FormatMoney(buy.max, { iconSize = 10 })))
     elseif event == "COMMODITY_PRICE_UNAVAILABLE" then
-        EndBuy("Not available anymore.")
+        EndBuy(Tr("Not available anymore."))
     elseif event == "COMMODITY_PURCHASE_SUCCEEDED" and buy.stage == "wait" then
-        local msg = ("Bought %d× %s for %s."):format(buy.qty, P.Name(buy.id), ns.FormatMoney(buy.total or 0, { iconSize = 10 }))
+        local msg = (Tr("Bought %d× %s for %s.")):format(buy.qty, P.Name(buy.id), ns.FormatMoney(buy.total or 0, { iconSize = 10 }))
         buy = nil
         BuyMsg(msg)
     elseif event == "COMMODITY_PURCHASE_FAILED" and buy.stage == "wait" then
-        EndBuy("Purchase failed (price changed or not enough gold).")
+        EndBuy(Tr("Purchase failed (price changed or not enough gold)."))
     end
 end)
 
@@ -535,10 +589,10 @@ local function Remind()
         end
     end
     if bestT then
-        table.insert(ready, 1, ("Transmute — best today: %s%s"):format(bestT.cd.n:gsub("^Transmute: ", ""),
+        table.insert(ready, 1, (Tr("Transmute — best today: %s%s")):format(bestT.cd.n:gsub("^Transmute: ", ""),
             bestT.g and (" (" .. ns.FormatMoney(bestT.g, { iconSize = 10, sign = true }) .. ")") or ""))
     end
-    if #ready > 0 then ns.Print("|cffe0a83dcooldowns ready:|r " .. table.concat(ready, "  ·  ")) end
+    if #ready > 0 then ns.Print(Tr("|cffe0a83dcooldowns ready:|r ") .. table.concat(ready, "  ·  ")) end
 end
 
 local ev = CreateFrame("Frame")
@@ -572,10 +626,16 @@ function LS.Diag()
     LS.Build()
     local n = 0
     for _, g in ipairs(LS.groups) do for _, l in ipairs(g.lists) do n = n + #l.entries end end
-    ns.Print(("lists: recipe materials known for %d / %d recipes · %d items across all lists."):format(found, total, n))
-    local it = Data().items and Data().items[18510] -- Hide of the Wild (recette non connue de vos persos)
-    local r = it and FromSchematic(it.s)
-    local parts = {}
-    for _, rg in ipairs(r or {}) do parts[#parts + 1] = rg[2] .. "× " .. P.Name(rg[1]) end
-    ns.Print("test, Hide of the Wild: " .. (r and table.concat(parts, ", ") or "the game does not give recipe materials for unknown recipes"))
+    ns.Print((Tr("lists: recipe materials known for %d / %d recipes · %d items across all lists.")):format(found, total, n))
+    -- Recette propre à Forever (Living Crown) : le jeu donne-t-il ses composants ?
+    local it = Data().items and Data().items[252561]
+    local function Fmt(r)
+        local parts = {}
+        for _, rg in ipairs(r or {}) do parts[#parts + 1] = rg[2] .. "× " .. P.Name(rg[1]) end
+        return table.concat(parts, ", ")
+    end
+    local a = it and FromSchematic(it.s)
+    local b = it and FromRecipeTooltip(it.rec)
+    ns.Print(Tr("test, Living Crown — recipe data: ") .. (a and Fmt(a) or Tr("not available")))
+    ns.Print(Tr("test, Living Crown — pattern tooltip: ") .. (b and Fmt(b) or Tr("not available")))
 end

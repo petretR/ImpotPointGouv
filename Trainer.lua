@@ -2,6 +2,7 @@
 -- Pour chaque patron : profit par craft (meilleur canal HV / marchand / désenchantement)
 -- et nombre de crafts pour rembourser le prix du patron.
 local _, ns = ...
+local Tr = ns.L
 local T, P, CR = ns.Theme, ns.Prices, ns.Craft
 local TR = {}
 ns.Trainer = TR
@@ -119,8 +120,8 @@ local function ShowTip(a, anchor)
     local function Add(left, right, lc, gap) rows[#rows + 1] = { left, right or "", lc, gap } end
     local G, M, W = "|cffe0a83d", "|cff8a877f", "|cffece6d6"
     if not ev then
-        Add(G .. "Impot|r" .. W .. "PointGouv|r", "")
-        Add(M .. "This pattern doesn't make an item.|r", "")
+        Add(G .. Tr("Impot|r") .. W .. Tr("PointGouv|r"), "")
+        Add(M .. Tr("This pattern doesn't make an item.|r"), "")
     else
         -- En-tête : verdict
         local verdict
@@ -128,45 +129,45 @@ local function ShowTip(a, anchor)
             local how = ev.channel == "de" and "disenchant" or ev.channel == "vendor" and "sell to vendor" or "sell on AH"
             verdict = ev.profit > 0 and ("|cff5cd173Profitable|r " .. M .. "(" .. how .. ")|r") or "|cffed5c52Not profitable|r"
         else
-            verdict = M .. "Missing prices|r"
+            verdict = M .. Tr("Missing prices|r")
         end
-        Add(G .. "Impot|r" .. W .. "PointGouv|r", verdict)
+        Add(G .. Tr("Impot|r") .. W .. Tr("PointGouv|r"), verdict)
 
         -- Composants
-        Add(M .. "REAGENTS|r", "", nil, true)
+        Add(M .. Tr("REAGENTS|r"), "", nil, true)
         for _, line in ipairs(ev.lines or {}) do
             local src = line.src == "vendor" and "vendor" or line.src == "ah" and "AH" or line.src == "craft" and "you craft it"
                 or "|cffed5c52no price|r"
             Add(("%s ×%d  " .. M .. "%s|r"):format(line.rg.name or "?", line.rg.n or 1, src), Money(line.total))
         end
-        Add(W .. "Total cost|r", Money(ev.cost > 0 and ev.cost or nil) .. (ev.unknown > 0 and " |cffed5c52+ ?|r" or ""))
+        Add(W .. Tr("Total cost|r"), Money(ev.cost > 0 and ev.cost or nil) .. (ev.unknown > 0 and " |cffed5c52+ ?|r" or ""))
 
         -- Vente : la meilleure option en or
-        Add(M .. "SELLING IT|r", "", nil, true)
+        Add(M .. Tr("SELLING IT|r"), "", nil, true)
         local function Opt(label, value, key, why)
             local best = ev.channel == key and ev.profit
             local l = best and (G .. "» " .. label .. "|r") or label
             Add(l, why and (M .. why .. "|r") or Money(value), nil)
         end
-        Opt("On the AH  " .. M .. "(− 5% cut & lost deposits)|r", ev.ahNet, "ah",
+        Opt("On the AH  " .. M .. Tr("(− 5% cut & lost deposits)|r"), ev.ahNet, "ah",
             ev.bop and "bound, can't sell" or (ev.whiteGear and "white item, won't sell") or nil)
         Opt("To a vendor", ev.vendorNet, "vendor")
         Opt("Disenchanted  " .. M .. (ev.deObserved and "(your results)" or "(estimate)") .. "|r", ev.deNet, "de",
             (not ev.deNet and ev.whiteGear) and "can't disenchant" or nil)
 
         -- Résultat
-        Add(M .. "RESULT|r", "", nil, true)
+        Add(M .. Tr("RESULT|r"), "", nil, true)
         if ev.profit and not ev.noReagents then
-            Add(W .. "Profit per craft|r", Money(ev.profit, { sign = true, color = true, iconSize = 12 }))
+            Add(W .. Tr("Profit per craft|r"), Money(ev.profit, { sign = true, color = true, iconSize = 12 }))
             if a.cost and a.cost > 0 then
                 if ev.profit > 0 then
-                    Add("Pattern " .. Money(a.cost), ("|cff5cd173paid back after %d crafts|r"):format(math.ceil(a.cost / ev.profit)))
+                    Add("Pattern " .. Money(a.cost), (Tr("|cff5cd173paid back after %d crafts|r")):format(math.ceil(a.cost / ev.profit)))
                 else
-                    Add("Pattern " .. Money(a.cost), M .. "only for skill-ups|r")
+                    Add("Pattern " .. Money(a.cost), M .. Tr("only for skill-ups|r"))
                 end
             end
         else
-            Add(M .. "Scan the AH to price every reagent.|r", "")
+            Add(M .. Tr("Scan the AH to price every reagent.|r"), "")
         end
     end
     local width, y = 280, -10

@@ -2,6 +2,7 @@
 -- Liste les verts/bleus des sacs ; un bouton sécurisé (et son raccourci) désenchante l'objet suivant.
 -- Le jeu exige un appui de touche par sort : impossible de tout désenchanter en un seul clic.
 local _, ns = ...
+local Tr = ns.L
 local T, P = ns.Theme, ns.Prices
 local C = T.C
 local D = {}
@@ -127,7 +128,7 @@ function D.Arm()
     local spell = SpellName()
     if it and spell then
         button:SetAttribute("type", "macro")
-        button:SetAttribute("macrotext", ("/cast %s\n/use %d %d"):format(spell, it.bag, it.slot))
+        button:SetAttribute("macrotext", (Tr("/cast %s\n/use %d %d")):format(spell, it.bag, it.slot))
     else
         button:SetAttribute("type", nil)
         button:SetAttribute("macrotext", nil)
@@ -156,7 +157,7 @@ local function Build()
 
     local icon = frame:CreateTexture(nil, "ARTWORK")
     icon:SetTexture("Interface\\Icons\\INV_Enchant_Disenchant"); icon:SetSize(26, 26); icon:SetPoint("TOPLEFT", 14, -12)
-    local title = T.Text(frame, 15, { bold = true, text = "Disenchant" }); title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, 1)
+    local title = T.Text(frame, 15, { bold = true, text = Tr("Disenchant") }); title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, 1)
     frame.sub = T.Text(frame, 11, { color = C.faint }); frame.sub:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 8, -1)
     local close = T.CloseButton(frame, function() frame:Hide() end); close:SetPoint("TOPRIGHT", -8, -10)
 
@@ -164,11 +165,11 @@ local function Build()
     T.Surface(list, C.surface, 10)
     list:SetPoint("TOPLEFT", 12, -50); list:SetPoint("TOPRIGHT", -12, -50)
     list:SetHeight(ROWS * ROW_H + 28)
-    local h1 = T.Text(list, 10, { bold = true, color = C.faint, text = "Disenchant", justify = "RIGHT" })
+    local h1 = T.Text(list, 10, { bold = true, color = C.faint, text = Tr("Disenchant"), justify = "RIGHT" })
     h1:SetPoint("TOPRIGHT", -176, -8)
-    local h2 = T.Text(list, 10, { bold = true, color = C.faint, text = "AH", justify = "RIGHT" })
+    local h2 = T.Text(list, 10, { bold = true, color = C.faint, text = Tr("AH"), justify = "RIGHT" })
     h2:SetPoint("TOPRIGHT", -116, -8)
-    local h3 = T.Text(list, 10, { bold = true, color = C.faint, text = "Do", justify = "CENTER" })
+    local h3 = T.Text(list, 10, { bold = true, color = C.faint, text = Tr("Do"), justify = "CENTER" })
     h3:SetPoint("TOPRIGHT", -58, -8)
     frame.rows = {}
     local function Choose(r, go)
@@ -197,9 +198,9 @@ local function Build()
             D.Refresh()
         end)
         r.skip:SetPoint("RIGHT", -2, 0)
-        r.sellB = T.Button(r, "Sell", 36, 18, function() Choose(r, false) end)
+        r.sellB = T.Button(r, Tr("Sell"), 36, 18, function() Choose(r, false) end)
         r.sellB:SetPoint("RIGHT", r.skip, "LEFT", -6, 0)
-        r.deB = T.Button(r, "DE", 36, 18, function() Choose(r, true) end)
+        r.deB = T.Button(r, Tr("DE"), 36, 18, function() Choose(r, true) end)
         r.deB:SetPoint("RIGHT", r.sellB, "LEFT", -2, 0)
         r:SetScript("OnEnter", function(self)
             if not self.item then return end
@@ -210,7 +211,7 @@ local function Build()
         r:SetScript("OnLeave", function() GameTooltip:Hide() end)
         frame.rows[i] = r
     end
-    frame.empty = T.Text(list, 12, { color = C.faint, justify = "CENTER", text = "No green or blue gear in your bags." })
+    frame.empty = T.Text(list, 12, { color = C.faint, justify = "CENTER", text = Tr("No green or blue gear in your bags.") })
     frame.empty:SetPoint("CENTER")
     frame.offset = 0
     list:EnableMouseWheel(true)
@@ -227,14 +228,14 @@ local function Build()
     button:RegisterForClicks("AnyUp", "AnyDown")
     button:SetPoint("BOTTOMLEFT", 12, 12); button:SetPoint("BOTTOMRIGHT", -12, 12); button:SetHeight(38)
     -- Habillage visuel (non sécurisé) posé sur le bouton.
-    frame.go = T.Button(frame, "Disenchant", 10, 38, nil, "primary")
+    frame.go = T.Button(frame, Tr("Disenchant"), 10, 38, nil, "primary")
     frame.go:SetAllPoints(button)
     frame.go:EnableMouse(false)
     frame.go:SetFrameLevel((button:GetFrameLevel() or 1) + 1)
     button:HookScript("OnEnter", function()
         GameTooltip:SetOwner(button, "ANCHOR_TOP")
         local key = GetBindingKey and GetBindingKey("CLICK ImpotPointGouvDestroyButton:LeftButton")
-        GameTooltip:AddLine("Click (or press your key) to disenchant the next item.", 1, 1, 1, true)
+        GameTooltip:AddLine(Tr("Click (or press your key) to disenchant the next item."), 1, 1, 1, true)
         GameTooltip:AddLine(key and ("Key: " .. key) or "Set a key: Options > Keybindings > AddOns > ImpotPointGouv.",
             0.88, 0.66, 0.24, true)
         GameTooltip:Show()
@@ -270,12 +271,12 @@ function D.Draw()
             local ign = Ignored(it.id)
             local rec = (not ign and it.best == "de") and "DE" or "Sell"
             r.deB:SetSelected(it.go); r.sellB:SetSelected(not it.go)
-            r.deB.tooltip = "Disenchant this one" .. (rec == "DE" and " (recommended)" or "")
-            r.sellB.tooltip = "Keep this one to sell" .. (rec == "Sell" and " (recommended)" or "")
+            r.deB.tooltip = Tr("Disenchant this one") .. (rec == "DE" and " (recommended)" or "")
+            r.sellB.tooltip = Tr("Keep this one to sell") .. (rec == "Sell" and " (recommended)" or "")
             r.skip:SetSelected(ign and true or false)
             r.skip.tooltip = ign and "Always kept: click to let the addon suggest it again"
                 or "Never suggest disenchanting this item"
-            if ign then r.name:SetText(name .. "  |cff615f5c(always kept)|r") end
+            if ign then r.name:SetText(name .. Tr("  |cff615f5c(always kept)|r")) end
             r:SetAlpha(it.go and 1 or 0.6)
             r:Show()
         else
@@ -284,7 +285,7 @@ function D.Draw()
     end
     frame.empty:SetShown(#items == 0)
     local sell = #items - count
-    frame.total:SetText(("%d to disenchant (≈ %s)   ·   %d to sell"):format(count, Money(total), sell))
+    frame.total:SetText((Tr("%d to disenchant (≈ %s)   ·   %d to sell")):format(count, Money(total), sell))
     frame.sub:SetText(KnowsDisenchant() and "" or "|cffed5c52This character doesn't know Enchanting|r")
 end
 
@@ -299,7 +300,7 @@ function D.IsShown() return frame ~= nil and frame:IsShown() end
 
 function D.Toggle()
     if not KnowsDisenchant() then
-        ns.Print("this character doesn't know Enchanting: nothing to disenchant here.")
+        ns.Print(Tr("this character doesn't know Enchanting: nothing to disenchant here."))
         if frame then frame:Hide() end
         return
     end

@@ -1,6 +1,7 @@
 -- ImpotPointGouv : bilan de test par objet (/ipg report).
 -- Mises en vente, ventes, prix moyens, délai de vente, invendus, et résultats réels de désenchantement.
 local _, ns = ...
+local Tr = ns.L
 local P = ns.Prices
 local R = {}
 ns.Report = R
@@ -65,7 +66,7 @@ function R.Build(days)
     end
     local lines = {}
     local function Add(s) lines[#lines + 1] = s end
-    Add(("ImpotPointGouv test report  ·  last %d days  ·  %s"):format(days, date("%d/%m/%Y %H:%M")))
+    Add((Tr("ImpotPointGouv test report  ·  last %d days  ·  %s")):format(days, date("%d/%m/%Y %H:%M")))
     Add("")
     Add("== AH: per item ==")
     Add("item | posted (posts) | avg list price | sold | avg sale price | expired/cancelled | still listed | avg time to sell | net gold")
@@ -102,7 +103,7 @@ function R.Build(days)
             value = value + (v or 0) * 0.95 * qty
             parts[#parts + 1] = ("%s ×%d"):format(P.Name(id), qty)
         end
-        Add(("%s | %d disenchant(s) | got: %s | real value/DE %s | predicted %s"):format(key, b.n,
+        Add((Tr("%s | %d disenchant(s) | got: %s | real value/DE %s | predicted %s")):format(key, b.n,
             table.concat(parts, ", "), M(value / b.n), M(b.predicted)))
     end
     if #dorder == 0 then Add("(no disenchant recorded yet: use the Disenchant window, /ipg de)") end
