@@ -9,7 +9,7 @@ Inspired by TSM and Auctionator, with a clean, minimal interface.
 2. Unzip it into `World of Warcraft/_forever_/Interface/AddOns/`.
 3. Fully restart the game (`/reload` does not load new files).
 
-`/ipg` opens the main window. A setup guide shows up on first launch.
+Open the main window with the minimap button or `/ipg`. A setup guide shows up on first launch.
 
 ## Commands
 
