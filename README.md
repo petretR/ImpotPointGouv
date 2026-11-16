@@ -18,6 +18,7 @@ Open the main window with the minimap button or `/ipg`. A setup guide shows up o
 | `/ipg` | Main window (overview, history, characters, market, settings) |
 | `/ipg list` | Routine (shopping list, mail sends) |
 | `/ipg de` | Disenchant window |
+| `/ipg lists` | Lists tab + check of recipe data from the game |
 | `/ipg sold` | Vendor sales over the last 7 days, and what was worth more at the AH |
 | `/ipg report` | 30-day report |
 | `/ipg hints` | Toggle the warnings shown at vendors |
@@ -35,7 +36,9 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Theme.lua` | Colors, buttons, tooltips, UI widgets |
 | `UI.lua`, `Chart.lua` | Main window, tabs, chart |
 | `Mail.lua` | Mailbox (Inbox / Send tabs) |
-| `Prices.lua` | AH scans and price history |
+| `Prices.lua` | AH scans, price history and stats (usual price, low/high, volatility, sales/day) |
+| `Data.lua` | Built-in list data: pre-BiS crafts, consumables, enchants per spec, profession leveling shopping lists, cooldowns |
+| `Lists.lua`, `ListsUI.lua` | Lists tab: watchlists, verdicts (buy / sell / farm), deal buying with a price limit, cooldown tracking |
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
 | `Routine.lua`, `Next.lua`, `Preview.lua` | Routine (shopping, sending, vendor selling), preview before batch actions |
 | `Sell.lua` | AH posting and cancelling |

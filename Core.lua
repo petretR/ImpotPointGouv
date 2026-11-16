@@ -1,7 +1,7 @@
 -- ImpotPointGouv : namespace, base de données, utilitaires.
 local ADDON, ns = ...
 ns.name = ADDON
-ns.version = "0.17.1"
+ns.version = "0.18.0"
 _G.ImpotPointGouv = ns
 
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"

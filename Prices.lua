@@ -70,8 +70,73 @@ function P.Record(id, low, qty, full)
     elseif full then
         e.cur = nil -- plus aucune annonce
     end
-    if full then e.qty = qty or 0 end
+    if full then
+        e.qty = qty or 0
+        -- Historique fin (un point par scan, 15 min mini entre deux) : prix habituel, volatilité, ventes.
+        -- Seulement pour les objets suivis (listes), pour garder un fichier de sauvegarde léger.
+        if ns.Lists and ns.Lists.IsWatched and ns.Lists.IsWatched(id) then
+        e.h = e.h or {}
+        local h, now = e.h, time()
+        local lp = h[#h]
+        if lp and now - lp[1] < 900 then lp[2], lp[3] = low or 0, qty or 0
+        else h[#h + 1] = { now, low or 0, qty or 0 } end
+        while #h > 0 and (#h > 120 or now - h[1][1] > 21 * 86400) do table.remove(h, 1) end
+        end
+    end
     e.t = time()
+end
+
+-- Statistiques sur 7 jours : médiane (prix habituel), bas (20 %), haut (80 %), volatilité, ventes / jour.
+local function Pct(sorted, p)
+    local n = #sorted
+    if n == 0 then return nil end
+    return sorted[math.max(1, math.min(n, math.ceil(n * p)))]
+end
+function P.Stats(id)
+    local e = P.Entry(id)
+    if not e then return nil end
+    local now, vals = time(), {}
+    local h = e.h or {}
+    for _, pt in ipairs(h) do
+        if now - pt[1] <= 7 * 86400 and pt[2] > 0 then vals[#vals + 1] = pt[2] end
+    end
+    if #vals < 3 and e.d then
+        for i = #e.d, math.max(1, #e.d - 6), -1 do
+            if e.d[i][1] >= math.floor(now / 86400) - 7 then vals[#vals + 1] = e.d[i][2] end
+        end
+    end
+    local st = { cur = e.cur, t = e.t, qty = e.qty, n = #vals }
+    if #vals > 0 then
+        table.sort(vals)
+        st.med, st.low, st.high = Pct(vals, 0.5), Pct(vals, 0.2), Pct(vals, 0.8)
+        local sum = 0
+        for _, v in ipairs(vals) do sum = sum + v end
+        local mean = sum / #vals
+        local var = 0
+        for _, v in ipairs(vals) do var = var + (v - mean) ^ 2 end
+        st.cv = mean > 0 and math.sqrt(var / #vals) / mean or 0
+    end
+    -- Ventes estimées : baisses de quantité entre deux scans successifs (annulations comprises).
+    local drop, first, last = 0, nil, nil
+    for i, pt in ipairs(h) do
+        if now - pt[1] <= 7 * 86400 then
+            first = first or pt[1]; last = pt[1]
+            local prev = h[i - 1]
+            if prev and now - prev[1] <= 7 * 86400 and prev[3] > pt[3] then drop = drop + (prev[3] - pt[3]) end
+        end
+    end
+    if first and last and last - first >= 6 * 3600 then st.sales = drop / ((last - first) / 86400) end
+    -- Courbe : plus bas prix par jour, 7 derniers jours.
+    local today, spark = math.floor(now / 86400), {}
+    for _, pt in ipairs(h) do
+        local d = today - math.floor(pt[1] / 86400)
+        if d < 7 and pt[2] > 0 then
+            local k = 7 - d
+            spark[k] = spark[k] and math.min(spark[k], pt[2]) or pt[2]
+        end
+    end
+    st.spark = spark
+    return st
 end
 
 function P.Entry(id) return id and DB()[id] end
@@ -315,6 +380,9 @@ function FinishScan(msg)
     scan = nil
     -- Après le scan des métiers : profondeur (quantités par prix) des composants, objet par objet.
     if s and not msg and s.mode == "items" and StartDepth and StartDepth(s) then return end
+    if s and s.mode == "list" and not msg then
+        msg = ("%s scanned: %d / %d items found."):format(s.label, s.got or 0, #s.ids)
+    end
     if s and s.mode == "depth" and not msg then
         msg = ("Scan done: %d prices, market depth of %d reagents."):format(s.items or 0, s.got or 0)
     end
@@ -594,7 +662,80 @@ StartDepth = function(prev)
     return true
 end
 
+-- ------------------------------------------------------------ scan d'une liste (onglet Lists)
+local ListNext
+function P.ScanIds(ids, label)
+    if not IsModern() or not AHM.SendSearchQuery or not AHM.MakeItemKey then Status("List scan needs the auction house."); return false end
+    if scan then FinishScan("Scan stopped."); return false end
+    if not ids or #ids == 0 then return false end
+    scan = { mode = "list", ids = ids, i = 0, got = 0, label = label or "List" }
+    UpdateBar()
+    ns.Fire("LIST_SCAN", scan)
+    ListNext()
+    return true
+end
+function P.Scanning() return scan end
+
+ListNext = function()
+    if not scan or scan.mode ~= "list" then return end
+    scan.i = scan.i + 1
+    local id = scan.ids[scan.i]
+    if not id then FinishScan(); return end
+    local function Send()
+        if not scan or scan.mode ~= "list" or scan.ids[scan.i] ~= id then return end
+        if AHM.IsThrottledMessageSystemReady and not AHM.IsThrottledMessageSystemReady() then C_Timer.After(0.15, Send); return end
+        Status(("%s: %s (%d / %d)…"):format(scan.label, P.Name(id), scan.i, #scan.ids))
+        scan.cur = id
+        scan.commodity = ns.IsCommodity(id)
+        local sorts = { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }
+        local ok = pcall(AHM.SendSearchQuery, AHM.MakeItemKey(id), sorts, false)
+        if not ok then scan.cur = nil; C_Timer.After(0.05, ListNext); return end
+        local my = scan.i
+        C_Timer.After(4, function()
+            if scan and scan.mode == "list" and scan.i == my and scan.cur == id then scan.cur = nil; ListNext() end
+        end)
+        ns.Fire("LIST_SCAN", scan)
+    end
+    Send()
+end
+
+local function OnListItemResults(itemKey)
+    if not scan or scan.mode ~= "list" or not itemKey or itemKey.itemID ~= scan.cur then return end
+    local low, total = nil, 0
+    for k = 1, (AHM.GetNumItemSearchResults(itemKey) or 0) do
+        local r = AHM.GetItemSearchResultInfo(itemKey, k)
+        if r and r.buyoutAmount then
+            local q = r.quantity or 1
+            local unit = math.floor(r.buyoutAmount / math.max(1, q))
+            low = low and math.min(low, unit) or unit
+            total = total + q
+        end
+    end
+    P.Record(itemKey.itemID, low, total, true)
+    scan.got = scan.got + 1
+    scan.cur = nil
+    C_Timer.After(0.05, ListNext)
+end
+
 local function OnCommodityResults(itemID)
+    if scan and scan.mode == "list" and itemID == scan.cur then
+        local n = AHM.GetNumCommoditySearchResults and AHM.GetNumCommoditySearchResults(itemID) or 0
+        local ladder, total, low = {}, 0, nil
+        for k = 1, n do
+            local r = AHM.GetCommoditySearchResultInfo(itemID, k)
+            if r and r.unitPrice and r.quantity then
+                ladder[r.unitPrice] = (ladder[r.unitPrice] or 0) + r.quantity
+                total = total + r.quantity
+                low = low and math.min(low, r.unitPrice) or r.unitPrice
+            end
+        end
+        P.Record(itemID, low, total, true)
+        if ns.Market and ns.Market.SetBook then ns.Market.SetBook(itemID, ladder) end
+        scan.got = scan.got + 1
+        scan.cur = nil
+        C_Timer.After(0.05, ListNext)
+        return
+    end
     if not scan or scan.mode ~= "depth" or itemID ~= scan.cur then return end
     local n = AHM.GetNumCommoditySearchResults and AHM.GetNumCommoditySearchResults(itemID) or 0
     local ladder, total, low = {}, 0, nil
@@ -713,7 +854,7 @@ local ev = CreateFrame("Frame")
 for _, e in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
     "AUCTION_ITEM_LIST_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN",
     "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", "AUCTION_HOUSE_BROWSE_RESULTS_ADDED", "REPLICATE_ITEM_LIST_UPDATE",
-    "COMMODITY_SEARCH_RESULTS_UPDATED" }) do
+    "COMMODITY_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_UPDATED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 local debounce = 0
@@ -737,6 +878,8 @@ ev:SetScript("OnEvent", function(_, event, ...)
         ModernOnBrowse()
     elseif event == "COMMODITY_SEARCH_RESULTS_UPDATED" then
         OnCommodityResults(...)
+    elseif event == "ITEM_SEARCH_RESULTS_UPDATED" then
+        OnListItemResults(...)
     elseif event == "REPLICATE_ITEM_LIST_UPDATE" then
         if scan and scan.mode == "full" then
             scan.got = true

@@ -621,10 +621,10 @@ local function Build()
     rtB.tooltip = "Your daily loop: craft queue, shopping list, Auctionator export, mail buttons."
 
     local tabDefs = {
-        { "bilan", "Overview" }, { "tx", "History" }, { "chars", "Characters" },
-        { "market", "Market" }, { "settings", "Settings" },
+        { "bilan", "Overview" }, { "lists", "Lists" }, { "market", "Market" }, { "tx", "History" },
+        { "chars", "Characters" }, { "settings", "Settings" },
     }
-    local x = 240
+    local x = 226
     for _, d in ipairs(tabDefs) do
         local t = T.Tab(header, d[2], function() ShowPage(d[1]) end)
         t:SetPoint("BOTTOMLEFT", x, 0)
@@ -648,6 +648,7 @@ local function Build()
     Page("tx", BuildTransactions)
     Page("chars", BuildCharacters)
     Page("market", ns.Market.BuildPage)
+    Page("lists", ns.ListsUI.BuildPage)
     Page("settings", BuildSettings)
 
     frame.footer = T.Text(frame, 11, { color = C.faint })
@@ -675,7 +676,7 @@ function UI.Refresh()
 end
 
 local refreshQueued
-ns.On("MARKET_CHANGED", function() if current == "market" then UI.Refresh() end end)
+ns.On("MARKET_CHANGED", function() if current == "market" or current == "lists" then UI.Refresh() end end)
 ns.On("LEDGER_CHANGED", function()
     if refreshQueued or not frame or not frame:IsShown() then return end
     refreshQueued = true
@@ -759,6 +760,7 @@ function UI.Menu(anchor)
             { "Routine (shopping list)", function() ns.Routine.Toggle() end },
             { "Disenchant", function() ns.Destroy.Toggle() end },
             { "Transactions", function() UI.Toggle("tx") end },
+            { "Lists (watch, buy, farm)", function() UI.Toggle("lists") end },
             { "Market (what sells)", function() UI.Toggle("market") end },
             { "Test report", function() ns.Report.Show(30) end },
             { "Characters", function() UI.Toggle("chars") end },
@@ -800,6 +802,8 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
         ns.Print("auto-buy of vendor reagents " .. (ns.db.settings.autoVendorBuy and "on." or "off."))
     elseif msg == "list" or msg == "routine" then
         ns.Routine.Toggle()
+    elseif msg == "lists" or msg == "listes" then
+        UI.Toggle("lists"); ns.Lists.Diag()
     elseif msg == "sold" or msg == "ventes" then
         ns.Track.Report(7)
     elseif msg == "hints" then
