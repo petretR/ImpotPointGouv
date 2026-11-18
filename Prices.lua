@@ -71,6 +71,11 @@ function P.Record(id, low, qty, full)
     elseif full then
         e.cur = nil -- plus aucune annonce
     end
+    -- Partage avec Auctionator : son infobulle affiche alors les prix de nos scans.
+    if full and low and ns.db.settings.shareAuctionator ~= false and Auctionator and Auctionator.Database
+        and Auctionator.Database.SetPrice then
+        pcall(Auctionator.Database.SetPrice, Auctionator.Database, tostring(id), low, qty)
+    end
     if full then
         e.qty = qty or 0
         -- Historique fin (un point par scan, 15 min mini entre deux) : prix habituel, volatilité, ventes.

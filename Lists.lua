@@ -198,7 +198,7 @@ local function AddRecipe(list, rec, rg)
         local e = list.byId[m[1]]
         if e then
             e.usedIn = e.usedIn or {}
-            if not e.usedIn[rec.name] then e.usedIn[rec.name] = m[2]; e.usedInN = (e.usedInN or 0) + 1 end
+            if not e.usedIn[rec] then e.usedIn[rec] = m[2]; e.usedInN = (e.usedInN or 0) + 1 end
         end
     end
 end
@@ -431,15 +431,48 @@ function LS.Deals(list)
 end
 
 -- Coût d'une recette (composants directs, prix habituel sinon actuel) et valeur nette du produit.
+-- Pour chaque composant intermédiaire (qui a ses propres composants dessous), on compare
+-- "l'acheter" et "le fabriquer", et on garde le moins cher. Renvoie aussi le détail par ligne.
 function LS.RecipeCost(rec, useNow)
-    local cost, missing = 0, 0
-    for _, m in ipairs(rec.mats or {}) do
+    local mats = rec.mats or {}
+    local function Price(id)
+        local st = P.Stats(id)
+        return st and ((useNow and st.cur) or st.med or st.cur)
+    end
+    local detail = {}
+    -- coût "fabriqué" d'une ligne : somme de ses enfants directs (eux-mêmes au meilleur prix)
+    local function Best(i)
+        local m = mats[i]
+        local buy = Price(m[1])
+        local buyCost = buy and buy * m[2] or nil
+        local craft, craftMissing, j = 0, 0, i + 1
+        local hasKids = false
+        while mats[j] and mats[j][3] > m[3] do
+            if mats[j][3] == m[3] + 1 then
+                hasKids = true
+                local c = Best(j)
+                if c then craft = craft + c else craftMissing = craftMissing + 1 end
+            end
+            j = j + 1
+        end
+        local d = { buy = buyCost }
+        if hasKids and craftMissing == 0 then d.craft = craft end
+        if d.craft and (not d.buy or d.craft < d.buy) then d.best = "craft" else d.best = d.buy and "buy" or nil end
+        detail[i] = d
+        if d.best == "craft" then return d.craft end
+        return d.buy
+    end
+    local cost, missing, allBuy, allBuyMissing = 0, 0, 0, 0
+    for i, m in ipairs(mats) do
         if m[3] == 1 then
-            local st = P.Stats(m[1])
-            local p = st and ((useNow and st.cur) or st.med or st.cur)
-            if p then cost = cost + p * m[2] else missing = missing + 1 end
+            local c = Best(i)
+            if c then cost = cost + c else missing = missing + 1 end
+            local b = detail[i] and detail[i].buy
+            if b then allBuy = allBuy + b else allBuyMissing = allBuyMissing + 1 end
         end
     end
+    rec._detail = detail
+    rec._allBuy = allBuyMissing == 0 and allBuy or nil
     local value
     if rec.id then
         local st = P.Stats(rec.id)

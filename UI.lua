@@ -566,6 +566,8 @@ local function BuildSettings(page)
         "Highest stock the adaptive target can reach for an item that sells well.")
     Toggle(2, "Warn when vendoring AH-worthy loot", function() return st().vendorHints ~= false end,
         function(v) st().vendorHints = v end, "At the vendor: a tooltip line and a chat line when an item is worth much more at the AH. /ipg sold for the week.")
+    Toggle(2, "Share scan prices with Auctionator", function() return st().shareAuctionator ~= false end,
+        function(v) st().shareAuctionator = v end, "Each item scanned here also updates Auctionator's price, so its tooltip stays in sync.")
     Head(2, "Data")
     local setupB = T.Button(cols[2], Tr("Setup guide"), 140, 28, function() ns.Setup.Show() end)
     setupB:SetPoint("TOPLEFT", 16, y[2]); y[2] = y[2] - 38

@@ -11,6 +11,7 @@ local function DBChar()
     if not k then return nil end
     ns.db.inv = ns.db.inv or {}
     ns.db.inv[k] = ns.db.inv[k] or { bags = {}, bank = {}, owned = {} }
+    ns.db.inv[k].mail = ns.db.inv[k].mail or {}
     return ns.db.inv[k]
 end
 
@@ -89,6 +90,76 @@ function I.ScanBank()
     c.bankT = time()
 end
 
+-- ------------------------------------------------------------ courrier
+-- Objets dans la boîte aux lettres du personnage (relevé à chaque ouverture).
+function I.ScanMail()
+    local c = DBChar()
+    if not c or not GetInboxNumItems then return end
+    local into = {}
+    local maxAtt = ATTACHMENTS_MAX_RECEIVE or 16
+    for i = 1, GetInboxNumItems() do
+        for j = 1, maxAtt do
+            local _, id, _, count = GetInboxItem(i, j)
+            if id then into[id] = (into[id] or 0) + (count or 1) end
+        end
+    end
+    c.mail, c.mailT = into, time()
+    -- Ce qui était "en route" vers ce personnage est maintenant dans sa boîte.
+    local me = (UnitName("player") or ""):lower()
+    if ns.db.transit then ns.db.transit[me] = nil end
+end
+
+-- Objets envoyés à un de vos personnages, pas encore relevés dans sa boîte.
+local function OwnCharName(recipient)
+    if not recipient then return nil end
+    local n = recipient:match("^([^%-]+)") or recipient
+    n = n:lower()
+    for _, ch in pairs(ns.db.chars or {}) do
+        if ch.name and ch.name:lower() == n then return n end
+    end
+end
+local function CaptureSend(recipient)
+    local who = OwnCharName(recipient)
+    if not who or not GetSendMailItem then return end
+    local items = {}
+    for j = 1, (ATTACHMENTS_MAX_SEND or 12) do
+        local _, id, _, count = GetSendMailItem(j)
+        if id then items[id] = (items[id] or 0) + (count or 1) end
+    end
+    if not next(items) then return end
+    ns.db.transit = ns.db.transit or {}
+    local t = ns.db.transit[who] or {}
+    ns.db.transit[who] = t
+    for id, n in pairs(items) do t[id] = (t[id] or 0) + n end
+end
+if type(SendMail) == "function" then
+    -- Juste après l'appel, les pièces jointes sont encore dans la fenêtre d'envoi : on note ce qui part vers vos persos.
+    hooksecurefunc("SendMail", function(recipient) pcall(CaptureSend, recipient) end)
+end
+
+function I.Mail(id)
+    local total = 0
+    for _, c in pairs(ns.db.inv or {}) do total = total + ((c.mail or {})[id] or 0) end
+    for _, t in pairs(ns.db.transit or {}) do total = total + (t[id] or 0) end
+    return total
+end
+
+-- Détail par personnage : { {nom, sacs, banque, courrier}, ... }, en vente, en route.
+function I.Breakdown(id)
+    local rows = {}
+    for key, c in pairs(ns.db.inv or {}) do
+        local b, k, m = (c.bags or {})[id] or 0, (c.bank or {})[id] or 0, (c.mail or {})[id] or 0
+        if b + k + m > 0 then
+            local ch = ns.db.chars[key]
+            rows[#rows + 1] = { (ch and ch.name) or "?", b, k, m }
+        end
+    end
+    table.sort(rows, function(a, b) return (a[2] + a[3] + a[4]) > (b[2] + b[3] + b[4]) end)
+    local transit = 0
+    for _, t in pairs(ns.db.transit or {}) do transit = transit + (t[id] or 0) end
+    return rows, I.Listed(id), transit, ((ns.db.warband or {})[id] or 0)
+end
+
 -- ------------------------------------------------------------ requêtes
 -- Ce que le personnage connecté a sous la main (sacs + banque + bataillon).
 function I.Mine(id)
@@ -129,16 +200,17 @@ function I.Listed(id)
     return total
 end
 
--- Stock total possédé (tous persos, banques, en vente) : pour le réassort.
+-- Stock total possédé (tous persos, banques, courrier, en route, en vente) : pour le réassort.
 function I.Stock(id)
     local alts = I.Alts(id)
-    return I.Mine(id) + alts + I.Listed(id)
+    return I.Mine(id) + alts + I.Listed(id) + I.Mail(id)
 end
 
 -- ------------------------------------------------------------ événements
 local ev = CreateFrame("Frame")
 for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED",
-    "PLAYERBANKSLOTS_CHANGED", "PLAYERREAGENTBANKSLOTS_CHANGED", "AUCTION_HOUSE_SHOW", "OWNED_AUCTIONS_UPDATED" }) do
+    "PLAYERBANKSLOTS_CHANGED", "PLAYERREAGENTBANKSLOTS_CHANGED", "AUCTION_HOUSE_SHOW", "OWNED_AUCTIONS_UPDATED",
+    "MAIL_INBOX_UPDATE", "MAIL_CLOSED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 local queued
@@ -161,6 +233,8 @@ ev:SetScript("OnEvent", function(_, event)
         bankOpen = false
     elseif event == "PLAYERBANKSLOTS_CHANGED" or event == "PLAYERREAGENTBANKSLOTS_CHANGED" then
         I.ScanBank(); Changed()
+    elseif event == "MAIL_INBOX_UPDATE" or event == "MAIL_CLOSED" then
+        I.ScanMail(); Changed()
     elseif event == "AUCTION_HOUSE_SHOW" then
         if C_AuctionHouse and C_AuctionHouse.QueryOwnedAuctions then
             C_Timer.After(0.5, function() pcall(C_AuctionHouse.QueryOwnedAuctions, {}) end)

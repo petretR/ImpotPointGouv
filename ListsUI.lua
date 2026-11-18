@@ -264,6 +264,20 @@ function LU.BuildPage(page)
                 return
             end
             T.ItemTooltip(self, row.id)
+            if row.head and row.rec then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddDoubleLine(Tr("Materials, best mix"), Money(row.cost), 0.88, 0.66, 0.24, 1, 1, 1)
+                if row.rec._allBuy and row.rec._allBuy ~= row.cost then
+                    GameTooltip:AddDoubleLine(Tr("Materials, all bought"), Money(row.rec._allBuy), 0.7, 0.7, 0.7, 1, 1, 1)
+                end
+                if row.value then GameTooltip:AddDoubleLine(Tr("Sells for (after AH cut)"), Money(row.value), 0.7, 0.7, 0.7, 1, 1, 1) end
+            end
+            if row.choice then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddDoubleLine(Tr("Buy it"), Money(row.choice.buy), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Craft it (materials below)"), Money(row.choice.craft), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddLine(row.choice.best == "craft" and Tr("Cheaper to craft") or Tr("Cheaper to buy"), 0.36, 0.82, 0.45)
+            end
             local st = row.st
             GameTooltip:AddLine(" ")
             if st and st.med then
@@ -281,7 +295,10 @@ function LU.BuildPage(page)
             if e.note then GameTooltip:AddLine(e.note, 0.88, 0.66, 0.24) end
             if e.usedIn and not row.head then
                 local names = {}
-                for n, q in pairs(e.usedIn) do names[#names + 1] = { Tr(n), q } end
+                for rec, q in pairs(e.usedIn) do
+                    local n = rec.cd and Tr(rec.name) or (rec.id and P.Name(rec.id)) or Tr(rec.name)
+                    names[#names + 1] = { n, q }
+                end
                 table.sort(names, function(a, b) return a[1] < b[1] end)
                 GameTooltip:AddLine(Tr("Used in:"), 0.88, 0.66, 0.24)
                 for k = 1, math.min(10, #names) do GameTooltip:AddDoubleLine("  " .. names[k][1], "×" .. names[k][2], 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
@@ -291,6 +308,25 @@ function LU.BuildPage(page)
             local rl = {}
             for _, r2 in ipairs(LS.ROLES) do if e.roles[r2[1]] then rl[#rl + 1] = Tr(r2[2]) end end
             if #rl > 0 and #rl < 5 then GameTooltip:AddLine(Tr("Used by: ") .. table.concat(rl, ", "), 0.6, 0.6, 0.6) end
+            -- Où sont vos exemplaires (sacs, banque, courrier, en route, en vente).
+            local I = ns.Inventory
+            if I and I.Breakdown then
+                local rows, listed, transit, warband = I.Breakdown(row.id)
+                if #rows > 0 or listed > 0 or transit > 0 or warband > 0 then
+                    GameTooltip:AddLine(" ")
+                    GameTooltip:AddDoubleLine(Tr("You have"), tostring(LS.Have(row.id)), 0.88, 0.66, 0.24, 1, 1, 1)
+                    for _, c in ipairs(rows) do
+                        local parts = {}
+                        if c[2] > 0 then parts[#parts + 1] = Tr("bags") .. " " .. c[2] end
+                        if c[3] > 0 then parts[#parts + 1] = Tr("bank") .. " " .. c[3] end
+                        if c[4] > 0 then parts[#parts + 1] = Tr("mail") .. " " .. c[4] end
+                        GameTooltip:AddDoubleLine("  " .. c[1], table.concat(parts, ", "), 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
+                    end
+                    if warband > 0 then GameTooltip:AddDoubleLine("  " .. Tr("Warband bank"), tostring(warband), 0.8, 0.8, 0.8, 0.8, 0.8, 0.8) end
+                    if transit > 0 then GameTooltip:AddDoubleLine("  " .. Tr("Mailed, not collected yet"), tostring(transit), 0.8, 0.8, 0.8, 0.8, 0.8, 0.8) end
+                    if listed > 0 then GameTooltip:AddDoubleLine("  " .. Tr("Listed at the AH"), tostring(listed), 0.8, 0.8, 0.8, 0.8, 0.8, 0.8) end
+                end
+            end
             GameTooltip:AddLine(Tr("Right-click: add to one of your lists"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
@@ -387,6 +423,7 @@ function LU.BuildPage(page)
                 for k = 1, 7 do r.bars[k]:Hide() end
                 r.vol:SetText(""); r.sales:SetText(""); r.listed:SetText(""); r.have:SetText("")
                 r.buy:Hide(); r.tag:Show(); r.tag:SetText("")
+                r:SetAlpha(1)
                 r:Show()
             elseif row then
                 local id, st, e = row.id, row.st, row.e
@@ -439,7 +476,13 @@ function LU.BuildPage(page)
                     else
                         r.tag:SetText("")
                     end
+                elseif row.choice then
+                    -- Intermédiaire : l'acheter ou le fabriquer, le moins cher des deux.
+                    local craft = row.choice.best == "craft"
+                    r.tag:SetText(craft and Tr("CRAFT") or Tr("BUY IT"))
+                    r.tag:SetTextColor(unpack(craft and VERDICT.buy[2] or C.gold))
                 elseif v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
+                r:SetAlpha(row.dim and 0.45 or 1)
                 r:Show()
             else
                 r:Hide()
@@ -521,10 +564,19 @@ function LU.BuildPage(page)
                     head.st = P.Stats(x.rec.id)
                 end
                 data[#data + 1] = head
-                for _, m in ipairs(x.rec.mats) do
+                local detail = x.rec._detail or {}
+                local dimBelow
+                for k, m in ipairs(x.rec.mats) do
                     local e = l.byId[m[1]] or { id = m[1], kind = "mat", roles = {}, uses = 1 }
                     local row = LS.Row(e)
                     row.depth, row.qty = m[3], m[2]
+                    if dimBelow and m[3] <= dimBelow then dimBelow = nil end
+                    row.dim = dimBelow ~= nil
+                    local d = detail[k]
+                    if d and d.craft then
+                        row.choice = d
+                        if d.best == "buy" then dimBelow = m[3] end
+                    end
                     data[#data + 1] = row
                 end
             end
