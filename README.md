@@ -23,7 +23,7 @@ Ready-made watchlists, each with its finished items and their materials:
 - **Consumes & enchants**: flasks, elixirs, potions, food, weapon oils and stones, armor kits, enchants used by each spec.
 - **Daily cooldowns**: transmutes, Mooncloth, Refined Deeprock Salt, with the gain of each one and which character has it ready.
 - **Pre-BiS crafts**: cloth, leather, mail, plate, weapons, cloaks/trinkets/relics, from the pre-raid BiS lists of every spec.
-- **Profession leveling**: shopping list to reach 300 in each profession, with quantities and the total cost now vs usual.
+- **Profession leveling**: two views. **Shopping list**: what to buy to reach 300, with quantities and the total cost now vs usual. **Best route**: the cheapest path from your current skill to 300, step by step, using every recipe of the profession (trainer, vendor patterns, BoE patterns at the AH, recipes you already know). For each step: crafts needed, total cost (learning cost + materials − resale of what you craft), and close alternatives. Click an alternative to use it instead; "No AH patterns" builds a route without buying patterns. Skill-up chance follows orange / yellow / green / grey; trainer costs are read when you open a trainer (estimated until then).
 - **My lists**: your own, right-click any item to add it.
 
 Two views: **By recipe** (each recipe, then its materials, with the net gain per craft) and **Flat list** (each item once, deals first).
@@ -82,6 +82,8 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Track.lua` | Vendor sale details, loot log, time per zone/level, items that don't sell |
 | `Theme.lua` | Colors, buttons, tooltips, UI widgets |
 | `UI.lua`, `Chart.lua` | Main window, tabs, chart, settings |
+| `DataRecipes.lua` | Every profession recipe (skill colors, materials, pattern), for the leveling route |
+| `Route.lua` | Cheapest leveling route, alternatives, trainer cost capture |
 | `Data.lua` | Built-in list data: pre-BiS crafts and consumables per spec, enchants, leveling shopping lists, cooldowns, fallback recipes |
 | `Lists.lua`, `ListsUI.lua` | Lists tab: lists, recipe trees, verdicts, deal buying, cooldown tracking |
 | `Prices.lua` | AH scans, price history and stats (usual price, low/high, volatility, sales/day) |
