@@ -579,6 +579,15 @@ end
 -- Destinataire (vos persos en un clic), or, et objets des sacs à cocher ; envoi par lots de 12 pièces jointes.
 local basket = {}
 
+-- Choisir N piles d'un objet : on garde les N premières piles des sacs (l'ordre de l'envoi).
+local function SetStacks(it, n)
+    n = math.max(0, math.min(n, #(it.stacks or {})))
+    if n == 0 then basket[it.id] = nil; return end
+    local q = 0
+    for k = 1, n do q = q + it.stacks[k] end
+    basket[it.id] = q
+end
+
 local function BagItems()
     local by, list = {}, {}
     local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or ((NUM_BAG_SLOTS or 4) + 1)
@@ -594,6 +603,8 @@ local function BagItems()
                     list[#list + 1] = e
                 end
                 e.count = e.count + (info.stackCount or 1)
+                e.stacks = e.stacks or {}
+                e.stacks[#e.stacks + 1] = info.stackCount or 1 -- même ordre que l'envoi (sac par sac)
             end
         end
     end
@@ -699,7 +710,7 @@ function M.BuildSend(f)
     local right = Card(p)
     right:SetPoint("TOPLEFT", pad + 270, -14); right:SetPoint("BOTTOMRIGHT", -pad, 16)
     local rt = T.Text(right, 12, { bold = true, text = Tr("Your bags") }); rt:SetPoint("TOPLEFT", 14, -10)
-    local rh = T.Text(right, 11, { color = C.faint, text = Tr("click to add / remove · soulbound items are hidden") })
+    local rh = T.Text(right, 11, { color = C.faint, text = Tr("click to add / remove · − / + for the number of stacks") })
     rh:SetPoint("TOPRIGHT", -14, -11)
     p.rows = {}
     for i = 1, 13 do
@@ -713,6 +724,18 @@ function M.BuildSend(f)
         r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
         r.name = T.Text(r, 12); r.name:SetPoint("LEFT", 56, 0); r.name:SetWidth(260)
         r.count = T.Text(r, 12, { bold = true, justify = "RIGHT" }); r.count:SetPoint("RIGHT", -8, 0)
+        -- Nombre de piles : − / + sur les objets cochés qui occupent plusieurs emplacements.
+        local function Step(d)
+            local it = r.item
+            if not it then return end
+            local cur = (frame.send.stackOf and frame.send.stackOf[it.id]) or 0
+            SetStacks(it, cur + d)
+            M.DrawSend()
+        end
+        r.plus = T.Button(r, "+", 22, 20, function() Step(1) end)
+        r.plus:SetPoint("RIGHT", -6, 0)
+        r.minus = T.Button(r, "−", 22, 20, function() Step(-1) end)
+        r.plus.tooltip = Tr("One more stack"); r.minus.tooltip = Tr("One stack less")
         r:SetScript("OnClick", function(self)
             if not self.item then return end
             if basket[self.item.id] then basket[self.item.id] = nil else basket[self.item.id] = self.item.count end
@@ -854,9 +877,20 @@ function DrawSendInner()
             local qc = ITEM_QUALITY_COLORS and it.quality and ITEM_QUALITY_COLORS[it.quality]
             r.name:SetText(it.name)
             if qc then r.name:SetTextColor(qc.r, qc.g, qc.b) else r.name:SetTextColor(unpack(C.text)) end
-            local st = sel and p.stackOf and p.stackOf[it.id]
-            r.count:SetText((sel and sel < it.count and ("|cffe0a83d" .. sel .. "|r / " .. it.count) or ("×" .. it.count))
-                .. (st and ("  |cff8a877f· " .. st .. (st > 1 and " slots" or " slot") .. "|r") or ""))
+            local st = sel and p.stackOf and p.stackOf[it.id] or 0
+            local nStacks = #(it.stacks or {})
+            local stepper = sel ~= nil and nStacks > 1
+            r.plus:SetShown(stepper); r.minus:SetShown(stepper)
+            r.count:ClearAllPoints()
+            if stepper then
+                r.count:SetPoint("RIGHT", r.plus, "LEFT", -6, 0)
+                r.minus:ClearAllPoints(); r.minus:SetPoint("RIGHT", r.count, "LEFT", -6, 0)
+                r.plus:SetDisabled(st >= nStacks); r.minus:SetDisabled(false)
+                r.count:SetText(("|cffe0a83d%d|r / %d %s  |cff8a877f· %d|r"):format(st, nStacks, Tr("stacks"), sel))
+            else
+                r.count:SetPoint("RIGHT", -8, 0)
+                r.count:SetText("×" .. it.count .. (sel and ("  |cff8a877f· " .. st .. " " .. Tr(st > 1 and "slots" or "slot") .. "|r") or ""))
+            end
             r:SetAlpha(sel and 1 or 0.8)
             r:Show()
         else

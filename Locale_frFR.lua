@@ -563,4 +563,10 @@ ns.AddLocale("frFR", {
     ["+%d options"] = "+%d options",
     ["Per craft (materials − resale)"] = "Par craft (composants − revente)",
     ["Click: show the alternatives"] = "Clic : voir les alternatives",
+    ["One more stack"] = "Une pile de plus",
+    ["One stack less"] = "Une pile de moins",
+    ["stacks"] = "piles",
+    ["slots"] = "emplacements",
+    ["slot"] = "emplacement",
+    ["click to add / remove · − / + for the number of stacks"] = "clic pour ajouter / retirer · − / + pour le nombre de piles",
 })
