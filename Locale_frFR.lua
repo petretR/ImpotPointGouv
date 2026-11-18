@@ -557,4 +557,10 @@ ns.AddLocale("frFR", {
     ["test, Living Crown — recipe data: "] = "test, Living Crown — données de recette : ",
     ["test, Living Crown — pattern tooltip: "] = "test, Living Crown — infobulle du patron : ",
     ["not available"] = "non disponible",
+    ["No route yet: scan the AH (full scan) so the materials get a price."] = "Pas encore de route : fais un scan complet de l'HV pour que les composants aient un prix.",
+    ["Skill"] = "Palier",
+    ["Recipe"] = "Recette",
+    ["+%d options"] = "+%d options",
+    ["Per craft (materials − resale)"] = "Par craft (composants − revente)",
+    ["Click: show the alternatives"] = "Clic : voir les alternatives",
 })

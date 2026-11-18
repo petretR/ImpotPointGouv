@@ -18,7 +18,115 @@ local VERDICT = {
     farm = { "FARM", { 0.45, 0.68, 0.95, 1 } },
 }
 
+local DrawRouteRow
 local function Money(v) return v and ns.FormatMoney(v, { iconSize = 11, short = true }) or "|cff615f5c—|r" end
+
+-- ------------------------------------------------------------ route de montée : lignes dédiées
+-- Montant arrondi : à l'argent près dès 1 pa, à l'or près dès 100 po.
+local function RMoney(v, opts)
+    if not v then return "|cff615f5c—|r" end
+    local a = math.abs(v)
+    if a >= 100 then a = math.floor(a / 100 + 0.5) * 100 end
+    opts = opts or {}
+    return ns.FormatMoney(v < 0 and -a or a, { iconSize = opts.icon or 11, short = true, sign = opts.sign })
+end
+local SRC_STYLE = {
+    known   = { "Known",   { 0.36, 0.82, 0.45 } },
+    trainer = { "Trainer", { 0.80, 0.78, 0.72 } },
+    ah      = { "AH",      { 0.88, 0.66, 0.24 } },
+    vendor  = { "Vendor",  { 0.45, 0.68, 0.95 } },
+}
+local function RouteUI(r)
+    if rawget(r, "rt") then return r.rt end
+    local C = ns.Theme.C
+    local rt = {}
+    rt.range = T.Text(r, 11, { bold = true, color = C.gold }); rt.range:SetPoint("LEFT", 14, 2)
+    rt.track = r:CreateTexture(nil, "ARTWORK"); rt.track:SetTexture(T.WHITE)
+    rt.track:SetVertexColor(1, 1, 1, 0.07); rt.track:SetSize(54, 2); rt.track:SetPoint("BOTTOMLEFT", 14, 5)
+    rt.fill = r:CreateTexture(nil, "OVERLAY"); rt.fill:SetTexture(T.WHITE)
+    rt.fill:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.85); rt.fill:SetHeight(2)
+    rt.name = T.Text(r, 12); rt.name:SetWordWrap(false)
+    rt.crafts = T.Text(r, 12, { justify = "RIGHT", color = C.muted }); rt.crafts:SetPoint("RIGHT", -272, 0)
+    rt.pill = CreateFrame("Frame", nil, r); rt.pill:SetHeight(18); rt.pill:SetPoint("LEFT", r, "RIGHT", -252, 0)
+    rt.pillBg = T.Rounded(rt.pill, { 1, 1, 1, 0.06 }, 9)
+    rt.pillTx = T.Text(rt.pill, 10, { bold = true, justify = "CENTER" }); rt.pillTx:SetPoint("CENTER", 0, 0)
+    rt.learn = T.Text(r, 11, { color = C.muted }); rt.learn:SetPoint("LEFT", rt.pill, "RIGHT", 6, 0)
+    rt.cost = T.Text(r, 13, { bold = true, justify = "RIGHT" }); rt.cost:SetPoint("RIGHT", -16, 0)
+    function rt.SetShown(on)
+        for _, w in ipairs({ rt.range, rt.track, rt.fill, rt.name, rt.crafts, rt.pill, rt.learn, rt.cost }) do w:SetShown(on) end
+    end
+    r.rt = rt
+    return rt
+end
+
+DrawRouteRow = function(r, row, absIndex, page)
+    local C = ns.Theme.C
+    local rt = RouteUI(r)
+    rt.SetShown(true)
+    local main = row.route ~= nil
+    local x = row.route or row.alt
+    local rc = x.r
+    rc.name = rc.name or "?"
+    -- Palier + petite jauge de progression vers 300.
+    if main then
+        rt.range:SetText(("%d – %d"):format(x.from, x.to))
+        local w = 54
+        rt.fill:ClearAllPoints()
+        rt.fill:SetPoint("BOTTOMLEFT", rt.track, "BOTTOMLEFT", math.floor(w * x.from / 300), 0)
+        rt.fill:SetWidth(math.max(2, math.floor(w * (x.to - x.from) / 300)))
+    end
+    rt.range:SetShown(main); rt.track:SetShown(main); rt.fill:SetShown(main)
+    -- Icône + nom.
+    local left = main and 86 or 104
+    local tex = rc.out and ns.GetItemIcon(rc.out) or (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(rc.spell)) or "Interface\\Icons\\INV_Misc_QuestionMark"
+    r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", left, 0); r.icon:SetTexture(tex)
+    r.icon:SetSize(main and 18 or 15, main and 18 or 15)
+    rt.name:ClearAllPoints(); rt.name:SetPoint("LEFT", left + (main and 26 or 22), 0)
+    rt.name:SetWidth(math.max(120, (r:GetWidth() or 800) - left - 26 - 300))
+    local label = rc.name .. (rc.est and "|cff6b675f ~|r" or "")
+    if main then
+        local n = #(x.alts or {})
+        if n > 0 then
+            local open = page.routeOpen and page.routeOpen[x.from]
+            label = label .. "   |cff6b675f" .. (open and "▾" or ((Tr("+%d options")):format(n))) .. "|r"
+        end
+        rt.name:SetTextColor(0.93, 0.90, 0.84)
+    else
+        rt.name:SetTextColor(unpack(C.muted))
+    end
+    rt.name:SetText(label)
+    -- Crafts.
+    rt.crafts:SetText(("×%d"):format(math.floor((x.crafts or 0) + 0.5)))
+    -- Source : pastille colorée, puis le coût d'apprentissage.
+    local st = SRC_STYLE[rc.label] or { rc.label or "?", C.muted }
+    local col = st[2]
+    local txt = Tr(st[1])
+    if rc.label == "ah" and rc.qtyListed then txt = txt .. " · " .. rc.qtyListed end
+    rt.pillTx:SetText(txt); rt.pillTx:SetTextColor(col[1], col[2], col[3], 1)
+    rt.pillBg:SetColor({ col[1], col[2], col[3], 0.14 })
+    rt.pill:SetWidth((rt.pillTx:GetStringWidth() or 40) + 16)
+    if rc.F and rc.F > 0 then
+        rt.learn:SetText(RMoney(rc.F, { icon = 10 }) .. (rc.estF and " ~" or ""))
+    else
+        rt.learn:SetText("")
+    end
+    -- Coût total de la tranche ; pour une alternative, l'écart avec l'étape choisie.
+    if main then
+        rt.cost:SetText(RMoney(x.cost))
+        T.SetFont(rt.cost, 13, true); rt.cost:SetTextColor(0.93, 0.90, 0.84)
+    else
+        local d = x.cost - (row.seg.cost or 0)
+        rt.cost:SetText("+" .. RMoney(d, { icon = 10 }))
+        T.SetFont(rt.cost, 11, false); rt.cost:SetTextColor(unpack(C.muted))
+    end
+    for k = 1, 7 do r.bars[k]:Hide() end
+    r.buy:Hide(); r.tag:Hide()
+    r.band:SetShown(main)
+    r.sep:SetShown(main and absIndex > 1)
+    r:SetAlpha(1)
+    r:Show()
+end
+
 local function AHOpen() return AuctionHouseFrame and AuctionHouseFrame:IsShown() end
 
 -- ------------------------------------------------------------ petit menu contextuel
@@ -91,6 +199,7 @@ end
 
 -- ------------------------------------------------------------ page
 function LU.BuildPage(page)
+    LU._page = page
     page.offset, page.sideOffset = 0, 0
     page.role = ns.db.settings.listRole or "all"
     page.kind = ns.db.settings.listKind or "all"
@@ -287,8 +396,13 @@ function LU.BuildPage(page)
                 end
                 if (rc.resale or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Resale of what you craft"), "−" .. Money(rc.resale), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
                 if (rc.F or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Money(rc.F) .. (rc.estF and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1) end
+                GameTooltip:AddDoubleLine(Tr("Per craft (materials − resale)"), Money(rc.c or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddLine(" ")
                 if row.alt then GameTooltip:AddLine(Tr("Click: use this recipe instead"), 0.88, 0.66, 0.24)
-                else GameTooltip:AddLine(Tr("Right-click: skip this recipe"), 0.88, 0.66, 0.24) end
+                else
+                    if #(row.route.alts or {}) > 0 then GameTooltip:AddLine(Tr("Click: show the alternatives"), 0.88, 0.66, 0.24) end
+                    GameTooltip:AddLine(Tr("Right-click: skip this recipe"), 0.88, 0.66, 0.24)
+                end
                 GameTooltip:Show()
                 return
             end
@@ -375,7 +489,13 @@ function LU.BuildPage(page)
             if self.row.alt then
                 ns.Route.Ban(self.row.prof, self.row.seg.r.spell); page:Refresh(); return
             elseif self.row.route then
-                if button == "RightButton" then ns.Route.Ban(self.row.prof, self.row.route.r.spell); page:Refresh() end
+                if button == "RightButton" then
+                    ns.Route.Ban(self.row.prof, self.row.route.r.spell)
+                elseif #(self.row.route.alts or {}) > 0 then
+                    local k = self.row.route.from
+                    page.routeOpen[k] = not page.routeOpen[k] or nil
+                end
+                page:Refresh()
                 return
             end
             if button == "RightButton" then
@@ -456,45 +576,15 @@ function LU.BuildPage(page)
             local isHead = row and row.head
             r.band:SetShown(isHead and true or false)
             r.sep:SetShown(isHead and (self.offset + i) > 1 or false)
-            r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", 8 + indent, 0)
+            r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", 8 + indent, 0); r.icon:SetSize(18, 18)
             r.name:ClearAllPoints(); r.name:SetPoint("LEFT", 32 + indent, 0); r.name:SetWidth(176 - indent)
             local SRC = { known = { Tr("Known"), VERDICT.buy[2] }, trainer = { Tr("Trainer"), C.text },
                 ah = { Tr("AH"), C.gold }, vendor = { Tr("Vendor"), { 0.45, 0.68, 0.95, 1 } } }
-            if row and (row.route or row.alt) then
-                local rc = row.route and row.route.r or row.alt.r
-                local x = row.route or row.alt
-                rc.name = rc.name or "?"
-                local tex = rc.out and ns.GetItemIcon(rc.out) or (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(rc.spell)) or "Interface\\Icons\\INV_Misc_QuestionMark"
-                r.icon:SetTexture(tex)
-                if row.route then
-                    r.name:SetText(("|cffe0a83d%d–%d|r  %s"):format(row.route.from, row.route.to, rc.name))
-                else
-                    r.name:SetText("|cff8a877f↳|r " .. rc.name)
-                end
-                r.now:SetText(Money(x.cost))
-                r.usual:SetText(ns.FormatMoney(rc.c or 0, { iconSize = 11, short = true, sign = (rc.c or 0) < 0 }))
-                for k = 1, 7 do r.bars[k]:Hide() end
-                r.vol:SetText("")
-                r.sales:SetText(("×%d"):format(math.floor((x.crafts or 0) + 0.5)))
-                local src = SRC[rc.label] or { rc.label or "", C.muted }
-                local txt = src[1]
-                if rc.label == "ah" and rc.qtyListed then txt = txt .. " (" .. rc.qtyListed .. ")" end
-                if rc.estF then txt = txt .. " ~" end
-                if rc.F and rc.F > 0 then txt = txt .. "  " .. ns.FormatMoney(rc.F, { iconSize = 9, short = true }) end
-                r.listed:SetText(txt); r.listed:SetTextColor(unpack(src[2]))
-                r.have:SetText("")
-                r.buy:Hide(); r.tag:Show()
-                if row.alt then
-                    r.tag:SetText("+" .. ns.FormatMoney(row.alt.cost - (row.seg.cost or 0), { iconSize = 9, short = true }))
-                    r.tag:SetTextColor(unpack(C.muted))
-                else
-                    r.tag:SetText(rc.est and "~" or "")
-                    r.tag:SetTextColor(unpack(C.muted))
-                end
-                r.band:SetShown(row.route and true or false)
-                r.sep:SetShown(row.route and (self.offset + i) > 1 or false)
-                r:SetAlpha(row.alt and 0.8 or 1)
-                r:Show()
+            local isRouteRow = row and (row.route or row.alt) and true or false
+            for _, w in ipairs({ r.name, r.now, r.usual, r.vol, r.sales, r.listed, r.have }) do w:SetShown(not isRouteRow) end
+            if rawget(r, "rt") then r.rt.SetShown(not not isRouteRow) end
+            if isRouteRow then
+                DrawRouteRow(r, row, self.offset + i, self)
             elseif row and row.head and not row.id then
                 -- En-tête d'enchantement (pas d'objet) : coût des composants.
                 local rec = row.rec
@@ -608,9 +698,21 @@ function LU.BuildPage(page)
         self.noAH:SetShown(isRoute and true or false); self.noAH:SetSelected(ns.db.settings.routeNoAH and true or false)
         self.routeProf = l.leveling and l.key:sub(4) or nil
         self.resetRoute:SetShown(isRoute and ns.Route.HasBans(self.routeProf) or false)
-        local H = isRoute and { Tr("Skill  ·  recipe"), Tr("Cost"), Tr("Per craft"), "", Tr("Crafts"), Tr("Source"), "" }
+        local H = isRoute and { Tr("Skill"), Tr("Recipe"), "", "", Tr("Crafts"), Tr("Source"), Tr("Cost") }
             or { Tr("Item"), Tr("Now"), Tr("Usual"), Tr("7 days"), Tr("Sold/day"), Tr("Listed"), Tr("Have") }
         for k = 1, 7 do if self.heads[k] then self.heads[k]:SetText(H[k]) end end
+        -- Colonnes : celles de la route ou celles des listes.
+        local HP = isRoute and {
+            { "LEFT", 14 }, { "LEFT", 112 }, { "RIGHT", -300 }, { "RIGHT", -300 },
+            { "RIGHT", -278 }, { "TOPLEFT", -252 }, { "RIGHT", -22 } }
+            or { { "LEFT", 38 }, { "RIGHT", -402 }, { "RIGHT", -330 }, { "TOPLEFT", -316 },
+            { "RIGHT", -176 }, { "RIGHT", -120 }, { "RIGHT", -82 } }
+        for k = 1, 7 do
+            local h, pos = self.heads[k], HP[k]
+            h:ClearAllPoints()
+            if pos[1] == "TOPLEFT" then h:SetPoint("TOPLEFT", self.listFrame, "TOPRIGHT", pos[2], -9); h:SetJustifyH("LEFT")
+            else h:SetPoint("TOP" .. pos[1], pos[2], -9); h:SetJustifyH(pos[1]) end
+        end
         self.listFrame:ClearAllPoints()
         self.listFrame:SetPoint("TOPLEFT", 0, (showRoles or showKinds or l.leveling) and -74 or -44)
         self.listFrame:SetPoint("BOTTOMRIGHT", 0, 0)
@@ -674,10 +776,13 @@ function LU.BuildPage(page)
         local route
         if isRoute then
             route = ns.Route.Compute(self.routeProf, { noAH = ns.db.settings.routeNoAH })
+            if self.routeOpenFor ~= self.routeProf then self.routeOpen, self.routeOpenFor = {}, self.routeProf end
             data = {}
             for _, sg in ipairs(route.segs) do
                 data[#data + 1] = { route = sg, prof = self.routeProf }
-                for _, a in ipairs(sg.alts) do data[#data + 1] = { alt = a, seg = sg, prof = self.routeProf } end
+                if self.routeOpen[sg.from] then
+                    for _, a in ipairs(sg.alts) do data[#data + 1] = { alt = a, seg = sg, prof = self.routeProf } end
+                end
             end
         end
         self.data = data
@@ -718,6 +823,12 @@ function LU.BuildPage(page)
         for _, row in ipairs(data) do if row.st and row.st.med then anyPrice = true; break end end
         self.empty:SetText(#data == 0 and Tr("Nothing matches these filters.")
             or (not anyPrice and "No prices yet. Open the auction house and click Scan list.\nThe usual price and the verdicts get reliable after a few scans on different days." or ""))
+        if isRoute then
+            anyPrice = true
+            if #data == 0 then
+                self.empty:SetText(Tr("No route yet: scan the AH (full scan) so the materials get a price."))
+            end
+        end
         self.empty:SetShown(#data == 0 or not anyPrice)
         self:Draw()
     end

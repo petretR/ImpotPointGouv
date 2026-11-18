@@ -146,37 +146,69 @@ function Finish(reason)
     M.Refresh()
 end
 
+-- Signature d'un courrier pour le sauter : plusieurs ventes identiques ont la même,
+-- donc on compte combien de courriers de cette signature sont à sauter.
+local function SkipAdd(sig) run.skip[sig] = (run.skip[sig] or 0) + 1 end
+
+-- Un seul minuteur à la fois ; les événements du courrier relancent l'étape tout de suite.
+local function Poke(delay)
+    if not run or run.timer then return end
+    run.timer = true
+    local r = run
+    C_Timer.After(delay or 0, function()
+        if run ~= r then return end
+        r.timer = false
+        Step()
+    end)
+end
+M.Poke = function() if run and run.pend then Poke(0) end end
+
+-- Rafraîchit la liste au plus deux fois par seconde pendant la récupération.
+local function LightRefresh()
+    if run and run.lastDraw and GetTime() - run.lastDraw < 0.5 then return end
+    if run then run.lastDraw = GetTime() end
+    M.Refresh(true)
+end
+
 function Step()
     if not run then return end
     if not mailOpen then Finish("Mailbox closed, collection interrupted."); return end
-    -- Attendre que la dernière action soit traitée par le serveur.
-    if run.lastSig then
-        local still = FindSig(run.lastSig)
-        if still and run.tries < 20 then -- jusqu'à 5 s : le serveur peut être lent
-            run.tries = run.tries + 1
-            C_Timer.After(0.25, Step)
-            return
+    -- Attendre que le serveur ait traité la dernière action : le courrier a disparu ou s'est vidé.
+    local p = run.pend
+    if p then
+        local n = GetInboxNumItems()
+        local done = n < p.n
+        if not done and p.i <= n then
+            local _, _, _, subject, money, _, _, itemCount = GetInboxHeaderInfo(p.i)
+            done = (money or 0) < p.money or (itemCount or 0) < p.items or subject ~= p.subject
         end
-        if still then run.skip[run.lastSig] = true end
-        run.lastSig = nil
+        if not done then
+            if GetTime() - p.t < 4 then Poke(0.05); return end -- le serveur peut être lent
+            SkipAdd(p.sig)
+        end
+        run.pend = nil
     end
     if run.mode == "all" and not run.bagsFull and FreeSlots() == 0 then run.bagsFull = true end
     local n, total = Scan()
+    local seen = {}
     for i = n, 1, -1 do
         local m = mails[i]
-        if not run.skip[m.sig] and Takeable(m, run.mode, run.bagsFull) then
+        seen[m.sig] = (seen[m.sig] or 0) + 1
+        if seen[m.sig] > (run.skip[m.sig] or 0) and Takeable(m, run.mode, run.bagsFull) then
             if TakeMail(m, run.mode, run.bagsFull) then
-                run.lastSig, run.tries = m.sig, 0
+                run.pend = { i = i, n = n, money = m.money, items = m.itemCount, subject = m.subject,
+                    sig = m.sig, t = GetTime() }
                 run.count = run.count + 1
                 SetStatus((Tr("Collecting… %d  ·  %s")):format(run.count,
                     ns.FormatMoney(GetMoney() - run.startMoney, { sign = true, color = true, iconSize = 11 })))
-                C_Timer.After(0.3, Step)
-                M.Refresh(true)
+                LightRefresh()
+                Poke(0.05)
                 return
             end
-            run.skip[m.sig] = true
+            SkipAdd(m.sig)
         end
     end
+    M.Refresh(true)
     -- Plus rien de visible : d'autres courriers attendent côté serveur ?
     if total > n then
         local wait = math.max(0, lastCheck + 61 - GetTime())
@@ -188,7 +220,7 @@ function Step()
                 run.waiting = false
                 lastCheck = GetTime()
                 CheckInbox()
-                C_Timer.After(2, Step)
+                C_Timer.After(1, Step)
             end)
         end
         return
@@ -198,7 +230,7 @@ function Step()
         run.passes = (run.passes or 0) + 1
         run.skip = {}
         SetStatus(Tr("Checking for mails the server was slow to hand over…"))
-        C_Timer.After(1.5, Step)
+        Poke(1)
         return
     end
     Finish()
@@ -209,6 +241,7 @@ local function StartRun(mode)
     run = { mode = mode, count = 0, skip = {}, startMoney = GetMoney(), tries = 0 }
     Step()
 end
+M.Collect = StartRun
 
 -- ------------------------------------------------------------ interface
 local function Card(parent)
@@ -943,6 +976,8 @@ ev:SetScript("OnEvent", function(_, event, ...)
         local a, b = ...
         local msg = type(b) == "string" and b or a
         if run and (msg == ERR_INV_FULL or msg == ERR_ITEM_MAX_COUNT) then run.bagsFull = true end
+    elseif (event == "MAIL_INBOX_UPDATE" or event == "BAG_UPDATE") and run then
+        M.Poke() -- la récupération avance dès que le serveur répond, et rafraîchit elle-même
     elseif (event == "MAIL_INBOX_UPDATE" or event == "BAG_UPDATE") and frame and frame:IsShown() then
         if queued then return end
         queued = true

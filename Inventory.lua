@@ -213,7 +213,7 @@ for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "BANKFRAME_O
     "MAIL_INBOX_UPDATE", "MAIL_CLOSED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
-local queued
+local queued, mailQueued
 local function Changed()
     if queued then return end
     queued = true
@@ -233,8 +233,13 @@ ev:SetScript("OnEvent", function(_, event)
         bankOpen = false
     elseif event == "PLAYERBANKSLOTS_CHANGED" or event == "PLAYERREAGENTBANKSLOTS_CHANGED" then
         I.ScanBank(); Changed()
-    elseif event == "MAIL_INBOX_UPDATE" or event == "MAIL_CLOSED" then
+    elseif event == "MAIL_CLOSED" then
         I.ScanMail(); Changed()
+    elseif event == "MAIL_INBOX_UPDATE" then
+        -- Pendant une récupération, cet événement arrive à chaque courrier : on regroupe.
+        if mailQueued then return end
+        mailQueued = true
+        C_Timer.After(1.5, function() mailQueued = false; I.ScanMail(); Changed() end)
     elseif event == "AUCTION_HOUSE_SHOW" then
         if C_AuctionHouse and C_AuctionHouse.QueryOwnedAuctions then
             C_Timer.After(0.5, function() pcall(C_AuctionHouse.QueryOwnedAuctions, {}) end)
