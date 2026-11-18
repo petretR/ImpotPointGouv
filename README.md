@@ -23,7 +23,7 @@ Ready-made watchlists, each with its finished items and their materials:
 - **Consumes & enchants**: flasks, elixirs, potions, food, weapon oils and stones, armor kits, enchants used by each spec.
 - **Daily cooldowns**: transmutes, Mooncloth, Refined Deeprock Salt, with the gain of each one and which character has it ready.
 - **Pre-BiS crafts**: cloth, leather, mail, plate, weapons, cloaks/trinkets/relics, from the pre-raid BiS lists of every spec.
-- **Profession leveling**: two views. **Shopping list**: what to buy to reach 300, with quantities and the total cost now vs usual. **Best route**: the cheapest path from your current skill to 300, step by step, using every recipe of the profession (trainer, vendor patterns, BoE patterns at the AH, recipes you already know). For each step: crafts needed, total cost (learning cost + materials − resale of what you craft), and close alternatives. Click an alternative to use it instead; "No AH patterns" builds a route without buying patterns. Skill-up chance follows orange / yellow / green / grey; trainer costs are read when you open a trainer (estimated until then).
+- **Profession leveling**: two views. **Shopping list**: what to buy to reach 300, with quantities and the total cost now vs usual. **Best route**: the cheapest path from your current skill to 300, step by step, using every recipe of the profession (trainer, vendor patterns, BoE patterns at the AH, recipes you already know). For each step: crafts needed, the gold balance (negative when it costs, positive when it earns: resale of what you craft − materials − learning cost), and close alternatives. Click an alternative to use it instead; "No AH patterns" builds a route without buying patterns. Skill-up chance follows orange / yellow / green / grey; trainer costs are read when you open a trainer (estimated until then).
 - **My lists**: your own, right-click any item to add it.
 
 Two views: **By recipe** (each recipe, then its materials, with the net gain per craft) and **Flat list** (each item once, deals first).
@@ -40,7 +40,10 @@ Recipe materials come from the game itself, so they stay correct for WoW Forever
 - **Cancel**: only when the price gap is worth more than the lost deposit.
 
 ### Market tab
-What sells across the whole AH (estimated from full scans), what is worth farming, AH flips, and vendor flips (listings below what a vendor pays).
+What sells across the whole AH (estimated from full scans), what is worth farming, AH flips, vendor flips (listings below what a vendor pays), and **vendor crafts**: every recipe of every profession whose result sells to a vendor for more than its materials cost at the AH, with the profit per craft, how many crafts the current listings allow, the skill needed and where to learn it.
+
+### Stock tab
+Everything you own, on every character: bags, bank, warband bank, mail, AH listings and items in the mail to your characters. Each item is valued at its AH price after the 5 % cut or its vendor price, whichever is higher (soulbound items: vendor price only). Sort by name, quantity, unit value or total; filter AH-valued, vendor-valued or unpriced items. The Overview "Stock value" card uses the same numbers; click it to open the tab.
 
 ### Crafting
 Craft advisor next to the profession window, a craft queue per crafter with adaptive stock targets and a budget cap, shopping list across all your characters, one key to craft the next recipe then disenchant.
@@ -87,7 +90,8 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Data.lua` | Built-in list data: pre-BiS crafts and consumables per spec, enchants, leveling shopping lists, cooldowns, fallback recipes |
 | `Lists.lua`, `ListsUI.lua` | Lists tab: lists, recipe trees, verdicts, deal buying, cooldown tracking |
 | `Prices.lua` | AH scans, price history and stats (usual price, low/high, volatility, sales/day) |
-| `Market.lua` | Market tab (what sells, flips) |
+| `Market.lua` | Market tab (what sells, flips, vendor crafts) |
+| `Stock.lua` | Stock tab: everything you own and its value |
 | `Sell.lua` | AH posting and cancelling |
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
 | `Routine.lua`, `Next.lua`, `Preview.lua` | Routine window, next-action key, checklist before batch actions |

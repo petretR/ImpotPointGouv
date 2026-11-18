@@ -19,6 +19,9 @@ local function SpellName(spell)
     if GetSpellInfo then return (GetSpellInfo(spell)) end
 end
 
+RO.NAME_KEYS = NAME_KEYS
+RO.SpellName = SpellName
+
 -- Recettes d'un métier (construites une fois).
 local cache = {}
 function RO.Recipes(prof)
@@ -61,6 +64,7 @@ local function KnownSet(prof)
     end
     return set
 end
+RO.KnownSet = KnownSet
 
 -- Coût de formation estimé (tant que le formateur n'a pas été visité) : grandit avec la compétence requise.
 local function TrainerEstimate(o)

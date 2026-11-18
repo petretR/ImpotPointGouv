@@ -18,7 +18,7 @@ end
 local function ContainerItem(bag, slot)
     if C_Container and C_Container.GetContainerItemInfo then
         local info = C_Container.GetContainerItemInfo(bag, slot)
-        if info then return info.itemID, info.stackCount or 1 end
+        if info then return info.itemID, info.stackCount or 1, info.isBound end
         return nil
     end
     if GetContainerItemInfo then
@@ -34,12 +34,19 @@ local function NumSlots(bag)
     return ok and n or 0
 end
 
+-- Objets liés (non vendables à l'HV) : valorisés au prix marchand seulement.
+local function Bound() ns.db.bound = ns.db.bound or {}; return ns.db.bound end
+
 local function ScanBags(list, into)
     wipe(into)
+    local bound = Bound()
     for _, bag in ipairs(list) do
         for slot = 1, NumSlots(bag) do
-            local id, count = ContainerItem(bag, slot)
-            if id then into[id] = (into[id] or 0) + count end
+            local id, count, isBound = ContainerItem(bag, slot)
+            if id then
+                into[id] = (into[id] or 0) + count
+                if isBound then bound[id] = true elseif isBound == false then bound[id] = nil end
+            end
         end
     end
 end
@@ -199,6 +206,28 @@ function I.Listed(id)
     for _, c in pairs(ns.db.inv or {}) do total = total + ((c.owned or {})[id] or 0) end
     return total
 end
+
+-- Tout ce que vous possédez, objet par objet : { [id] = { bags, bank, mail, listed, warband, transit, total } }.
+function I.AllStock()
+    local out = {}
+    local function Add(id, field, n)
+        if not id or not n or n <= 0 then return end
+        local e = out[id]
+        if not e then e = { bags = 0, bank = 0, mail = 0, listed = 0, warband = 0, transit = 0, total = 0 }; out[id] = e end
+        e[field] = e[field] + n
+        e.total = e.total + n
+    end
+    for _, c in pairs(ns.db.inv or {}) do
+        for id, n in pairs(c.bags or {}) do Add(id, "bags", n) end
+        for id, n in pairs(c.bank or {}) do Add(id, "bank", n) end
+        for id, n in pairs(c.mail or {}) do Add(id, "mail", n) end
+        for id, n in pairs(c.owned or {}) do Add(id, "listed", n) end
+    end
+    for id, n in pairs(ns.db.warband or {}) do Add(id, "warband", n) end
+    for _, t in pairs(ns.db.transit or {}) do for id, n in pairs(t) do Add(id, "transit", n) end end
+    return out
+end
+function I.IsBound(id) return (ns.db.bound or {})[id] and true or false end
 
 -- Stock total possédé (tous persos, banques, courrier, en route, en vente) : pour le réassort.
 function I.Stock(id)

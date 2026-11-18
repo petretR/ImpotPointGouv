@@ -344,7 +344,7 @@ end
 local RAW = { [5] = "Cloth", [6] = "Leather", [7] = "Metal & Stone", [8] = "Cooking", [9] = "Herb", [10] = "Elemental", [12] = "Enchanting" }
 M.FILTERS = {
     { "all", "All" }, { "raw", "Farm" }, { "gear", "Gear" }, { "consum", "Consumables" }, { "flip", "AH flip" },
-    { "vflip", "Vendor flip" },
+    { "vflip", "Vendor flip" }, { "vcraft", "Vendor crafts" },
 }
 
 local function Category(id)
@@ -397,6 +397,64 @@ function M.List(filter)
     return out
 end
 
+-- ------------------------------------------------------------ crafts rentables chez le marchand
+-- Toutes les recettes de tous les métiers dont le produit se vend au marchand plus cher que ses composants
+-- (achetés maintenant à l'HV, ou chez le marchand pour les fournitures). Aucun risque : le marchand achète tout.
+local function BuyNow(id)
+    if P.IsVendorItem(id) then
+        local v = P.VendorBuy(id)
+        if v then return v, math.huge end
+    end
+    local e = P.Entry(id)
+    if e and e.cur and e.t and time() - e.t < 2 * 86400 and (e.qty or 0) > 0 then return e.cur, e.qty end
+    local m = P.Market(id)
+    if m then return m, 0 end
+end
+
+function M.VendorCrafts()
+    local RO = ns.Route
+    local out, waiting = {}, 0
+    if not RO then return out, 0 end
+    for prof in pairs(RO.AL_PROF) do
+        local known = RO.KnownSet(prof)
+        local skill, who = RO.CurrentSkill(prof)
+        for _, r in ipairs(RO.Recipes(prof)) do
+            if r.out and #r.mats > 0 then
+                local cost, maxN, ok = 0, math.huge, true
+                for _, m in ipairs(r.mats) do
+                    local p, avail = BuyNow(m[1])
+                    if not p then ok = false; break end
+                    cost = cost + p * m[2]
+                    maxN = math.min(maxN, math.floor((avail or 0) / m[2]))
+                end
+                if ok then
+                    local vs = P.VendorSell(r.out)
+                    if not vs and not ns.GetItemInfo(r.out) then
+                        waiting = waiting + 1
+                        if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, r.out) end
+                    end
+                    local gain = vs and (vs * r.n - cost)
+                    if gain and gain > 0 then
+                        r.name = r.name or RO.SpellName(r.spell)
+                        local F, label, qty, est = RO.Access(r, known, {})
+                        out[#out + 1] = { id = r.out, rec = r, prof = prof, gain = gain, cost = cost, vs = vs * r.n,
+                            units = maxN, skill = r.o, mySkill = skill, who = who,
+                            access = F, label = label, est = est, rate = 0, listed = 0 }
+                    end
+                end
+            end
+        end
+    end
+    -- Les recettes que vous pouvez faire tout de suite d'abord, puis le gain par craft.
+    table.sort(out, function(a, b)
+        local ra = a.label == "known" and a.mySkill >= a.skill
+        local rb = b.label == "known" and b.mySkill >= b.skill
+        if ra ~= rb then return ra end
+        return a.gain > b.gain
+    end)
+    return out, waiting
+end
+
 -- Le personnage connaît-il une recette qui produit / utilise cet objet ?
 local function Relation(id)
     if ns.Craft and ns.Craft.ProducerOf and ns.Craft.ProducerOf(id) then return "you craft it" end
@@ -425,7 +483,7 @@ function M.BuildPage(page)
     local prev
     for i = #M.FILTERS, 1, -1 do
         local d = M.FILTERS[i]
-        local b = T.Button(page, Tr(d[2]), d[1] == "vflip" and 100 or 92, 26, function()
+        local b = T.Button(page, Tr(d[2]), (d[1] == "vflip" or d[1] == "vcraft") and 100 or 92, 26, function()
             page.filter = d[1]; ns.db.settings.marketFilter = d[1]; page.offset = 0; page:Refresh()
         end, "pill")
         if prev then b:SetPoint("RIGHT", prev, "LEFT", -6, 0) else b:SetPoint("TOPRIGHT", 0, 0) end
@@ -434,6 +492,7 @@ function M.BuildPage(page)
     end
     page.fb.raw.tooltip = Tr("Raw materials (cloth, leather, ore, meat & fish, herbs, elemental, enchanting): what is worth farming.")
     page.fb.flip.tooltip = Tr("Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit).")
+    page.fb.vcraft.tooltip = Tr("Recipes (all professions) whose result sells to a vendor for more than its materials cost at the AH. The ones you can craft now come first.")
     page.fb.vflip.tooltip = Tr("Listed below what a vendor pays for them: buy, then sell at any vendor. Risk-free while the price holds.")
 
     local list = CreateFrame("Frame", nil, page)
@@ -470,6 +529,26 @@ function M.BuildPage(page)
             if not row then return end
             T.ItemTooltip(self, row.id)
             GameTooltip:AddLine(" ")
+            if row.rec then
+                local rc = row.rec
+                GameTooltip:AddLine((rc.name or "?") .. "  |cff8a877f(" .. Tr(ns.Route.NAME_KEYS[row.prof]) .. " " .. rc.o .. ")|r", 1, 1, 1)
+                for _, m in ipairs(rc.mats) do
+                    local p = BuyNow(m[1])
+                    GameTooltip:AddDoubleLine(m[2] .. "× " .. P.Name(m[1]), p and ns.FormatMoney(p * m[2], { iconSize = 11 }) or "?", 0.8, 0.8, 0.8, 1, 1, 1)
+                end
+                GameTooltip:AddDoubleLine(Tr("Vendor pays") .. (rc.n > 1 and (" (×" .. rc.n .. ")") or ""), ns.FormatMoney(row.vs, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Profit per craft"), ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7)
+                if row.units < math.huge then
+                    GameTooltip:AddDoubleLine(Tr("Crafts with the materials listed now"), tostring(row.units), 0.7, 0.7, 0.7, 1, 1, 1)
+                end
+                if row.access and row.access > 0 then
+                    GameTooltip:AddDoubleLine(Tr("Learn it (once)"), ns.FormatMoney(row.access, { iconSize = 11 }) .. (row.est and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1)
+                end
+                if row.who then GameTooltip:AddDoubleLine(Tr("Your skill"), ("%s %d"):format(row.who, row.mySkill), 0.7, 0.7, 0.7, 1, 1, 1) end
+                GameTooltip:AddLine(Tr("Materials at today's AH price (vendor price for vendor supplies)."), 0.5, 0.5, 0.5, true)
+                GameTooltip:Show()
+                return
+            end
             GameTooltip:AddDoubleLine(Tr("Sold per day (est.)"), ("%.1f"):format(row.rate), 0.7, 0.7, 0.7, 1, 1, 1)
             if row.market then GameTooltip:AddDoubleLine(Tr("Usual price"), ns.FormatMoney(row.market, { iconSize = 11 }), 0.7, 0.7, 0.7) end
             if row.cur then GameTooltip:AddDoubleLine(Tr("Lowest now"), ns.FormatMoney(row.cur, { iconSize = 11 }), 0.7, 0.7, 0.7) end
@@ -507,7 +586,23 @@ function M.BuildPage(page)
                 r.icon:SetTexture(ns.GetItemIcon(row.id) or icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                 r.name:SetText(P.Name(row.id))
                 r.buy:SetShown(self.filter == "vflip"); r.tag:SetShown(self.filter ~= "vflip")
-                if self.filter == "vflip" then
+                if self.filter == "vcraft" then
+                    local rc = row.rec
+                    r.name:SetText(P.Name(row.id) .. (rc.n > 1 and ("  |cff8a877f×" .. rc.n .. "|r") or ""))
+                    r.price:SetText(Money(row.cost) .. Tr("  |cff615f5c/ ") .. Money(row.vs) .. "|r")
+                    r.rate:SetText(row.units == math.huge and "∞" or tostring(row.units))
+                    r.gold:SetText(ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11, short = true }))
+                    local mine = row.mySkill >= row.skill
+                    r.listed:SetText((mine and "|cff5cd173" or "|cff8a877f") .. row.skill .. "|r")
+                    local SRC = { known = { "Known", "|cff5cd173" }, trainer = { "Trainer", "|cffcdc8b8" },
+                        ah = { "AH", "|cffe0a83d" }, vendor = { "Vendor", "|cff73adf2" } }
+                    local s = SRC[row.label] or { "?", "|cff8a877f" }
+                    local learn = (row.access and row.access > 0) and (" " .. Money(row.access) .. (row.est and "~" or "")) or ""
+                    r.tag:SetText(Tr(ns.Route.NAME_KEYS[row.prof]) .. "  " .. s[2] .. Tr(s[1]) .. "|r" .. learn)
+                    r.tag:SetTextColor(unpack(C.faint))
+                    r.buy:Hide(); r.tag:Show()
+                    r:Show()
+                elseif self.filter == "vflip" then
                     local b = M.Buying()
                     r.buy.text:SetText((b and b.id == row.id) and (b.stage == "confirm" and "Confirm" or "…") or "Buy")
                     r.buy:SetDisabled(not IsAHOpen() or (b ~= nil and b.id ~= row.id))
@@ -521,14 +616,16 @@ function M.BuildPage(page)
                     r.price:SetText(Money(row.price))
                     r.gold:SetText(Money(row.gold))
                 end
-                if self.filter ~= "vflip" then
-                    r.rate:SetText(row.rate >= 10 and ("%d"):format(math.floor(row.rate + 0.5)) or ("%.1f"):format(row.rate))
+                if self.filter ~= "vcraft" then
+                    if self.filter ~= "vflip" then
+                        r.rate:SetText(row.rate >= 10 and ("%d"):format(math.floor(row.rate + 0.5)) or ("%.1f"):format(row.rate))
+                    end
+                    r.listed:SetText(tostring(row.listed))
+                    local rel = Relation(row.id)
+                    r.tag:SetText(rel and (rel:find("craft") and "you craft it" or "you use it") or (row.sub or ""))
+                    r.tag:SetTextColor(unpack(rel and C.gold or C.faint))
+                    r:Show()
                 end
-                r.listed:SetText(tostring(row.listed))
-                local rel = Relation(row.id)
-                r.tag:SetText(rel and (rel:find("craft") and "you craft it" or "you use it") or (row.sub or ""))
-                r.tag:SetTextColor(unpack(rel and C.gold or C.faint))
-                r:Show()
             else
                 r:Hide()
             end
@@ -543,6 +640,20 @@ function M.BuildPage(page)
         self.heads[2]:SetText(vf and "Price / vendor" or self.filter == "flip" and "Now / usual" or "Price")
         self.heads[3]:SetText(vf and "Units" or "Sold / day")
         self.heads[4]:SetText(vf and "Profit" or self.filter == "flip" and "Gain / unit" or "Gold / day")
+        if self.filter == "vcraft" then
+            self.heads[2]:SetText(Tr("Materials / vendor")); self.heads[3]:SetText(Tr("Crafts"))
+            self.heads[4]:SetText(Tr("Profit / craft")); self.heads[5]:SetText(Tr("Skill"))
+            local list, waiting = M.VendorCrafts()
+            self.data = list
+            local sub = (Tr("%d recipes sell at a vendor for more than their materials cost")):format(#list)
+            if waiting > 0 then sub = sub .. (Tr("  ·  loading %d items…")):format(waiting) end
+            self.sub:SetText(sub)
+            self.empty:SetText(Tr("No profitable vendor craft found. Scan the AH so materials get a price."))
+            self.empty:SetShown(#list == 0)
+            self:Draw()
+            return
+        end
+        self.heads[5]:SetText(Tr("Listed"))
         if vf then
             local list, t = M.Flips()
             self.data = list

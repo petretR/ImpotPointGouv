@@ -55,25 +55,7 @@ end
 -- Valeur du stock : composants et créations de vos recettes (+ compos d'enchantement) détenus par tous vos persos,
 -- au prix où vous les vendriez aujourd'hui (HV nette ou marchand, le meilleur).
 function UI.StockValue()
-    local ids = {}
-    for _, list in pairs(ns.db.recipes or {}) do
-        for _, r in pairs(list) do
-            if r.p then ids[r.p] = true end
-            for _, rg in ipairs(r.r or {}) do if rg[1] then ids[rg[1]] = true end end
-        end
-    end
-    for _, id in ipairs(ns.Prices.DE_MATS or {}) do ids[id] = true end
-    local total, n = 0, 0
-    for id in pairs(ids) do
-        local q = ns.Inventory.Stock(id)
-        if q > 0 then
-            local ah = ns.Prices.AHValue(id)
-            local unit = math.max(ah and ah * 0.95 or 0, ns.Prices.VendorSell(id) or 0)
-            total = total + unit * q
-            n = n + q
-        end
-    end
-    return math.floor(total), n
+    return ns.Stock.Value()
 end
 
 local function BuildBilan(page)
@@ -101,7 +83,7 @@ local function BuildBilan(page)
     local defs = {
         { "Total gold", "all characters" },
         { "Trading result", "sales − purchases − AH fees" },
-        { "Stock value", "reagents & crafts you hold" },
+        { "Stock value", "everything you hold" },
         { "Sales", "" },
     }
     local gap = 12
@@ -123,6 +105,17 @@ local function BuildBilan(page)
             card.accent:SetVertexColor(unpack(C.gold))
             card.accent:SetSize(3, 40)
             card.accent:SetPoint("LEFT", 0, 0)
+        end
+        if i == 3 then
+            -- Clic : l'onglet Stock (détail objet par objet).
+            card:EnableMouse(true)
+            card:SetScript("OnMouseUp", function() UI.Toggle("stock") end)
+            card:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+                GameTooltip:AddLine(Tr("Click: see every item in the Stock tab"), 0.88, 0.66, 0.24)
+                GameTooltip:Show()
+            end)
+            card:SetScript("OnLeave", function() GameTooltip:Hide() end)
         end
         page.cards[i] = card
     end
@@ -205,7 +198,7 @@ local function BuildBilan(page)
         c[2].sub:SetText(Tr("bought ") .. ns.FormatMoney(-st.bought, { iconSize = 10 }) .. Tr("  ·  fees ") .. ns.FormatMoney(st.fees, { iconSize = 10 }))
         local sv, sn = UI.StockValue()
         c[3].value:SetText(ns.FormatMoney(sv, { iconSize = 16 }))
-        c[3].sub:SetText(sn > 0 and (Tr("%d items in bags, bank and AH, at today's prices")):format(sn) or "nothing in stock")
+        c[3].sub:SetText(sn > 0 and (Tr("%d items, all characters, at today's prices")):format(sn) or "nothing in stock")
         c[4].value:SetText(ns.FormatMoney(st.sold, { iconSize = 16 }))
         c[4].sub:SetText(st.soldCount == 0 and "no sales" or
             (st.soldCount .. (st.soldCount > 1 and " sales" or " sale") .. Tr(" (AH + vendor)")))
@@ -622,7 +615,7 @@ local function Build()
     rtB.tooltip = Tr("Your daily loop: craft queue, shopping list, Auctionator export, mail buttons.")
 
     local tabDefs = {
-        { "bilan", "Overview" }, { "lists", "Lists" }, { "market", "Market" }, { "tx", "History" },
+        { "bilan", "Overview" }, { "lists", "Lists" }, { "market", "Market" }, { "stock", "Stock" }, { "tx", "History" },
         { "chars", "Characters" }, { "settings", "Settings" },
     }
     local x = 226
@@ -649,6 +642,7 @@ local function Build()
     Page("tx", BuildTransactions)
     Page("chars", BuildCharacters)
     Page("market", ns.Market.BuildPage)
+    Page("stock", ns.Stock.BuildPage)
     Page("lists", ns.ListsUI.BuildPage)
     Page("settings", BuildSettings)
 

@@ -112,11 +112,14 @@ DrawRouteRow = function(r, row, absIndex, page)
     end
     -- Coût total de la tranche ; pour une alternative, l'écart avec l'étape choisie.
     if main then
-        rt.cost:SetText(RMoney(x.cost))
-        T.SetFont(rt.cost, 13, true); rt.cost:SetTextColor(0.93, 0.90, 0.84)
+        -- Signe du point de vue de ta bourse : − ça coûte, + ça rapporte.
+        local v = -(x.cost or 0)
+        rt.cost:SetText(RMoney(v, { sign = true }))
+        T.SetFont(rt.cost, 13, true)
+        if v > 0 then rt.cost:SetTextColor(0.36, 0.82, 0.45) else rt.cost:SetTextColor(0.93, 0.90, 0.84) end
     else
-        local d = x.cost - (row.seg.cost or 0)
-        rt.cost:SetText("+" .. RMoney(d, { icon = 10 }))
+        local d = (row.seg.cost or 0) - x.cost -- ce que tu perds en prenant cette alternative
+        rt.cost:SetText(RMoney(d, { icon = 10, sign = true }))
         T.SetFont(rt.cost, 11, false); rt.cost:SetTextColor(unpack(C.muted))
     end
     for k = 1, 7 do r.bars[k]:Hide() end
@@ -394,9 +397,9 @@ function LU.BuildPage(page)
                     local p = (P.IsVendorItem(m[1]) and P.VendorBuy(m[1])) or (st and (st.med or st.cur))
                     GameTooltip:AddDoubleLine(m[2] .. "× " .. P.Name(m[1]), p and Money(p * m[2]) or "?", 0.8, 0.8, 0.8, 1, 1, 1)
                 end
-                if (rc.resale or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Resale of what you craft"), "−" .. Money(rc.resale), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
+                if (rc.resale or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Resale of what you craft"), "+" .. Money(rc.resale), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
                 if (rc.F or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Money(rc.F) .. (rc.estF and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1) end
-                GameTooltip:AddDoubleLine(Tr("Per craft (materials − resale)"), Money(rc.c or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Per craft (resale − materials)"), ns.FormatMoney(-(rc.c or 0), { iconSize = 11, short = true, sign = true, color = true }), 0.7, 0.7, 0.7, 1, 1, 1)
                 GameTooltip:AddLine(" ")
                 if row.alt then GameTooltip:AddLine(Tr("Click: use this recipe instead"), 0.88, 0.66, 0.24)
                 else
@@ -793,7 +796,7 @@ function LU.BuildPage(page)
             or (Tr("%d items")):format(#data)
         if isRoute then
             sub = (Tr("From %d%s to 300: %s in %d steps")):format(route.start, route.who and (" (" .. route.who .. ")") or "",
-                Money(route.total), #route.segs)
+                ns.FormatMoney(-route.total, { iconSize = 11, short = true, sign = true, color = route.total < 0 }), #route.segs)
             if not route.reached then sub = sub .. Tr("  ·  |cffed5c52Incomplete: scan the AH so more recipes get a price|r") end
         elseif l.leveling then
             local now, usual, missing = LS.LevelCost(l)
