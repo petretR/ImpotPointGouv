@@ -134,6 +134,14 @@ local Step, Finish
 
 local function SetStatus(text) if frame then frame.status:SetText(text or "") end end
 
+-- Infobulle à droite de la fenêtre, alignée sur la ligne survolée (pas au-dessus, loin de la souris).
+local function RowTip(row)
+    GameTooltip:SetOwner(row, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    local x = (frame and frame:GetRight() and row:GetRight()) and (frame:GetRight() - row:GetRight() + 8) or 8
+    GameTooltip:SetPoint("TOPLEFT", row, "TOPRIGHT", x, 0)
+end
+
 function Finish(reason)
     if not run then return end
     local gained = GetMoney() - run.startMoney
@@ -410,13 +418,13 @@ local function EnsureRows()
         r:SetScript("OnEnter", function(self)
             self.hl:SetColor({ 1, 1, 1, 0.045 })
             if self.mail and self.mail.attach and GameTooltip.SetInboxItem then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                RowTip(self)
                 GameTooltip:SetInboxItem(self.mail.index, self.mail.attach)
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine(Tr("Click: collect this mail"), 0.88, 0.66, 0.24)
                 GameTooltip:Show()
             elseif self.mail then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                RowTip(self)
                 GameTooltip:AddLine(self.mail.subject, 1, 1, 1, true)
                 GameTooltip:AddLine(Tr("Click: collect this mail"), 0.88, 0.66, 0.24)
                 GameTooltip:Show()
@@ -580,7 +588,7 @@ local function BagItems()
             if info and info.itemID and not info.isBound then
                 local e = by[info.itemID]
                 if not e then
-                    e = { id = info.itemID, count = 0, icon = info.iconFileID, quality = info.quality,
+                    e = { id = info.itemID, count = 0, icon = info.iconFileID, quality = info.quality, bag = bag, slot = slot,
                         name = ns.Prices.Name(info.itemID) }
                     by[info.itemID] = e
                     list[#list + 1] = e
@@ -712,7 +720,13 @@ function M.BuildSend(f)
         end)
         r:SetScript("OnEnter", function(self)
             self.hl:SetColor({ 1, 1, 1, 0.045 })
-            if self.item then T.ItemTooltip(self, self.item.id) end
+            local it = self.item
+            if not it then return end
+            RowTip(self)
+            -- L'objet réel du sac (suffixe, enchantement, état lié), pas une fiche générique.
+            if it.bag and GameTooltip.SetBagItem then GameTooltip:SetBagItem(it.bag, it.slot)
+            elseif GameTooltip.SetItemByID then GameTooltip:SetItemByID(it.id) end
+            GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
         p.rows[i] = r
