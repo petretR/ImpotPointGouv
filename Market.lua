@@ -438,7 +438,7 @@ function M.VendorCrafts()
                         r.name = r.name or RO.SpellName(r.spell)
                         local F, label, qty, est = RO.Access(r, known, {})
                         out[#out + 1] = { id = r.out, rec = r, prof = prof, gain = gain, cost = cost, vs = vs * r.n,
-                            units = maxN, skill = r.o, mySkill = skill, who = who,
+                            units = r.cd and math.min(maxN, 1) or maxN, skill = r.o, mySkill = skill, who = who,
                             access = F, label = label, est = est, rate = 0, listed = 0 }
                     end
                 end

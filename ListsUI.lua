@@ -105,7 +105,7 @@ DrawRouteRow = function(r, row, absIndex, page)
     rt.pillTx:SetText(txt); rt.pillTx:SetTextColor(col[1], col[2], col[3], 1)
     rt.pillBg:SetColor({ col[1], col[2], col[3], 0.14 })
     rt.pill:SetWidth((rt.pillTx:GetStringWidth() or 40) + 16)
-    if rc.F and rc.F > 0 then
+    if rc.F and rc.F > 0 and not x.reuse then
         rt.learn:SetText(RMoney(rc.F, { icon = 10 }) .. (rc.estF and " ~" or ""))
     else
         rt.learn:SetText("")
@@ -398,7 +398,8 @@ function LU.BuildPage(page)
                     GameTooltip:AddDoubleLine(m[2] .. "× " .. P.Name(m[1]), p and Money(p * m[2]) or "?", 0.8, 0.8, 0.8, 1, 1, 1)
                 end
                 if (rc.resale or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Resale of what you craft"), "+" .. Money(rc.resale), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
-                if (rc.F or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Money(rc.F) .. (rc.estF and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1) end
+                if (rc.F or 0) > 0 and (row.route or row.alt).reuse then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Tr("already paid earlier in the route"), 0.7, 0.7, 0.7, 0.6, 0.6, 0.6)
+                elseif (rc.F or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Money(rc.F) .. (rc.estF and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1) end
                 GameTooltip:AddDoubleLine(Tr("Per craft (resale − materials)"), ns.FormatMoney(-(rc.c or 0), { iconSize = 11, short = true, sign = true, color = true }), 0.7, 0.7, 0.7, 1, 1, 1)
                 GameTooltip:AddLine(" ")
                 if row.alt then GameTooltip:AddLine(Tr("Click: use this recipe instead"), 0.88, 0.66, 0.24)
@@ -413,7 +414,7 @@ function LU.BuildPage(page)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:AddLine(Tr(row.rec.name), 1, 1, 1)
                 for _, m in ipairs(row.rec.mats) do
-                    if m[3] == 1 then GameTooltip:AddDoubleLine(P.Name(m[1]), "×" .. m[2], 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
+                    if m[3] == 1 then GameTooltip:AddDoubleLine(P.Name(m[1]), "×" .. LS.FmtQty(m[2]), 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
                 end
                 GameTooltip:AddDoubleLine(Tr("Usual price (7 days)"), Money(row.cost), 0.7, 0.7, 0.7, 1, 1, 1)
                 GameTooltip:Show()
@@ -447,7 +448,7 @@ function LU.BuildPage(page)
                 GameTooltip:AddLine(Tr("No price history yet: scan this list at the AH."), 0.6, 0.6, 0.6, true)
             end
             local e = row.e
-            if e.qty and e.qty > 0 then GameTooltip:AddDoubleLine(e.range and ("Needed (" .. e.range .. ")") or "Needed", tostring(e.qty), 0.7, 0.7, 0.7, 1, 1, 1) end
+            if e.qty and e.qty > 0 then GameTooltip:AddDoubleLine(e.range and ("Needed (" .. e.range .. ")") or "Needed", LS.FmtQty(e.qty), 0.7, 0.7, 0.7, 1, 1, 1) end
             if e.note then GameTooltip:AddLine(e.note, 0.88, 0.66, 0.24) end
             if e.usedIn and not row.head then
                 local names = {}
@@ -457,7 +458,7 @@ function LU.BuildPage(page)
                 end
                 table.sort(names, function(a, b) return a[1] < b[1] end)
                 GameTooltip:AddLine(Tr("Used in:"), 0.88, 0.66, 0.24)
-                for k = 1, math.min(10, #names) do GameTooltip:AddDoubleLine("  " .. names[k][1], "×" .. names[k][2], 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
+                for k = 1, math.min(10, #names) do GameTooltip:AddDoubleLine("  " .. names[k][1], "×" .. LS.FmtQty(names[k][2]), 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
                 if #names > 10 then GameTooltip:AddLine(("  +%d"):format(#names - 10), 0.6, 0.6, 0.6) end
             end
             if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6) end
@@ -607,7 +608,7 @@ function LU.BuildPage(page)
                 r.icon:SetTexture(ns.GetItemIcon(id) or icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                 local name = (row.head and row.rec and row.rec.cd) and Tr(row.rec.name) or P.Name(id)
                 if row.head or (not row.depth and e.kind == "product") then name = "|cffe0a83d" .. name .. "|r" end
-                if row.depth and row.qty then name = "|cff8a877f" .. row.qty .. "×|r " .. name end
+                if row.depth and row.qty then name = "|cff8a877f" .. LS.FmtQty(row.qty) .. "×|r " .. name end
                 r.name:SetText(name)
                 r.now:SetText(st and st.cur and Money(st.cur) or (st and st.med and "|cff6fa8f0none|r" or Money(nil)))
                 r.usual:SetText(Money(st and st.med))
@@ -798,6 +799,7 @@ function LU.BuildPage(page)
             sub = (Tr("From %d%s to 300: %s in %d steps")):format(route.start, route.who and (" (" .. route.who .. ")") or "",
                 ns.FormatMoney(-route.total, { iconSize = 11, short = true, sign = true, color = route.total < 0 }), #route.segs)
             if not route.reached then sub = sub .. Tr("  ·  |cffed5c52Incomplete: scan the AH so more recipes get a price|r") end
+            if (route.cdSkipped or 0) > 0 then sub = sub .. (Tr("  ·  %d cooldown recipes left out")):format(route.cdSkipped) end
         elseif l.leveling then
             local now, usual, missing = LS.LevelCost(l)
             sub = sub .. (Tr("  ·  Cost now %s, usual %s%s")):format(Money(now), Money(usual), missing > 0 and (Tr("  (%d not priced)")):format(missing) or "")

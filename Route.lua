@@ -4,6 +4,8 @@
 -- Accès à la recette, payé une fois : déjà connue (0), formateur (coût relevé en jeu, sinon estimé),
 -- patron à l'HV (prix actuel, s'il y en a en vente) ou patron vendu par un marchand (≈ 4 × prix de revente).
 -- Programmation dynamique sur la compétence, puis alternatives proches pour chaque tranche.
+-- Une recette apprise n'est payée qu'une fois, même si la route y revient plus tard.
+-- Les recettes à recharge (transmutations, étoffe lunaire, sel) sont exclues : un craft par recharge.
 local _, ns = ...
 local Tr = ns.L
 local P = ns.Prices
@@ -22,6 +24,29 @@ end
 RO.NAME_KEYS = NAME_KEYS
 RO.SpellName = SpellName
 
+-- Recettes à recharge connues (Classic), en plus de celles de Data.lua (D.cooldowns).
+local CD_SPELLS = {
+    [11479] = true, [11480] = true,                          -- Transmutation : fer en or, mithril en vrai-argent
+    [17187] = true, [17559] = true, [17560] = true, [17561] = true, [17562] = true,
+    [17563] = true, [17565] = true, [17566] = true, [25146] = true, -- autres transmutations
+    [18560] = true,                                          -- Étoffe lunaire
+    [19566] = true,                                          -- Sel de rochebrune raffiné (salière)
+}
+local cdOut
+-- Vrai si la recette a une recharge (on ne peut pas la crafter en série pour monter).
+function RO.IsCooldown(spell, prof, out)
+    if CD_SPELLS[spell] then return true end
+    if not cdOut then
+        cdOut = {}
+        for _, cd in ipairs((ns.Data or {}).cooldowns or {}) do
+            if cd.s then CD_SPELLS[cd.s] = true end
+            if cd.out and cd.p then cdOut[cd.p .. ":" .. cd.out] = true end
+        end
+        if CD_SPELLS[spell] then return true end
+    end
+    return out ~= nil and prof ~= nil and cdOut[prof .. ":" .. out] == true
+end
+
 -- Recettes d'un métier (construites une fois).
 local cache = {}
 function RO.Recipes(prof)
@@ -31,6 +56,7 @@ function RO.Recipes(prof)
         if t[2] == code then
             local r = { spell = spell, out = t[1] ~= 0 and t[1] or nil, o = t[3], y = t[4], g = t[5], n = t[6] or 1,
                 pat = t[7] ~= 0 and t[7] or nil, est = t[8] == 1, mats = {} }
+            r.cd = RO.IsCooldown(spell, prof, r.out)
             for i = 9, #t, 2 do r.mats[#r.mats + 1] = { t[i], t[i + 1] or 1 } end
             out[#out + 1] = r
         end
@@ -133,10 +159,12 @@ function RO.Compute(prof, opts)
     local memo = {}
     local start, who = RO.CurrentSkill(prof)
     if opts.from then start = opts.from end
-    local cands, skipped = {}, 0
+    local cands, skipped, cdSkipped = {}, 0, 0
     for _, r in ipairs(recipes) do
         r.name = r.name or SpellName(r.spell)
-        if r.g > start and not bans[r.spell] then
+        if r.g > start and r.cd then
+            cdSkipped = cdSkipped + 1
+        elseif r.g > start and not bans[r.spell] then
             local F, label, qty, est = RO.Access(r, known, opts)
             local cost, missing = 0, false
             for _, m in ipairs(r.mats) do
@@ -153,40 +181,45 @@ function RO.Compute(prof, opts)
             end
         end
     end
-    -- Programmation dynamique : best[x] = coût minimal pour atteindre x.
     local INF = math.huge
-    local best, arg = { [start] = 0 }, {}
-    local M, Ms, PS = {}, {}, {}
-    for _, r in ipairs(cands) do M[r], PS[r] = INF, 0 end
-    for x = start, 299 do
-        local bx = best[x] or INF
-        local bestNext, br, bs = INF, nil, nil
-        for _, r in ipairs(cands) do
-            local ch = Chance(r, x)
-            if ch > 0 then
-                -- démarrer (ou redémarrer) un segment avec r en x
-                local cand = bx + r.F - PS[r]
-                if cand < M[r] then M[r], Ms[r] = cand, x end
-                PS[r] = PS[r] + r.c / ch
-                local v = M[r] + PS[r]
-                if v < bestNext then bestNext, br, bs = v, r, Ms[r] end
-            else
-                M[r] = INF
+    -- Programmation dynamique : best[x] = coût minimal pour atteindre x, en tranches contiguës.
+    -- owned : recettes déjà payées (apprentissage gratuit dans cette passe).
+    local function Solve(owned)
+        local best, arg = { [start] = 0 }, {}
+        local M, Ms, PS = {}, {}, {}
+        for _, r in ipairs(cands) do M[r], PS[r] = INF, 0 end
+        for x = start, 299 do
+            local bx = best[x] or INF
+            local bestNext, br, bs = INF, nil, nil
+            for _, r in ipairs(cands) do
+                local ch = Chance(r, x)
+                if ch > 0 then
+                    -- démarrer (ou redémarrer) un segment avec r en x
+                    local cand = bx + (owned[r] and 0 or r.F) - PS[r]
+                    if cand < M[r] then M[r], Ms[r] = cand, x end
+                    PS[r] = PS[r] + r.c / ch
+                    local v = M[r] + PS[r]
+                    if v < bestNext then bestNext, br, bs = v, r, Ms[r] end
+                else
+                    M[r] = INF
+                end
             end
+            best[x + 1] = bestNext
+            arg[x + 1] = { br, bs }
         end
-        best[x + 1] = bestNext
-        arg[x + 1] = { br, bs }
+        -- Reconstruction des tranches (deux tranches de suite avec la même recette : fusionnées).
+        local segs = {}
+        local t = 300
+        while t > start and arg[t] and arg[t][1] do
+            local r, s = arg[t][1], arg[t][2]
+            if segs[1] and segs[1].r == r and segs[1].from == t then segs[1].from = s
+            else table.insert(segs, 1, { from = s, to = t, r = r }) end
+            t = s
+        end
+        return segs, (best[300] or INF) < INF
     end
-    -- Reconstruction des tranches.
-    local segs = {}
-    local t = 300
-    while t > start and arg[t] and arg[t][1] do
-        local r, s = arg[t][1], arg[t][2]
-        table.insert(segs, 1, { from = s, to = t, r = r })
-        t = s
-    end
-    local function SegCost(r, a, b)
-        local total, crafts = r.F, 0
+    local function SegCost(r, a, b, free)
+        local total, crafts = free and 0 or r.F, 0
         for x = a, b - 1 do
             local ch = Chance(r, x)
             if ch <= 0 then return nil end
@@ -195,18 +228,39 @@ function RO.Compute(prof, opts)
         end
         return total, crafts
     end
+    -- Coût réel d'une route : chaque recette payée une seule fois (à sa première tranche).
+    local function Price(segs)
+        local paid, total = {}, 0
+        for _, sg in ipairs(segs) do
+            sg.reuse = paid[sg.r] or nil
+            sg.cost, sg.crafts = SegCost(sg.r, sg.from, sg.to, sg.reuse)
+            paid[sg.r] = true
+            total = total + (sg.cost or 0)
+        end
+        return total, paid
+    end
+    -- Passe 1 sans rien de payé ; puis on refait la route en considérant acquises les recettes déjà
+    -- choisies (le prix de leur apprentissage compte une fois), tant que la route réelle baisse.
+    local segs, reached = Solve({})
+    local total, paid = Price(segs)
+    for _ = 1, 4 do
+        if not reached then break end
+        local s2, ok2 = Solve(paid)
+        if not ok2 then break end
+        local t2, p2 = Price(s2)
+        if t2 >= total - 1 then break end
+        segs, total, paid = s2, t2, p2
+    end
+    Price(segs) -- remet sg.cost / sg.reuse de la route retenue
     local maxPct = (ns.db.settings.routeAltPct or 30) / 100
     local maxAbs = (ns.db.settings.routeAltGold or 5) * 10000
-    local total = 0
     for _, sg in ipairs(segs) do
-        sg.cost, sg.crafts = SegCost(sg.r, sg.from, sg.to)
-        total = total + (sg.cost or 0)
         local alts = {}
         for _, r in ipairs(cands) do
             if r ~= sg.r then
-                local c, cr = SegCost(r, sg.from, sg.to)
+                local c, cr = SegCost(r, sg.from, sg.to, paid[r])
                 if c and sg.cost and (c - sg.cost <= math.max(math.abs(sg.cost) * maxPct, maxAbs)) then
-                    alts[#alts + 1] = { r = r, cost = c, crafts = cr }
+                    alts[#alts + 1] = { r = r, cost = c, crafts = cr, reuse = paid[r] or nil }
                 end
             end
         end
@@ -214,8 +268,8 @@ function RO.Compute(prof, opts)
         for k = #alts, 4, -1 do alts[k] = nil end
         sg.alts = alts
     end
-    return { segs = segs, total = total, start = start, who = who, skipped = skipped,
-        reached = (best[300] or INF) < INF }
+    return { segs = segs, total = total, start = start, who = who, skipped = skipped, cdSkipped = cdSkipped,
+        reached = reached }
 end
 
 function RO.Ban(prof, spell)

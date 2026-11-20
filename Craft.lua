@@ -72,11 +72,17 @@ local Modern = {
         local basic = (Enum and Enum.CraftingReagentType and Enum.CraftingReagentType.Basic) or 1
         for _, rid in ipairs(C_TradeSkillUI.GetAllRecipeIDs() or {}) do
             local info = C_TradeSkillUI.GetRecipeInfo(rid)
+            -- Recettes pas encore apprises : on garde au moins le nombre produit par craft.
+            if info and info.learned == false and ns.Lists and ns.Lists.NoteMade and C_TradeSkillUI.GetRecipeSchematic then
+                local ok, sch = pcall(C_TradeSkillUI.GetRecipeSchematic, rid, false)
+                if ok then ns.Lists.NoteMade(sch) end
+            end
             if info and info.name and info.learned ~= false then
                 local rec = { index = rid, name = info.name, icon = info.icon, made = 1, reagents = {},
                     kind = DIFF_ENUM[info.relativeDifficulty] }
                 local sch = C_TradeSkillUI.GetRecipeSchematic and C_TradeSkillUI.GetRecipeSchematic(rid, false)
                 if sch then
+                    if ns.Lists and ns.Lists.NoteMade then ns.Lists.NoteMade(sch) end
                     rec.pid = sch.outputItemID
                     rec.made = ((sch.quantityMin or 1) + (sch.quantityMax or sch.quantityMin or 1)) / 2
                     for _, slot in ipairs(sch.reagentSlotSchematics or {}) do
