@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 local Tr = ns.L
 ns.name = ADDON
-ns.version = "0.23.0"
+ns.version = "0.23.1"
 _G.ImpotPointGouv = ns
 
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. Tr("\\media\\")
@@ -177,6 +177,23 @@ function ns.Print(msg)
 end
 
 -- "CAMWOW EU4 Realm 4 PvP" -> "EU4 · Realm 4 · PvP" (nom interne de WoW Forever).
+-- Clé de royaume stable. Depuis le correctif Forever 1.60.1, GetRealmName() renvoie "" :
+-- on garde le dernier nom connu (l'HV de Forever est globale, une seule clé suffit).
+function ns.Realm()
+    local r = GetRealmName and GetRealmName() or ""
+    if r ~= "" then ns.db.realmKey = r; return r end
+    if ns.db.realmKey and ns.db.realmKey ~= "" then return ns.db.realmKey end
+    -- Première fois sans nom : le royaume qui a le plus de prix enregistrés.
+    local best, most = nil, -1
+    for k, t in pairs(ns.db.prices or {}) do
+        local n = 0
+        for _ in pairs(t) do n = n + 1 end
+        if k ~= "" and n > most then best, most = k, n end
+    end
+    ns.db.realmKey = best or "Forever"
+    return ns.db.realmKey
+end
+
 function ns.PrettyRealm(realm)
     if not realm or realm == "" then return "" end
     local r = realm:gsub("^CAMWOW%s*", "")

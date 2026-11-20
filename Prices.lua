@@ -28,7 +28,7 @@ P.SEED_VENDOR = {
     [10647] = true, [10648] = true, [4471] = true, [17194] = true,-- papier / parchemin d'ingénieur, briquet, épices
 }
 
-local function Realm() return (GetRealmName and GetRealmName()) or "?" end
+local function Realm() return ns.Realm() end
 local function DB()
     local r = Realm()
     ns.db.prices[r] = ns.db.prices[r] or {}

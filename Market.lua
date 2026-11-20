@@ -11,7 +11,7 @@ ns.Market = M
 local MAX_GAP = 48 * 3600   -- au-delà, l'écart entre deux scans ne dit plus rien d'utile
 local KEEP_DAYS = 7
 
-local function Realm() return (GetRealmName and GetRealmName()) or "?" end
+local function Realm() return ns.Realm() end
 local function Today() return math.floor(time() / 86400) end
 local function DB()
     ns.db.market = ns.db.market or {}
