@@ -789,6 +789,8 @@ SLASH_IMPOTPOINTGOUV1 = "/impot"
 SLASH_IMPOTPOINTGOUV2 = "/ipg"
 SlashCmdList.IMPOTPOINTGOUV = function(msg)
     msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local itemArg = msg:match("^item%s+(.+)$")
+    if itemArg or msg == "item" then ns.History.Command(itemArg); return end
     if msg == "tx" or msg == "transactions" then UI.Toggle("tx")
     elseif msg == "persos" or msg == "chars" then UI.Toggle("chars")
     elseif msg == "vendor" then

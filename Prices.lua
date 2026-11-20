@@ -51,7 +51,8 @@ end
 
 -- ------------------------------------------------------------ enregistrement
 -- full = true : liste complète de l'objet (scan) -> quantité fiable, prix du jour remplacé.
-function P.Record(id, low, qty, full)
+-- ladder (facultatif) : { [prix unitaire] = quantité } vus par ce scan, pour l'historique de marché.
+function P.Record(id, low, qty, full, ladder)
     if not id then return end
     local db = DB()
     local e = db[id]
@@ -87,6 +88,7 @@ function P.Record(id, low, qty, full)
         if lp and now - lp[1] < 900 then lp[2], lp[3] = low or 0, qty or 0
         else h[#h + 1] = { now, low or 0, qty or 0 } end
         while #h > 0 and (#h > 120 or now - h[1][1] > 21 * 86400) do table.remove(h, 1) end
+        if ns.History then ns.History.Note(id, low, qty, ladder) end
         end
     end
     e.t = time()
@@ -410,10 +412,10 @@ local function FinalizeItem()
     local q = scan.queue[scan.idx]
     local a = scan.acc[q.id]
     if a then
-        P.Record(q.id, a.low, a.qty, true)
+        P.Record(q.id, a.low, a.qty, true, a.b)
         scan.found = (scan.found or 0) + 1
     else
-        P.Record(q.id, nil, 0, true)
+        P.Record(q.id, nil, 0, true, {})
     end
     scan.idx, scan.page = scan.idx + 1, 0
 end
@@ -485,7 +487,7 @@ local function ProcessFull()
         if i <= n then
             C_Timer.After(0.02, Chunk)
         else
-            for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true) end
+            for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
             if ns.Market then ns.Market.OnFullScan(scan.acc) end
             ns.db.scan[Realm()] = ns.db.scan[Realm()] or {}
             ns.db.scan[Realm()].lastFull = time()
@@ -596,7 +598,7 @@ local function ModernProcessFull()
         if i < n then
             C_Timer.After(0.02, Chunk)
         else
-            for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true) end
+            for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
             if ns.Market then ns.Market.OnFullScan(scan.acc) end
             ns.db.scan[Realm()] = ns.db.scan[Realm()] or {}
             ns.db.scan[Realm()].lastFull = time()
@@ -707,7 +709,7 @@ end
 
 local function OnListItemResults(itemKey)
     if not scan or scan.mode ~= "list" or not itemKey or itemKey.itemID ~= scan.cur then return end
-    local low, total = nil, 0
+    local low, total, ladder = nil, 0, {}
     for k = 1, (AHM.GetNumItemSearchResults(itemKey) or 0) do
         local r = AHM.GetItemSearchResultInfo(itemKey, k)
         if r and r.buyoutAmount then
@@ -715,9 +717,10 @@ local function OnListItemResults(itemKey)
             local unit = math.floor(r.buyoutAmount / math.max(1, q))
             low = low and math.min(low, unit) or unit
             total = total + q
+            ladder[unit] = (ladder[unit] or 0) + q
         end
     end
-    P.Record(itemKey.itemID, low, total, true)
+    P.Record(itemKey.itemID, low, total, true, ladder)
     scan.got = scan.got + 1
     scan.cur = nil
     C_Timer.After(0.05, ListNext)
@@ -735,7 +738,7 @@ local function OnCommodityResults(itemID)
                 low = low and math.min(low, r.unitPrice) or r.unitPrice
             end
         end
-        P.Record(itemID, low, total, true)
+        P.Record(itemID, low, total, true, ladder)
         if ns.Market and ns.Market.SetBook then ns.Market.SetBook(itemID, ladder) end
         scan.got = scan.got + 1
         scan.cur = nil
@@ -753,7 +756,7 @@ local function OnCommodityResults(itemID)
             low = low and math.min(low, r.unitPrice) or r.unitPrice
         end
     end
-    if low then P.Record(itemID, low, total, true) end
+    if low then P.Record(itemID, low, total, true, ladder) end
     if ns.Market and ns.Market.SetBook then ns.Market.SetBook(itemID, ladder) end
     scan.got = scan.got + 1
     scan.cur = nil

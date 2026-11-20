@@ -533,6 +533,7 @@ function LU.BuildPage(page)
                 if #names > 10 then GameTooltip:AddLine(("  +%d"):format(#names - 10), 0.6, 0.6, 0.6) end
             end
             if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6) end
+            GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
             local rl = {}
             for _, r2 in ipairs(LS.ROLES) do if e.roles[r2[1]] then rl[#rl + 1] = Tr(r2[2]) end end
             if #rl > 0 and #rl < 5 then GameTooltip:AddLine(Tr("Used by: ") .. table.concat(rl, ", "), 0.6, 0.6, 0.6) end
@@ -584,6 +585,8 @@ function LU.BuildPage(page)
             elseif IsModifiedClick and IsModifiedClick("CHATLINK") then
                 local _, link = ns.GetItemInfo(self.row.id)
                 if link and ChatEdit_InsertLink then ChatEdit_InsertLink(link) end
+            elseif self.row.id and ns.History then
+                ns.History.Show(self.row.id)
             end
         end)
         page.rows[i] = r
