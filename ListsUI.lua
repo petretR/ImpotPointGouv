@@ -690,7 +690,7 @@ function LU.BuildPage(page)
         LU.select = l.key
         self.title:SetText(Tr(l.title))
         -- Rôles : seulement pour ce qui dépend des spés (consommables, enchantements, pré-BiS).
-        local showRoles = not (l.leveling or l.custom or l.cd)
+        local showRoles = not (l.leveling or l.custom or l.cd or l.noRoles)
         local showKinds = not (l.leveling or l.custom) and #l.recipes > 0
         local role = showRoles and self.role or "all"
         local kind = "all"

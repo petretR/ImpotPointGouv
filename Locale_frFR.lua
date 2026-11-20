@@ -523,6 +523,8 @@ ns.AddLocale("frFR", {
     ["(estimated)"] = "(estimé)",
     ["Resale of what you craft"] = "Revente de ce que tu craftes",
     ["Learn it (once)"] = "L'apprendre (une fois)",
+    ["Every cooking recipe and what it's made of."] = "Toutes les recettes de cuisine et leurs composants.",
+    ["Every alchemy recipe and what it's made of."] = "Toutes les recettes d'alchimie et leurs composants.",
     ["already paid earlier in the route"] = "déjà payée plus tôt dans la route",
     ["  ·  %d cooldown recipes left out"] = "  ·  %d recettes à recharge écartées",
     ["Click: use this recipe instead"] = "Clic : prendre cette recette à la place",

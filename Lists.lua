@@ -339,6 +339,33 @@ function LS.Build()
         ench.info = ench.info .. Tr(" (Showing the usual raid enchanting materials until the game provides the exact recipes.)")
     end
 
+    -- Toutes les recettes d'un métier (cuisine, alchimie) : chaque produit avec ses composants.
+    -- Composants : le jeu d'abord, sinon les données Classic, sinon les données de recettes (DataRecipes).
+    local function ProfList(key, title, info, code)
+        local l = NewList(key, title, info)
+        l.noRoles = true
+        local spells = {}
+        for spell, t in pairs(D.allRecipes or {}) do
+            if t[2] == code and t[1] ~= 0 then spells[#spells + 1] = spell end
+        end
+        table.sort(spells)
+        for _, spell in ipairs(spells) do
+            local t = D.allRecipes[spell]
+            local id = t[1]
+            local rg = RDB()[spell] or (D.spellReagents and D.spellReagents[spell])
+            if not rg then
+                rg = {}
+                for i = 9, #t, 2 do rg[#rg + 1] = { t[i], t[i + 1] or 1 } end
+            end
+            Add(l, id, "product", ALL_ROLES)
+            for _, m in ipairs(Tree(rg, 1, {}, 1 / LS.YieldOf(id))) do Add(l, m[1], "mat", ALL_ROLES) end
+            AddRecipe(l, { id = id, spell = spell, roles = ALL_ROLES }, rg)
+        end
+        return l
+    end
+    local cook = ProfList("all_cook", Tr("Cooking"), Tr("Every cooking recipe and what it's made of."), 6)
+    local alch = ProfList("all_alch", Tr("Alchemy"), Tr("Every alchemy recipe and what it's made of."), 4)
+
     -- Recharges, une liste par métier : chaque recharge avec ses composants.
     local cdLists, cdBy = {}, {}
     local CD_TITLE = { alch = Tr("Alchemy: transmutes"), tail = Tr("Tailoring: Mooncloth"), lw = Tr("Leatherworking: salt") }
@@ -355,7 +382,7 @@ function LS.Build()
         if cd.item then Add(l, cd.item, "tool", ALL_ROLES, nil, "Tool") end
         AddRecipe(l, { id = cd.out, name = cd.n, roles = ALL_ROLES, cd = cd }, cd.r)
     end
-    groups[#groups + 1] = { key = "raid", title = Tr("CONSUMES & ENCHANTS"), lists = { consum, ench } }
+    groups[#groups + 1] = { key = "raid", title = Tr("CONSUMES & ENCHANTS"), lists = { consum, ench, cook, alch } }
     groups[#groups + 1] = { key = "cd", title = Tr("DAILY COOLDOWNS"), lists = cdLists }
 
     -- Pré-BiS craftés par type d'armure
