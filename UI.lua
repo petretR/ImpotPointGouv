@@ -798,6 +798,10 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
         ns.Routine.Toggle()
     elseif msg == "lists" or msg == "listes" then
         UI.Toggle("lists"); ns.Lists.Diag()
+    elseif msg:match("^price") or msg:match("^prix") then
+        local q = msg:gsub("^%S+%s*", "")
+        local id = ns.PriceCard.Find(q)
+        if id then ns.PriceCard.Show(id) else ns.Print(Tr("Usage: /ipg price <item name or link>")) end
     elseif msg == "sold" or msg == "ventes" then
         ns.Track.Report(7)
     elseif msg == "hints" then

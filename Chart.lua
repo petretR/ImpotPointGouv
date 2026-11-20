@@ -18,6 +18,7 @@ function Chart.Create(parent)
     c.lines, c.bars, c.grids, c.ylabels, c.xlabels = {}, {}, {}, {}, {}
     c.color = T.C.gold
     c.lastDot, c.lastRing = false, false
+    c.refTex, c.refLabels, c.lastLabel = {}, {}, false
 
     c.plot = CreateFrame("Frame", nil, c)
     c.plot:SetPoint("TOPLEFT", 58, -8)
@@ -102,6 +103,9 @@ function Chart.SetData(c, points, opts)
         c.empty:SetText(opts.emptyText or "No data yet.")
         c.empty:Show()
         if c.lastDot then c.lastDot:Hide(); c.lastRing:Hide() end
+        if c.refTex then HideFrom(c.refTex, 1) end
+        if c.refLabels then HideFrom(c.refLabels, 1) end
+        if c.lastLabel then c.lastLabel:Hide() end
         return
     end
     c.empty:Hide()
@@ -112,6 +116,10 @@ function Chart.SetData(c, points, opts)
         if p[2] > vmax then vmax = p[2] end
     end
     if opts.zeroLine then vmin = math.min(vmin, 0); vmax = math.max(vmax, 0) end
+    -- Lignes de référence (prix marchand, prix habituel) : visibles si elles restent proches de la courbe.
+    for _, ref in ipairs(opts.refs or {}) do
+        if ref.v and ref.v > 0 and ref.v <= vmax * 1.6 then vmin = math.min(vmin, ref.v); vmax = math.max(vmax, ref.v) end
+    end
     if vmax == vmin then vmax = vmax + 10000; vmin = math.max(opts.zeroLine and vmin or 0, vmin - 10000) end
     local step = NiceStep(vmax - vmin, 4)
     local lo = math.floor(vmin / step) * step
@@ -224,6 +232,40 @@ function Chart.SetData(c, points, opts)
         line:SetStartPoint("BOTTOMLEFT", plot, p.x, p.y); line:SetEndPoint("BOTTOMLEFT", plot, q.x, q.y)
     end
     HideFrom(c.lines, li + 1)
+    -- Bande du prix habituel (bas–haut) et lignes de référence en pointillés.
+    local ri = 0
+    local function Tex(layer, sub)
+        ri = ri + 1
+        return Pool(c.refTex, ri, function() local tx = plot:CreateTexture(nil, layer or "BORDER", nil, sub or 2); tx:SetTexture(T.WHITE); return tx end)
+    end
+    if opts.band and opts.band[1] and opts.band[2] and opts.band[2] > opts.band[1] then
+        local y1, y2 = math.max(0, Y(opts.band[1])), math.min(H, Y(opts.band[2]))
+        if y2 > y1 then
+            local b = Tex("BACKGROUND", 2)
+            b:ClearAllPoints(); b:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", 0, y1); b:SetSize(W, y2 - y1)
+            b:SetVertexColor(1, 1, 1, 0.035)
+        end
+    end
+    local rl = 0
+    for _, ref in ipairs(opts.refs or {}) do
+        local y = ref.v and Y(ref.v)
+        if y and y >= 0 and y <= H then
+            local col = ref.color or { 1, 1, 1 }
+            for x = 0, W, 9 do
+                local d = Tex("ARTWORK", 0)
+                d:ClearAllPoints(); d:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", x, y); d:SetSize(5, 1)
+                d:SetVertexColor(col[1], col[2], col[3], ref.alpha or 0.35)
+            end
+            if ref.label then
+                rl = rl + 1
+                local lbl = Pool(c.refLabels, rl, function() return T.Text(c, 10, { color = T.C.faint }) end)
+                lbl:ClearAllPoints(); lbl:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", 4, y + 2)
+                lbl:SetText(ref.label); lbl:SetTextColor(col[1], col[2], col[3], 0.8)
+            end
+        end
+    end
+    HideFrom(c.refTex, ri + 1)
+    HideFrom(c.refLabels, rl + 1)
     -- Point sur la valeur actuelle.
     if not c.lastDot then
         c.lastDot = plot:CreateTexture(nil, "OVERLAY", nil, 3); c.lastDot:SetTexture(T.CIRCLE); c.lastDot:SetSize(8, 8)
@@ -234,6 +276,13 @@ function Chart.SetData(c, points, opts)
     c.lastRing:ClearAllPoints(); c.lastRing:SetPoint("CENTER", plot, "BOTTOMLEFT", last.x - 1, last.y)
     c.lastDot:SetVertexColor(color[1], color[2], color[3], 1); c.lastRing:SetVertexColor(color[1], color[2], color[3], 0.22)
     c.lastDot:Show(); c.lastRing:Show()
+    if opts.lastLabel then
+        if not c.lastLabel then c.lastLabel = T.Text(c, 11, { bold = true, justify = "RIGHT" }) end
+        c.lastLabel:ClearAllPoints()
+        local above = last.y < H - 24
+        c.lastLabel:SetPoint(above and "BOTTOMRIGHT" or "TOPRIGHT", plot, "BOTTOMLEFT", last.x - 8, last.y + (above and 8 or -8))
+        c.lastLabel:SetText(opts.lastLabel); c.lastLabel:Show()
+    elseif c.lastLabel then c.lastLabel:Hide() end
 
     c.dot:SetVertexColor(color[1], color[2], color[3], 1)
     c.dotRing:SetVertexColor(color[1], color[2], color[3], 0.25)

@@ -560,9 +560,13 @@ function M.BuildPage(page)
             local rel = Relation(row.id)
             if rel then GameTooltip:AddLine(rel, 0.88, 0.66, 0.24) end
             GameTooltip:AddLine(Tr("Estimated from quantities that vanished between your full scans (cancels and expiries count too)."), 0.5, 0.5, 0.5, true)
+            GameTooltip:AddLine(Tr("Click: price curve"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        r:SetScript("OnMouseUp", function(self, button)
+            if button == "LeftButton" and self.row then ns.PriceCard.Show(self.row.id) end
+        end)
         page.rows[i] = r
     end
     page.empty = T.Text(list, 12, { color = C.muted, justify = "CENTER", wrap = true })

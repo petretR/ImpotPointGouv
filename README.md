@@ -42,6 +42,9 @@ Recipe materials come from the game itself, so they stay correct for WoW Forever
 ### Market tab
 What sells across the whole AH (estimated from full scans), what is worth farming, AH flips, vendor flips (listings below what a vendor pays), and **vendor crafts**: every recipe of every profession whose result sells to a vendor for more than its materials cost at the AH, with the profit per craft, how many crafts the current listings allow, the skill needed and where to learn it.
 
+### Price curves
+Click any item in Lists, Market or Stock (or type `/ipg price <item>`) to open its price card: lowest AH price over 30 days, 7 days or 48 h, the usual price range as a band, the vendor price as a dotted line, and four key numbers (price now, vs vendor or usual price, since the first scan, last 4 days). Below the curve: usual price, usual range, volatility, estimated sales per day and the verdict. Items in your lists get one point per scan, every other item one point per day.
+
 ### Stock tab
 Everything you own, on every character: bags, bank, warband bank, mail, AH listings and items in the mail to your characters. Each item is valued at its AH price after the 5 % cut or its vendor price, whichever is higher (soulbound items: vendor price only). Sort by name, quantity, unit value or total; filter AH-valued, vendor-valued or unpriced items. The Overview "Stock value" card uses the same numbers; click it to open the tab.
 
@@ -67,6 +70,7 @@ English and French, picked automatically from the game client language. Translat
 | `/ipg lists` | Lists tab, plus a check of the recipe data the game provides |
 | `/ipg list` | Routine window |
 | `/ipg de` | Disenchant window |
+| `/ipg price <item>` | Price card of an item (name or link) |
 | `/ipg sold` | Vendor sales of the last 7 days, and what was worth more at the AH |
 | `/ipg report` | 30-day test report per item |
 | `/ipg hints` | Toggle the "worth more at the AH" warnings at vendors |
@@ -92,6 +96,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Prices.lua` | AH scans, price history and stats (usual price, low/high, volatility, sales/day) |
 | `Market.lua` | Market tab (what sells, flips, vendor crafts) |
 | `Stock.lua` | Stock tab: everything you own and its value |
+| `PriceCard.lua` | Price card: price curve and fluctuations of one item |
 | `Sell.lua` | AH posting and cancelling |
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
 | `Routine.lua`, `Next.lua`, `Preview.lua` | Routine window, next-action key, checklist before batch actions |
