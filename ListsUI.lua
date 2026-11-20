@@ -37,6 +37,16 @@ function LU.SortBy(arr, val, desc, tie)
         return t[a] < t[b]
     end)
 end
+-- Durée de recharge lisible : "1 d", "3 d", "20 h".
+function LU.FmtCooldown(secs)
+    if not secs or secs <= 0 then return "|cff615f5c—|r" end
+    if secs >= 86400 then
+        local d = secs / 86400
+        return (d == math.floor(d) and ("%d"):format(d) or ("%.1f"):format(d)) .. " " .. Tr("d")
+    end
+    return ("%d"):format(math.floor(secs / 3600 + 0.5)) .. " " .. Tr("h")
+end
+
 -- Valeur d'une colonne pour un objet (vue liste) : nom, prix, volatilité, ventes, en vente, possédés, verdict.
 local VERDICT_RANK = { buy = 3, sell = 2, farm = 1 }
 function LU.ListValue(key, id, st, verdict)
@@ -397,10 +407,11 @@ function LU.BuildPage(page)
     local SORT_COLS = {
         list = { "name", "now", "usual", "vol", "sales", "listed", "have", "tag" },
         route = { "skill", "recipe", nil, nil, "crafts", "source", "cost" },
+        cd = { "name", "now", "usual", "vol", "cooldown", "perday", "have", "tag" },
     }
     local ASC_FIRST = { name = true, skill = true, recipe = true, source = true }
     local saved = ns.db.settings.listSort or {}
-    page.sortState = { list = saved.list or {}, route = saved.route or {} }
+    page.sortState = { list = saved.list or {}, route = saved.route or {}, cd = saved.cd or {} }
     page.sortMode = "list"
     function page:SortKey(k) return SORT_COLS[self.sortMode][k] end
     function page:SortBy(k)
@@ -704,6 +715,15 @@ function LU.BuildPage(page)
                 r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and "unstable" or "")
                 r.sales:SetText(st and st.sales and (st.sales >= 10 and ("%d"):format(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) or "|cff615f5c—|r")
                 r.listed:SetText(st and st.qty and (st.qty >= 10000 and (Tr("%dk")):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
+                if self.cdView then
+                    -- Recharge et gain par jour sur la ligne de la recette ; rien sur ses composants.
+                    if row.head then
+                        r.sales:SetText(LU.FmtCooldown(row.cdSecs))
+                        r.listed:SetText(row.perDay and ns.FormatMoney(row.perDay, { iconSize = 10, short = true, sign = true, color = true }) or "|cff615f5c—|r")
+                    else
+                        r.sales:SetText(""); r.listed:SetText("")
+                    end
+                end
                 for k = 1, 7 do r.bars[k]:Show() end
                 local have = LS.Have(id)
                 if e.qty and e.qty > 0 and self.list and self.list.leveling then
@@ -776,10 +796,13 @@ function LU.BuildPage(page)
         self.noAH:SetShown(isRoute and true or false); self.noAH:SetSelected(ns.db.settings.routeNoAH and true or false)
         self.routeProf = l.leveling and l.key:sub(4) or nil
         self.resetRoute:SetShown(isRoute and ns.Route.HasBans(self.routeProf) or false)
+        -- Recharges, vue par recette : la recharge et le gain par jour à la place de ventes / en vente.
+        local cdView = l.cd and byRecipe or false
+        self.cdView = cdView
         local H = isRoute and { Tr("Skill"), Tr("Recipe"), "", "", Tr("Crafts"), Tr("Source"), Tr("Cost"), "" }
-            or { Tr("Item"), Tr("Now"), Tr("Usual"), Tr("7 days"), Tr("Sold/day"), Tr("Listed"), Tr("Have"),
-                byRecipe and Tr("Profit") or Tr("Verdict") }
-        self.sortMode = isRoute and "route" or "list"
+            or { Tr("Item"), Tr("Now"), Tr("Usual"), Tr("7 days"), cdView and Tr("Cooldown") or Tr("Sold/day"),
+                cdView and Tr("Per day") or Tr("Listed"), Tr("Have"), byRecipe and Tr("Profit") or Tr("Verdict") }
+        self.sortMode = isRoute and "route" or cdView and "cd" or "list"
         local sortS = self.sortState[self.sortMode]
         self.headLabels = H
         self:Heads()
@@ -825,8 +848,10 @@ function LU.BuildPage(page)
                 if role == "all" or (rec.roles and rec.roles[role]) then
                     local cost, missing, value = LS.RecipeCost(rec)
                     local costNow = LS.RecipeCost(rec, true)
+                    local gain = (value and missing == 0) and (value - cost) or nil
+                    local cdSecs = rec.cd and rec.cd.cd
                     recs[#recs + 1] = { rec = rec, cost = cost, costNow = costNow, missing = missing, value = value,
-                        gain = (value and missing == 0) and (value - cost) or nil }
+                        gain = gain, cdSecs = cdSecs, perDay = gain and cdSecs and cdSecs > 0 and gain * 86400 / cdSecs or nil }
                 end
             end
             table.sort(recs, function(a, b)
@@ -837,13 +862,16 @@ function LU.BuildPage(page)
             if sortS.key then
                 LU.SortBy(recs, function(x)
                     if sortS.key == "tag" then return x.gain end
+                    if sortS.key == "cooldown" then return x.cdSecs end
+                    if sortS.key == "perday" then return x.perDay end
                     if sortS.key == "name" then return Tr(x.rec.name):lower() end
                     return x.rec.id and LU.ListValue(sortS.key, x.rec.id, P.Stats(x.rec.id)) or nil
                 end, sortS.desc, function(x) return Tr(x.rec.name) end)
             end
             data = {}
             for _, x in ipairs(recs) do
-                local head = { head = true, rec = x.rec, id = x.rec.id, cost = x.cost, costNow = x.costNow, missing = x.missing, value = x.value }
+                local head = { head = true, rec = x.rec, id = x.rec.id, cost = x.cost, costNow = x.costNow, missing = x.missing, value = x.value,
+                    cdSecs = x.cdSecs, perDay = x.perDay }
                 if x.rec.id then
                     head.e = l.byId[x.rec.id] or { id = x.rec.id, kind = "product", roles = {}, uses = 1 }
                     head.st = P.Stats(x.rec.id)
