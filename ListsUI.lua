@@ -21,6 +21,34 @@ local VERDICT = {
 local DrawRouteRow
 local function Money(v) return v and ns.FormatMoney(v, { iconSize = 11, short = true }) or "|cff615f5c—|r" end
 
+-- ------------------------------------------------------------ tri par colonne
+-- Trie arr selon val(élément) ; les valeurs inconnues (nil) toujours en dernier, égalités départagées par tie.
+function LU.SortBy(arr, val, desc, tie)
+    local v, t = {}, {}
+    for _, a in ipairs(arr) do v[a] = val(a); t[a] = tie(a) or "" end
+    table.sort(arr, function(a, b)
+        local va, vb = v[a], v[b]
+        if va == nil or vb == nil then
+            if va ~= vb then return va ~= nil end
+        elseif va ~= vb then
+            if desc then return va > vb end
+            return va < vb
+        end
+        return t[a] < t[b]
+    end)
+end
+-- Valeur d'une colonne pour un objet (vue liste) : nom, prix, volatilité, ventes, en vente, possédés, verdict.
+local VERDICT_RANK = { buy = 3, sell = 2, farm = 1 }
+function LU.ListValue(key, id, st, verdict)
+    if key == "name" then return P.Name(id):lower() end
+    if key == "have" then return LS.Have(id) end
+    if key == "tag" then return VERDICT_RANK[verdict] end
+    if not st then return nil end
+    if key == "now" then return st.cur elseif key == "usual" then return st.med
+    elseif key == "vol" then return st.cv elseif key == "sales" then return st.sales
+    elseif key == "listed" then return st.qty end
+end
+
 -- ------------------------------------------------------------ route de montée : lignes dédiées
 -- Montant arrondi : à l'argent près dès 1 pa, à l'or près dès 100 po.
 local function RMoney(v, opts)
@@ -88,7 +116,7 @@ DrawRouteRow = function(r, row, absIndex, page)
         local n = #(x.alts or {})
         if n > 0 then
             local open = page.routeOpen and page.routeOpen[x.from]
-            label = label .. "   |cff6b675f" .. (open and "▾" or ((Tr("+%d options")):format(n))) .. "|r"
+            label = label .. "   |cff6b675f" .. (open and "▼" or ((Tr("+%d options")):format(n))) .. "|r"
         end
         rt.name:SetTextColor(0.93, 0.90, 0.84)
     else
@@ -346,11 +374,54 @@ function LU.BuildPage(page)
         { "Item", "LEFT", 38 }, { "Now", "RIGHT", -402 }, { "Usual", "RIGHT", -330 }, { "7 days", "LEFT", -316, true },
         { "Sold/day", "RIGHT", -176 }, { "Listed", "RIGHT", -120 }, { "Have", "RIGHT", -82 }, { "", "RIGHT", -8 },
     }
-    page.heads = {}
-    for _, h in ipairs(cols) do
+    page.heads, page.headLabels = {}, {}
+    for k, h in ipairs(cols) do
         local t = T.Text(list, 10, { bold = true, color = C.faint, text = h[1], justify = h[4] and "LEFT" or h[2] })
         if h[4] then t:SetPoint("TOPLEFT", list, "TOPRIGHT", h[3], -9) else t:SetPoint("TOP" .. h[2], h[3], -9) end
-        page.heads[#page.heads + 1] = t
+        page.heads[k] = t
+        -- Zone cliquable sur le titre : trie la colonne.
+        local b = CreateFrame("Button", nil, list)
+        b:SetPoint("TOPLEFT", t, "TOPLEFT", -4, 4); b:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", 4, -4)
+        b:SetScript("OnClick", function() page:SortBy(k) end)
+        b:SetScript("OnEnter", function(self)
+            if not page:SortKey(k) then return end
+            t:SetTextColor(unpack(C.text))
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(Tr("Click to sort, again to reverse, a third time for the default order"), 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        b:SetScript("OnLeave", function() GameTooltip:Hide(); page:Heads() end)
+    end
+
+    -- Tri par colonne : une clé par colonne, selon la vue (listes ou route de montée).
+    local SORT_COLS = {
+        list = { "name", "now", "usual", "vol", "sales", "listed", "have", "tag" },
+        route = { "skill", "recipe", nil, nil, "crafts", "source", "cost" },
+    }
+    local ASC_FIRST = { name = true, skill = true, recipe = true, source = true }
+    local saved = ns.db.settings.listSort or {}
+    page.sortState = { list = saved.list or {}, route = saved.route or {} }
+    page.sortMode = "list"
+    function page:SortKey(k) return SORT_COLS[self.sortMode][k] end
+    function page:SortBy(k)
+        local key = self:SortKey(k)
+        if not key then return end
+        local s = self.sortState[self.sortMode]
+        if s.key ~= key then s.key, s.desc = key, not ASC_FIRST[key]
+        elseif s.desc == not ASC_FIRST[key] then s.desc = not s.desc
+        else s.key, s.desc = nil, nil end
+        ns.db.settings.listSort = self.sortState
+        self.offset = 0
+        self:Refresh()
+    end
+    function page:Heads()
+        local s = self.sortState[self.sortMode]
+        for k, t in ipairs(self.heads) do
+            local key = self:SortKey(k)
+            local on = key and key == s.key
+            t:SetText((self.headLabels[k] or "") .. (on and (s.desc and " ▼" or " ▲") or ""))
+            t:SetTextColor(unpack(on and C.gold or C.faint))
+        end
     end
     page.rows = {}
     for i = 1, ROWS do
@@ -702,9 +773,13 @@ function LU.BuildPage(page)
         self.noAH:SetShown(isRoute and true or false); self.noAH:SetSelected(ns.db.settings.routeNoAH and true or false)
         self.routeProf = l.leveling and l.key:sub(4) or nil
         self.resetRoute:SetShown(isRoute and ns.Route.HasBans(self.routeProf) or false)
-        local H = isRoute and { Tr("Skill"), Tr("Recipe"), "", "", Tr("Crafts"), Tr("Source"), Tr("Cost") }
-            or { Tr("Item"), Tr("Now"), Tr("Usual"), Tr("7 days"), Tr("Sold/day"), Tr("Listed"), Tr("Have") }
-        for k = 1, 7 do if self.heads[k] then self.heads[k]:SetText(H[k]) end end
+        local H = isRoute and { Tr("Skill"), Tr("Recipe"), "", "", Tr("Crafts"), Tr("Source"), Tr("Cost"), "" }
+            or { Tr("Item"), Tr("Now"), Tr("Usual"), Tr("7 days"), Tr("Sold/day"), Tr("Listed"), Tr("Have"),
+                byRecipe and Tr("Profit") or Tr("Verdict") }
+        self.sortMode = isRoute and "route" or "list"
+        local sortS = self.sortState[self.sortMode]
+        self.headLabels = H
+        self:Heads()
         -- Colonnes : celles de la route ou celles des listes.
         local HP = isRoute and {
             { "LEFT", 14 }, { "LEFT", 112 }, { "RIGHT", -300 }, { "RIGHT", -300 },
@@ -736,6 +811,10 @@ function LU.BuildPage(page)
             if a.e.uses ~= b.e.uses then return a.e.uses > b.e.uses end
             return P.Name(a.id) < P.Name(b.id)
         end)
+        if sortS.key and not byRecipe then
+            LU.SortBy(data, function(row) return LU.ListValue(sortS.key, row.id, row.st, row.verdict) end,
+                sortS.desc, function(row) return P.Name(row.id) end)
+        end
         if byRecipe then
             -- Une ligne par recette, puis ses composants en retrait.
             local recs = {}
@@ -752,6 +831,13 @@ function LU.BuildPage(page)
                 if a.gain and b.gain and a.gain ~= b.gain then return a.gain > b.gain end
                 return Tr(a.rec.name) < Tr(b.rec.name)
             end)
+            if sortS.key then
+                LU.SortBy(recs, function(x)
+                    if sortS.key == "tag" then return x.gain end
+                    if sortS.key == "name" then return Tr(x.rec.name):lower() end
+                    return x.rec.id and LU.ListValue(sortS.key, x.rec.id, P.Stats(x.rec.id)) or nil
+                end, sortS.desc, function(x) return Tr(x.rec.name) end)
+            end
             data = {}
             for _, x in ipairs(recs) do
                 local head = { head = true, rec = x.rec, id = x.rec.id, cost = x.cost, costNow = x.costNow, missing = x.missing, value = x.value }
@@ -782,7 +868,16 @@ function LU.BuildPage(page)
             route = ns.Route.Compute(self.routeProf, { noAH = ns.db.settings.routeNoAH })
             if self.routeOpenFor ~= self.routeProf then self.routeOpen, self.routeOpenFor = {}, self.routeProf end
             data = {}
-            for _, sg in ipairs(route.segs) do
+            local segs = { unpack(route.segs) }
+            if sortS.key then
+                LU.SortBy(segs, function(sg)
+                    local k = sortS.key
+                    if k == "skill" then return sg.from elseif k == "recipe" then return (sg.r.name or ""):lower()
+                    elseif k == "crafts" then return sg.crafts elseif k == "source" then return sg.r.label
+                    elseif k == "cost" then return sg.cost end
+                end, sortS.desc, function(sg) return ("%03d"):format(sg.from) end)
+            end
+            for _, sg in ipairs(segs) do
                 data[#data + 1] = { route = sg, prof = self.routeProf }
                 if self.routeOpen[sg.from] then
                     for _, a in ipairs(sg.alts) do data[#data + 1] = { alt = a, seg = sg, prof = self.routeProf } end

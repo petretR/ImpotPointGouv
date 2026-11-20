@@ -110,7 +110,7 @@ function S.BuildPage(page)
     function page:Heads()
         for _, b in ipairs(self.heads) do
             local on = b.key and b.key == self.sort
-            b.text:SetText(b.label .. (on and " ▾" or ""))
+            b.text:SetText(b.label .. (on and " ▼" or ""))
             b.text:SetTextColor(unpack(on and C.gold or C.faint))
         end
     end

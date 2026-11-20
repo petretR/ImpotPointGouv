@@ -525,6 +525,8 @@ ns.AddLocale("frFR", {
     ["Learn it (once)"] = "L'apprendre (une fois)",
     ["Every cooking recipe and what it's made of."] = "Toutes les recettes de cuisine et leurs composants.",
     ["Every alchemy recipe and what it's made of."] = "Toutes les recettes d'alchimie et leurs composants.",
+    ["Verdict"] = "Verdict",
+    ["Click to sort, again to reverse, a third time for the default order"] = "Clic : trier ; encore : inverser ; une troisième fois : ordre par défaut",
     ["already paid earlier in the route"] = "déjà payée plus tôt dans la route",
     ["  ·  %d cooldown recipes left out"] = "  ·  %d recettes à recharge écartées",
     ["Click: use this recipe instead"] = "Clic : prendre cette recette à la place",
