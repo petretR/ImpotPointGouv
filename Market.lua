@@ -546,6 +546,7 @@ function M.BuildPage(page)
                 end
                 if row.who then GameTooltip:AddDoubleLine(Tr("Your skill"), ("%s %d"):format(row.who, row.mySkill), 0.7, 0.7, 0.7, 1, 1, 1) end
                 GameTooltip:AddLine(Tr("Materials at today's AH price (vendor price for vendor supplies)."), 0.5, 0.5, 0.5, true)
+                GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
                 GameTooltip:Show()
                 return
             end
@@ -560,9 +561,21 @@ function M.BuildPage(page)
             local rel = Relation(row.id)
             if rel then GameTooltip:AddLine(rel, 0.88, 0.66, 0.24) end
             GameTooltip:AddLine(Tr("Estimated from quantities that vanished between your full scans (cancels and expiries count too)."), 0.5, 0.5, 0.5, true)
+            GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        -- Clic : historique des prix ; Maj-clic : lien dans la discussion.
+        r:SetScript("OnMouseUp", function(self, button)
+            local row = self.row
+            if not row or button ~= "LeftButton" then return end
+            if IsModifiedClick and IsModifiedClick("CHATLINK") then
+                local _, link = ns.GetItemInfo(row.id)
+                if link and ChatEdit_InsertLink then ChatEdit_InsertLink(link) end
+            elseif ns.History then
+                ns.History.Show(row.id)
+            end
+        end)
         page.rows[i] = r
     end
     page.empty = T.Text(list, 12, { color = C.muted, justify = "CENTER", wrap = true })

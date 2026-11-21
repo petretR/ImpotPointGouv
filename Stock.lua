@@ -152,9 +152,21 @@ function S.BuildPage(page)
             if ah then GameTooltip:AddDoubleLine(Tr("AH (after the 5 % cut)"), ns.FormatMoney(math.floor(ah * 0.95), { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1) end
             if vs then GameTooltip:AddDoubleLine(Tr("Vendor"), ns.FormatMoney(vs, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1) end
             if I.IsBound(row.id) then GameTooltip:AddLine(Tr("Soulbound: vendor value only"), 0.6, 0.6, 0.6) end
+            GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
+        -- Clic : historique des prix ; Maj-clic : lien dans la discussion.
+        r:SetScript("OnMouseUp", function(self, button)
+            local row = self.row
+            if not row or button ~= "LeftButton" then return end
+            if IsModifiedClick and IsModifiedClick("CHATLINK") then
+                local _, link = ns.GetItemInfo(row.id)
+                if link and ChatEdit_InsertLink then ChatEdit_InsertLink(link) end
+            elseif ns.History then
+                ns.History.Show(row.id)
+            end
+        end)
         page.rows[i] = r
     end
     page.empty = T.Text(list, 12, { color = C.muted, justify = "CENTER", wrap = true })

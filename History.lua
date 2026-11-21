@@ -208,13 +208,49 @@ function H.Note(id, low, qty, ladder)
     if H.frame and H.frame:IsShown() and H.id == id then H.dirty = true end
 end
 
+-- Pas encore d'historique : ce que les prix gardent déjà (points par scan des listes, plus bas du jour).
+local function FromPrices(id, span)
+    local e = P.Entry(id)
+    local out = {}
+    if not e then return out end
+    local now = time()
+    if span and span <= KEEP_SCANS then
+        for _, pt in ipairs(e.h or {}) do
+            if now - pt[1] <= span then
+                out[#out + 1] = { t = pt[1], low = pt[2] ~= 0 and pt[2] or nil, qty = pt[3] }
+            end
+        end
+    end
+    if #out == 0 then
+        local from = span and math.floor((now - span) / 86400) or -math.huge
+        for _, pt in ipairs(e.d or {}) do
+            if pt[1] >= from then out[#out + 1] = { t = pt[1] * 86400 + 43200, low = pt[2], qty = pt[3], daily = true } end
+        end
+    end
+    return out
+end
+
 -- Points d'une période : { t, low, mkt, qty, gone, new } ; par scan jusqu'à 7 jours, par jour au-delà.
 function H.Series(id, span)
     local h = Root()[id]
+    if not h then return FromPrices(id, span) end
     local out = {}
-    if not h then return out end
     local now = time()
+    local function Daily(before)
+        local from = span and math.floor((now - span) / 86400) or -math.huge
+        for _, s in ipairs(h.d) do
+            local f = Split(s)
+            local t = f[1] and f[1] * 86400 + 43200
+            if f[1] and f[1] >= from and (not before or t < before) and (not span or now - t <= span) then
+                out[#out + 1] = { t = t, low = f[2], mkt = (f[4] or 0) > 0 and f[3] and f[3] / f[4] or nil,
+                    qty = f[5], gone = f[6], new = f[7], scans = f[8], daily = true }
+            end
+        end
+    end
     if span and span <= KEEP_SCANS then
+        -- Points par scan ; avant le premier, les résumés du jour (objet suivi depuis peu).
+        local first = h.s[1] and Split(h.s[1])[1]
+        Daily(first or now + 1)
         for _, s in ipairs(h.s) do
             local f = Split(s)
             if f[1] and now - f[1] <= span then
@@ -222,14 +258,7 @@ function H.Series(id, span)
             end
         end
     else
-        local from = span and math.floor((now - span) / 86400) or -math.huge
-        for _, s in ipairs(h.d) do
-            local f = Split(s)
-            if f[1] and f[1] >= from then
-                out[#out + 1] = { t = f[1] * 86400 + 43200, low = f[2], mkt = (f[4] or 0) > 0 and f[3] and f[3] / f[4] or nil,
-                    qty = f[5], gone = f[6], new = f[7], scans = f[8], daily = true }
-            end
-        end
+        Daily(nil)
     end
     return out
 end
@@ -237,7 +266,15 @@ end
 -- Résumé pour l'en-tête : dernier point, point d'il y a 24 h, scans aujourd'hui.
 function H.Summary(id)
     local h = Root()[id]
-    if not h then return nil end
+    if not h then
+        -- d'après les plus bas du jour gardés par les prix
+        local e = P.Entry(id)
+        if not e or not e.d or #e.d == 0 then return nil end
+        local today = math.floor(time() / 86400)
+        local ago
+        for _, pt in ipairs(e.d) do if pt[1] < today then ago = pt[2] end end
+        return { t = e.t, low = e.cur, ago = ago, today = 0 }
+    end
     local now, last, ago, today = time(), nil, nil, 0
     local day = math.floor(now / 86400)
     for _, s in ipairs(h.s) do
@@ -450,7 +487,7 @@ local function Draw(f, pts)
         local l = Pool(f.xlabels, i, function() return T.Text(f, 10, { color = C.faint, justify = "CENTER" }) end)
         l:ClearAllPoints()
         l:SetPoint(i == 1 and "TOPLEFT" or i == 5 and "TOPRIGHT" or "TOP", barsF, "BOTTOMLEFT", X(t), -5)
-        l:SetText(date(fmt, t))
+        l:SetText(date(fmt, math.floor(t)))
     end
 
     -- Courbes : un point par scan, reliés au scan suivant quand les deux ont une valeur.
@@ -579,3 +616,5 @@ function H.Command(arg)
 end
 
 ns.On("PRICES_CHANGED", function() if H.frame and H.frame:IsShown() then H.dirty = true end end)
+-- Suivi automatique des objets ouverts (essayé puis retiré) : on efface ce qu'il a pu laisser.
+ns.On("DB_READY", function() if ns.db then ns.db.histTrack = nil end end)
