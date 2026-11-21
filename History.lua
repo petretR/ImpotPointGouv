@@ -16,7 +16,7 @@ local MERGE = 120              -- deux enregistrements à moins de 2 min = le m�
 local DIFF_MAX_GAP = 48 * 3600 -- au-delà, on ne compare plus deux scans (parties / ajoutées inconnues)
 local LADDER_LEVELS = 60       -- paliers de prix gardés pour comparer au scan suivant
 
-local function Realm() return (GetRealmName and GetRealmName()) or "?" end
+local function Realm() return ns.Realm() end
 local function Root()
     ns.db.hist = ns.db.hist or {}
     local r = Realm()

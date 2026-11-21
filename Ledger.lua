@@ -107,7 +107,7 @@ local function EnsureChar()
     charKey = guid
     local c = db.chars[guid]
     local name = UnitName("player")
-    local realm = GetRealmName and GetRealmName() or ""
+    local realm = ns.Realm()
     local _, class = UnitClass("player")
     local isNew = false
     if not c then
