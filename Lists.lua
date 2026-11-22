@@ -188,15 +188,15 @@ end
 
 local function IsVendor(id) return P.IsVendorItem and P.IsVendorItem(id) end
 
--- Composants d'un objet fabriqué (sans les objets vendus par les marchands), ou nil.
-function LS.ReagentsOf(id)
+-- Composants d'un objet fabriqué (sans les objets vendus par les marchands, sauf withVendor), ou nil.
+function LS.ReagentsOf(id, withVendor)
     local D = Data()
     local it = D.items and D.items[id]
     local r = (it and it.s and (RDB()[it.s] or (D.spellReagents and D.spellReagents[it.s]))) or ProductIndex()[id] or (D.reagents and D.reagents[id])
     if not r then return nil end
     local out = {}
     for _, rg in ipairs(r) do
-        if rg[1] and not IsVendor(rg[1]) then out[#out + 1] = rg end
+        if rg[1] and (withVendor or not IsVendor(rg[1])) then out[#out + 1] = rg end
     end
     return out
 end
@@ -249,12 +249,17 @@ end
 
 -- Recette affichée dans la vue "par recette" : produit (ou enchantement) puis ses composants (2 niveaux).
 -- mult = nombre de crafts ; les quantités sont pour un objet produit (divisées par ce que le craft produit).
+-- Les fournitures de marchand restent dans l'arbre (4e champ = true) pour compter dans le coût, sans enfants.
 local function Tree(rg, depth, out, mult, flat)
     for _, r in ipairs(rg or {}) do
-        if r[1] and not IsVendor(r[1]) then
+        if r[1] then
             local n = (mult or 1) * (r[2] or 1)
-            out[#out + 1] = { r[1], n, depth }
-            if depth < 2 and not flat then Tree(LS.ReagentsOf(r[1]), depth + 1, out, n / LS.YieldOf(r[1])) end
+            if IsVendor(r[1]) then
+                out[#out + 1] = { r[1], n, depth, true }
+            else
+                out[#out + 1] = { r[1], n, depth }
+                if depth < 2 and not flat then Tree(LS.ReagentsOf(r[1], true), depth + 1, out, n / LS.YieldOf(r[1])) end
+            end
         end
     end
     return out
@@ -262,7 +267,7 @@ end
 
 local function AddRecipe(list, rec, rg)
     -- Recharges (transmutations…) : composants directs seulement, sinon les essences se "transmutent" en boucle.
-    rec.mats = Tree(rg or (rec.id and LS.ReagentsOf(rec.id)), 1, {}, rec.id and 1 / LS.YieldOf(rec.id) or 1, rec.cd ~= nil)
+    rec.mats = Tree(rg or (rec.id and LS.ReagentsOf(rec.id, true)), 1, {}, rec.id and 1 / LS.YieldOf(rec.id) or 1, rec.cd ~= nil)
     rec.name = rec.name or (rec.id and P.Name(rec.id)) or "?"
     list.recipes[#list.recipes + 1] = rec
     for _, m in ipairs(rec.mats) do
@@ -358,7 +363,9 @@ function LS.Build()
                 for i = 9, #t, 2 do rg[#rg + 1] = { t[i], t[i + 1] or 1 } end
             end
             Add(l, id, "product", ALL_ROLES)
-            for _, m in ipairs(Tree(rg, 1, {}, 1 / LS.YieldOf(id))) do Add(l, m[1], "mat", ALL_ROLES) end
+            for _, m in ipairs(Tree(rg, 1, {}, 1 / LS.YieldOf(id))) do
+                if not m[4] then Add(l, m[1], "mat", ALL_ROLES) end -- fournitures de marchand : pas dans la liste d'achat
+            end
             AddRecipe(l, { id = id, spell = spell, roles = ALL_ROLES }, rg)
         end
         return l
@@ -534,6 +541,9 @@ end
 function LS.RecipeCost(rec, useNow)
     local mats = rec.mats or {}
     local function Price(id)
+        -- Fourniture de marchand : son prix chez le marchand, jamais l'HV.
+        local v = IsVendor(id) and P.VendorBuy(id)
+        if v then return v end
         local st = P.Stats(id)
         return st and ((useNow and st.cur) or st.med or st.cur)
     end

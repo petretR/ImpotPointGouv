@@ -5,6 +5,9 @@ local _, ns = ...
 local Tr = ns.L
 local T, P, LS = ns.Theme, ns.Prices, ns.Lists
 local C = T.C
+-- Icônes en ligne : prix instable (triangle d'alerte teinté rouge) et fourniture de marchand (sac du marchand).
+local UNSTABLE_ICON = "|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:13:13:0:0:64:64:0:64:0:64:237:92:82|t"
+local MERCHANT_ICON = "|TInterface\\GossipFrame\\VendorGossipIcon:11:11:0:0|t"
 local LU = {}
 ns.ListsUI = LU
 
@@ -519,12 +522,20 @@ function LU.BuildPage(page)
             end
             local st = row.st
             GameTooltip:AddLine(" ")
-            if st and st.med then
+            if row.merchant then
+                GameTooltip:AddDoubleLine(Tr("Vendor price"), row.vendorPrice and ns.FormatMoney(row.vendorPrice, { iconSize = 11 }) or "?", 0.7, 0.7, 0.7, 1, 1, 1)
+                if row.qty then
+                    GameTooltip:AddDoubleLine(Tr("In this recipe"), row.vendorPrice and ns.FormatMoney(row.vendorPrice * row.qty, { iconSize = 11 }) or "?", 0.7, 0.7, 0.7, 1, 1, 1)
+                end
+                GameTooltip:AddLine(Tr("Sold by merchants: counted in the recipe cost, left out of the shopping lists."), 0.6, 0.6, 0.6, true)
+            elseif st and st.med then
                 GameTooltip:AddDoubleLine(Tr("Usual price (7 days)"), ns.FormatMoney(st.med, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
                 GameTooltip:AddDoubleLine(Tr("Low / high"), ns.FormatMoney(st.low, { iconSize = 11 }) .. "  /  " .. ns.FormatMoney(st.high, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
                 local mx = LS.BuyMax(st)
                 if mx then GameTooltip:AddDoubleLine(Tr("Buy limit"), ns.FormatMoney(mx, { iconSize = 11 }), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
-                GameTooltip:AddDoubleLine(Tr("Volatility"), ("%d %%"):format(math.floor((st.cv or 0) * 100 + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
+                local unstable = (st.n or 0) >= 4 and (st.cv or 0) > 0.35
+                GameTooltip:AddDoubleLine(Tr("Volatility"), ("%d %%"):format(math.floor((st.cv or 0) * 100 + 0.5))
+                    .. (unstable and ("  " .. Tr("(unstable)")) or ""), 0.7, 0.7, 0.7, unstable and 0.93 or 1, unstable and 0.36 or 1, unstable and 0.32 or 1)
                 GameTooltip:AddDoubleLine(Tr("Price points"), tostring(st.n or 0), 0.7, 0.7, 0.7, 1, 1, 1)
             else
                 GameTooltip:AddLine(Tr("No price history yet: scan this list at the AH."), 0.6, 0.6, 0.6, true)
@@ -712,7 +723,7 @@ function LU.BuildPage(page)
                         t:SetHeight(2); t:SetVertexColor(1, 1, 1, 0.06); t:Show()
                     end
                 end
-                r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and "unstable" or "")
+                r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and UNSTABLE_ICON or "")
                 r.sales:SetText(st and st.sales and (st.sales >= 10 and ("%d"):format(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) or "|cff615f5c—|r")
                 r.listed:SetText(st and st.qty and (st.qty >= 10000 and (Tr("%dk")):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
                 if self.cdView then
@@ -752,6 +763,14 @@ function LU.BuildPage(page)
                     r.tag:SetText(craft and Tr("CRAFT") or Tr("BUY IT"))
                     r.tag:SetTextColor(unpack(craft and VERDICT.buy[2] or C.gold))
                 elseif v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
+                if row.merchant then
+                    -- Fourniture de marchand : prix chez le marchand, pas de courbe ni de verdict HV.
+                    -- Ventes / jour et quantité en vente restent affichées quand l'objet se vend aussi à l'HV.
+                    r.now:SetText(Money(row.vendorPrice)); r.usual:SetText("")
+                    r.vol:SetText("")
+                    for k = 1, 7 do r.bars[k]:Hide() end
+                    r.buy:Hide(); r.tag:Show(); r.tag:SetText(MERCHANT_ICON); r.tag:SetTextColor(1, 1, 1)
+                end
                 r:SetAlpha(row.dim and 0.45 or 1)
                 r:Show()
             else
@@ -883,6 +902,7 @@ function LU.BuildPage(page)
                     local e = l.byId[m[1]] or { id = m[1], kind = "mat", roles = {}, uses = 1 }
                     local row = LS.Row(e)
                     row.depth, row.qty = m[3], m[2]
+                    if m[4] then row.merchant, row.vendorPrice, row.verdict = true, P.VendorBuy(m[1]), nil end
                     if dimBelow and m[3] <= dimBelow then dimBelow = nil end
                     row.dim = dimBelow ~= nil
                     local d = detail[k]
