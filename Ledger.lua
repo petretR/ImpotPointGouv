@@ -365,6 +365,7 @@ local CONTEXT_EVENTS = {
 }
 
 local frame = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(frame, "Ledger") end
 local function Register(ev) pcall(frame.RegisterEvent, frame, ev) end
 
 Register("ADDON_LOADED")

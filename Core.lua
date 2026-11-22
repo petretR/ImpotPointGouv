@@ -107,32 +107,49 @@ local function RealmId()
     local guid = UnitGUID and UnitGUID("player")
     return guid and guid:match("^Player%-(%d+)%-")
 end
+-- Résultat gardé pour la session : ns.Realm() est appelé à chaque lecture de prix (des milliers de fois par
+-- affichage), et sans nom du jeu le repli ne doit être calculé qu'une fois.
+local realmCache
 function ns.Realm()
     local r = GetRealmName and GetRealmName()
     local db = ns.db
-    local rid = RealmId()
     if r and r ~= "" then
-        if db then
+        if realmCache ~= r and db then
+            local rid = RealmId()
             db.realmById = db.realmById or {}
             if rid then db.realmById[rid] = r end
             db.lastRealm, db.realmKey = r, r -- realmKey : nom gardé par la v0.23.1 / 0.24.0
         end
+        realmCache = r
         return r
     end
-    if db then
-        if rid and db.realmById and db.realmById[rid] then return db.realmById[rid] end
-        if db.realmKey and db.realmKey ~= "" then return db.realmKey end
-        if db.lastRealm then return db.lastRealm end
-        -- Aucun nom connu : le royaume qui a le plus de prix enregistrés.
-        local best, most = nil, -1
-        for k, t in pairs(db.prices or {}) do
-            local n = 0
-            for _ in pairs(t) do n = n + 1 end
-            if k ~= "" and k ~= "?" and n > most then best, most = k, n end
-        end
-        if best then return best end
+    if realmCache then return realmCache end
+    if not db then return "?" end
+    local rid = RealmId()
+    local found = (rid and db.realmById and db.realmById[rid])
+        or (db.realmKey ~= "" and db.realmKey) or db.lastRealm
+    if not found then
+        -- Royaume enregistré pour ce personnage.
+        local guid = UnitGUID and UnitGUID("player")
+        local c = guid and db.chars and db.chars[guid]
+        if c and c.realm and c.realm ~= "" then found = c.realm end
     end
-    return "?"
+    if not found then
+        -- Aucun nom connu : le royaume qui a le plus de prix enregistrés (calculé une seule fois).
+        local most = -1
+        for k, t in pairs(db.prices or {}) do
+            if k ~= "" and k ~= "?" then
+                local n = 0
+                for _ in pairs(t) do n = n + 1 end
+                if n > most then found, most = k, n end
+            end
+        end
+    end
+    if not found then return "?" end
+    realmCache = found
+    db.realmKey = found
+    if rid then db.realmById = db.realmById or {}; db.realmById[rid] = found end
+    return found
 end
 
 -- Données enregistrées sous un royaume vide ("") : fusionnées dans le vrai royaume.
@@ -399,7 +416,12 @@ end
 
 -- Petit bus d'événements interne (le Ledger prévient l'UI).
 local listeners = {}
-function ns.On(name, fn) listeners[name] = listeners[name] or {}; table.insert(listeners[name], fn) end
+function ns.On(name, fn)
+    listeners[name] = listeners[name] or {}
+    -- Chronométré par écouteur (/ipg perf) : "Fichier:ÉVÉNEMENT".
+    if ns.Profile then fn = ns.Profile.Wrap(ns.Profile.Caller(3) .. ":" .. name, fn) end
+    table.insert(listeners[name], fn)
+end
 function ns.Fire(name, ...)
     for _, fn in ipairs(listeners[name] or {}) do
         local ok, err = pcall(fn, ...)

@@ -1032,15 +1032,22 @@ local function RefreshIfShown()
     local f = _G.ImpotPointGouvFrame
     if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "lists" then ns.UI.Refresh() end
 end
-local pend
+-- Au plus un rafraîchissement toutes les 2 s : les infos d'objets arrivent par centaines.
+local pend, lastRefresh = false, 0
 local function Soon()
     if pend then return end
     pend = true
-    C_Timer.After(0.3, function() pend = false; RefreshIfShown() end)
+    local wait = math.max(0.3, 2 - (GetTime() - lastRefresh))
+    C_Timer.After(wait, function() pend = false; lastRefresh = GetTime(); RefreshIfShown() end)
 end
+LU.Soon = Soon
 ns.On("LISTS_CHANGED", Soon)
 ns.On("PRICES_CHANGED", Soon)
 ns.On("LIST_SCAN", Soon)
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "ListsUI") end
 for _, e in ipairs({ "GET_ITEM_INFO_RECEIVED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "BAG_UPDATE_DELAYED" }) do pcall(ev.RegisterEvent, ev, e) end
-ev:SetScript("OnEvent", function() Soon() end)
+ev:SetScript("OnEvent", function(_, event, _, success)
+    if event == "GET_ITEM_INFO_RECEIVED" and success == false then return end -- objet inexistant
+    Soon()
+end)

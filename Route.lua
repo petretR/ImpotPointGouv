@@ -185,9 +185,26 @@ local function Chance(r, s)
     return (r.g - s) / math.max(1, r.g - r.y)
 end
 
+-- Cache des routes : recalculées quand les prix, les persos, les choix ou les réglages changent,
+-- au plus tard toutes les 10 min (recettes apprises, formateur). Changer de liste ne refait plus le calcul.
+local routeCache, routeVer = {}, 0
+function RO.Invalidate() routeVer = routeVer + 1 end
+for _, ev in ipairs({ "PRICES_CHANGED", "CHARS_CHANGED", "LISTS_CHANGED", "INVENTORY_CHANGED" }) do ns.On(ev, RO.Invalidate) end
+
 -- Calcule la route. opts : { noAH = bool, from = skill, sell = { ah = bool, vendor = bool, de = bool } }
+local Compute
 function RO.Compute(prof, opts)
     opts = opts or {}
+    local sell = RO.SellSet(opts.sell)
+    local key = table.concat({ prof, tostring(opts.noAH and true or false), tostring(opts.from or RO.CurrentSkill(prof)),
+        sell.ah and "a" or "", sell.vendor and "v" or "", sell.de and "d" or "" }, ":")
+    local c = routeCache[key]
+    if c and c.ver == routeVer and time() - c.at < 600 then return c.res end
+    local res = ns.Profile and ns.Profile.Time("Route:Compute " .. prof, Compute, prof, opts) or Compute(prof, opts)
+    routeCache[key] = { ver = routeVer, at = time(), res = res }
+    return res
+end
+Compute = function(prof, opts)
     local sell = RO.SellSet(opts.sell)
     local recipes = RO.Recipes(prof)
     local known = KnownSet(prof)
@@ -317,9 +334,11 @@ function RO.Ban(prof, spell)
     ns.db.settings.routeBan = ns.db.settings.routeBan or {}
     ns.db.settings.routeBan[prof] = ns.db.settings.routeBan[prof] or {}
     ns.db.settings.routeBan[prof][spell] = true
+    RO.Invalidate()
 end
 function RO.ResetBans(prof)
     if ns.db.settings.routeBan then ns.db.settings.routeBan[prof] = nil end
+    RO.Invalidate()
 end
 function RO.HasBans(prof)
     local b = ns.db.settings.routeBan and ns.db.settings.routeBan[prof]
@@ -337,7 +356,9 @@ local function ReadTrainer()
             ns.db.trainer[name:lower()] = { c = cost, t = time() }
         end
     end
+    RO.Invalidate()
 end
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Route") end
 for _, e in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE" }) do pcall(ev.RegisterEvent, ev, e) end
 ev:SetScript("OnEvent", function() if ns.db then C_Timer.After(0.3, ReadTrainer) end end)

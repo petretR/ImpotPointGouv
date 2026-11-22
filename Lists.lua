@@ -108,10 +108,38 @@ local function FromRecipeTooltip(rec)
 end
 
 -- Demande au jeu les composants de toutes les recettes des listes. Renvoie trouvés, total.
-function LS.ResolveReagents()
+-- Recettes déjà tentées cette session (schéma puis infobulle) : on ne redemande pas au jeu à chaque passage,
+-- chaque demande d'infobulle charge des objets et déclenche des événements en cascade.
+local resolveTried = {}
+local lastResolve, sweepRunning = 0, false
+-- Nombre produit des autres recettes (intermédiaires comme le Cuir robuste traité), une fois par session,
+-- par lots de 60 pour ne pas figer le jeu.
+local function SweepSchematics()
+    if sweepRunning then return end
+    local todo = {}
+    for spell, t in pairs(Data().allRecipes or {}) do
+        if t[1] ~= 0 and not schTried[spell] and not schMade[t[1]] then todo[#todo + 1] = spell end
+    end
+    if #todo == 0 then return end
+    sweepRunning = true
+    local i = 1
+    local function Batch()
+        local t0 = debugprofilestop and debugprofilestop()
+        for k = i, math.min(#todo, i + 59) do Schematic(todo[k]) end
+        if t0 and ns.Profile then ns.Profile.Add("Lists:SchematicBatch", debugprofilestop() - t0) end
+        i = i + 60
+        if i <= #todo then C_Timer.After(0.1, Batch) else sweepRunning = false; LS.dirty = true end
+    end
+    Batch()
+end
+function LS.ResolveReagents(force)
+    if not force and LS.resolved and GetTime and GetTime() - lastResolve < 30 then
+        return LS.resolved.found, LS.resolved.total
+    end
+    lastResolve = GetTime and GetTime() or 0
     local db, D = RDB(), Data()
     local found, total = 0, 0
-    nameIndex = nil
+    local newFound = false
     local function Try(spell, rec)
         if not spell then return end
         total = total + 1
@@ -119,20 +147,21 @@ function LS.ResolveReagents()
             if not schTried[spell] then Schematic(spell) end -- pour le nombre produit
             found = found + 1; return
         end
+        if resolveTried[spell] then return end
+        resolveTried[spell] = true
         local r = FromSchematic(spell) or FromRecipeTooltip(rec)
-        if r then db[spell] = r; found = found + 1 end
+        if r then db[spell] = r; found = found + 1; newFound = true end
     end
     for _, it in pairs(D.items or {}) do Try(it.s, it.rec) end
     for spell, e in pairs(D.ench or {}) do Try(spell, e.rec) end
     for _, cd in ipairs(D.cooldowns or {}) do Try(cd.s) end
-    -- Nombre produit des autres recettes (intermédiaires comme le Cuir robuste traité), une fois par session.
-    for spell, t in pairs(D.allRecipes or {}) do
-        if t[1] ~= 0 and not schTried[spell] and not schMade[t[1]] then Schematic(spell) end
-    end
+    SweepSchematics()
     LS.resolved = { found = found, total = total, t = time() }
-    LS.dirty = true
+    if newFound or not LS.groups then nameIndex = nil; LS.dirty = true end
     return found, total
 end
+-- Nouvelles recettes connues (fenêtre de métier) : on peut retenter celles qui manquaient.
+function LS.RetryReagents() resolveTried = {}; lastResolve = 0 end
 
 -- Produit -> composants, d'après les recettes que vos personnages connaissent (fenêtre de métier ouverte).
 -- Garde aussi le nombre d'objets produits par craft, tel que le jeu l'affiche.
@@ -661,6 +690,7 @@ end
 LS.CancelBuy = function() EndBuy(Tr("Purchase cancelled.")) end
 
 local bev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(bev, "Lists") end
 for _, e in ipairs({ "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE",
     "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED", "AUCTION_HOUSE_CLOSED" }) do pcall(bev.RegisterEvent, bev, e) end
 bev:SetScript("OnEvent", function(_, event, a1, a2)
@@ -800,6 +830,7 @@ local function Remind()
 end
 
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Lists") end
 for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "TRADE_SKILL_SHOW", "SPELL_UPDATE_COOLDOWN", "TRADE_SKILL_LIST_UPDATE" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
@@ -816,6 +847,7 @@ ev:SetScript("OnEvent", function(_, event)
     elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" then
         -- Nouvelles recettes connues : on refait l'index et on retente les composants manquants.
         productIndex = nil
+        if event == "TRADE_SKILL_SHOW" then LS.RetryReagents() end
         C_Timer.After(1, function() LS.ResolveReagents(); LS.UpdateCooldowns() end)
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         if cdPend then return end
@@ -826,7 +858,8 @@ end)
 
 -- Diagnostic (/ipg lists) : combien de recettes le jeu a pu détailler.
 function LS.Diag()
-    local found, total = LS.ResolveReagents()
+    LS.RetryReagents()
+    local found, total = LS.ResolveReagents(true)
     LS.Build()
     local n = 0
     for _, g in ipairs(LS.groups) do for _, l in ipairs(g.lists) do n = n + #l.entries end end
@@ -842,4 +875,11 @@ function LS.Diag()
     local b = it and FromRecipeTooltip(it.rec)
     ns.Print(Tr("test, Living Crown — recipe data: ") .. (a and Fmt(a) or Tr("not available")))
     ns.Print(Tr("test, Living Crown — pattern tooltip: ") .. (b and Fmt(b) or Tr("not available")))
+end
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    LS.Build = ns.Profile.Wrap("Lists:Build", LS.Build)
+    LS.UpdateCooldowns = ns.Profile.Wrap("Lists:UpdateCooldowns", LS.UpdateCooldowns)
+    LS.ResolveReagents = ns.Profile.Wrap("Lists:ResolveReagents", LS.ResolveReagents)
 end

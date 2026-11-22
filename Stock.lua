@@ -229,12 +229,15 @@ end
 -- Noms et prix marchands qui arrivent après coup : redessine la page.
 local pend
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Stock") end
 pcall(ev.RegisterEvent, ev, "GET_ITEM_INFO_RECEIVED")
-ev:SetScript("OnEvent", function()
-    if pend then return end
+local lastDraw = 0
+ev:SetScript("OnEvent", function(_, _, _, success)
+    if success == false or pend then return end -- objet inexistant : rien à redessiner
     pend = true
-    C_Timer.After(0.6, function()
+    C_Timer.After(math.max(0.6, 2 - (GetTime() - lastDraw)), function()
         pend = false
+        lastDraw = GetTime()
         local f = _G.ImpotPointGouvFrame
         if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "stock" then ns.UI.Refresh() end
     end)

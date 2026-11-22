@@ -1001,6 +1001,7 @@ end
 
 -- ------------------------------------------------------------ événements
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Mail") end
 for _, e in ipairs({ "MAIL_SHOW", "MAIL_CLOSED", "MAIL_INBOX_UPDATE", "UI_ERROR_MESSAGE", "BAG_UPDATE" }) do
     pcall(ev.RegisterEvent, ev, e)
 end

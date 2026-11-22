@@ -100,9 +100,21 @@ local function Pct(sorted, p)
     if n == 0 then return nil end
     return sorted[math.max(1, math.min(n, math.ceil(n * p)))]
 end
+-- Cache : les stats d'un objet ne changent qu'avec un nouveau scan (e.t) ; recalculées au plus tard
+-- toutes les 10 min (la fenêtre de 7 jours glisse). Les listes les demandent des milliers de fois par affichage.
+local statsCache = {}
+local StatsRaw
 function P.Stats(id)
     local e = P.Entry(id)
     if not e then return nil end
+    local c = statsCache[id]
+    local now = time()
+    if c and c.e == e and c.t == e.t and c.nh == #(e.h or {}) and now - c.at < 600 then return c.st end
+    local st = StatsRaw(id, e)
+    statsCache[id] = { e = e, t = e.t, nh = #(e.h or {}), at = now, st = st }
+    return st
+end
+StatsRaw = function(id, e)
     local now, vals = time(), {}
     local h = e.h or {}
     for _, pt in ipairs(h) do
@@ -846,6 +858,7 @@ end
 
 -- ------------------------------------------------------------ événements
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Prices") end
 for _, e in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
     "AUCTION_ITEM_LIST_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN",
     "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", "AUCTION_HOUSE_BROWSE_RESULTS_ADDED", "REPLICATE_ITEM_LIST_UPDATE",
@@ -907,3 +920,8 @@ ev:SetScript("OnEvent", function(_, event, ...)
         end
     end
 end)
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    P.Record = ns.Profile.Wrap("Prices:Record", P.Record)
+end

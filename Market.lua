@@ -286,6 +286,7 @@ local function OnItemResults(itemKey)
 end
 
 local bev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(bev, "Market") end
 for _, e in ipairs({ "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE", "COMMODITY_PURCHASE_SUCCEEDED",
     "COMMODITY_PURCHASE_FAILED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "ITEM_SEARCH_RESULTS_UPDATED",
     "UI_ERROR_MESSAGE" }) do pcall(bev.RegisterEvent, bev, e) end
@@ -695,15 +696,28 @@ end
 -- Noms qui arrivent après coup : redessine la page (avec un petit délai).
 local pend
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Market") end
 pcall(ev.RegisterEvent, ev, "GET_ITEM_INFO_RECEIVED")
-ev:SetScript("OnEvent", function(_, _, id)
+-- Objets inexistants (success = false) : ignorés, sinon chaque redessin les redemande et relance l'événement.
+-- Au plus un redessin toutes les 2 s : les infos arrivent par milliers après un scan complet.
+local lastDraw = 0
+ev:SetScript("OnEvent", function(_, _, id, success)
+    if success == false then return end
     M.OnItemInfo(id)
     if pend then return end
     pend = true
-    C_Timer.After(0.5, function()
+    C_Timer.After(math.max(0.5, 2 - (GetTime() - lastDraw)), function()
         pend = false
+        lastDraw = GetTime()
         local f = _G.ImpotPointGouvFrame
         if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "market" then ns.UI.Refresh() end
         if M.dirty then M.dirty = false; ns.Fire("MARKET_CHANGED") end
     end)
 end)
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    M.OnFullScan = ns.Profile.Wrap("Market:OnFullScan", M.OnFullScan)
+    M.List = ns.Profile.Wrap("Market:List", M.List)
+    M.VendorCrafts = ns.Profile.Wrap("Market:VendorCrafts", M.VendorCrafts)
+end

@@ -397,6 +397,7 @@ end
 
 -- ------------------------------------------------------------ événements
 local f = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(f, "Track") end
 for _, ev in ipairs({ "AUCTION_HOUSE_SHOW", "MERCHANT_SHOW", "MERCHANT_CLOSED", "BAG_UPDATE_DELAYED", "CHAT_MSG_LOOT",
                       "QUEST_COMPLETE", "QUEST_TURNED_IN", "PLAYER_ENTERING_WORLD" }) do
     pcall(f.RegisterEvent, f, ev)

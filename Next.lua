@@ -59,6 +59,7 @@ local function Queue()
 end
 
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Next") end
 for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "PLAYER_REGEN_ENABLED", "TRADE_SKILL_SHOW",
     "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE", "UNIT_SPELLCAST_SUCCEEDED", "LOOT_CLOSED" }) do
     pcall(ev.RegisterEvent, ev, e)

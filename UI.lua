@@ -656,8 +656,12 @@ local function Build()
     frame:Hide()
 end
 
+local RefreshPage
 function UI.Refresh()
     if not frame or not frame:IsShown() then return end
+    if ns.Profile then ns.Profile.Time("Page:" .. tostring(current), RefreshPage) else RefreshPage() end
+end
+RefreshPage = function()
     local de = ns.Destroy and ns.Destroy.KnowsDisenchant and ns.Destroy.KnowsDisenchant()
     frame.deB:SetShown(de and true or false)
     frame.rtB:ClearAllPoints()
@@ -670,7 +674,10 @@ function UI.Refresh()
 end
 
 local refreshQueued
-ns.On("MARKET_CHANGED", function() if current == "market" or current == "lists" then UI.Refresh() end end)
+ns.On("MARKET_CHANGED", function()
+    if current == "market" then UI.Refresh()
+    elseif current == "lists" and ns.ListsUI and ns.ListsUI.Soon then ns.ListsUI.Soon() end -- limité à une fois toutes les 2 s
+end)
 ns.On("LEDGER_CHANGED", function()
     if refreshQueued or not frame or not frame:IsShown() then return end
     refreshQueued = true
@@ -803,6 +810,8 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
     elseif msg:match("^price") or msg:match("^prix") then
         -- /ipg price (v0.24.0) : même fenêtre que /ipg item.
         ns.History.Command((msg:gsub("^%S+%s*", "")))
+    elseif msg:match("^perf") then
+        ns.Profile.Report(msg:match("^perf%s+(%S+)"))
     elseif msg == "sold" or msg == "ventes" then
         ns.Track.Report(7)
     elseif msg == "hints" then

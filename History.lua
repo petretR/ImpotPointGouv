@@ -749,3 +749,8 @@ end
 ns.On("PRICES_CHANGED", function() if H.frame and H.frame:IsShown() then H.dirty = true end end)
 -- Suivi automatique des objets ouverts (essayé puis retiré) : on efface ce qu'il a pu laisser.
 ns.On("DB_READY", function() if ns.db then ns.db.histTrack = nil end end)
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    H.Note = ns.Profile.Wrap("History:Note", H.Note)
+end
