@@ -345,9 +345,8 @@ function CR.Evaluate(rec)
     ev.depositRisk = CR.DepositFor(pname) * (1 - chance) / chance -- dépôts perdus en moyenne avant une vente
     ev.ahNet = ahv and (ahv * (1 - AH_CUT) - ev.depositRisk) * rec.made
     ev.vendorNet = vs and vs * rec.made
-    local de, deSrc = P.DisenchantValue(rec.pid)
+    local de = P.DisenchantValue(rec.pid)
     ev.deNet = de and de * rec.made
-    ev.deObserved = deSrc == "observed"
     ev.listed = P.Entry(rec.pid) and P.Entry(rec.pid).qty
     if ev.ahNet and (not ev.vendorNet or ev.ahNet >= ev.vendorNet) then
         ev.value, ev.channel = ev.ahNet, "ah"

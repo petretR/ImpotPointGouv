@@ -376,7 +376,29 @@ function LU.BuildPage(page)
     page.resetRoute = T.Button(main, Tr("Reset my choices"), 120, 22, function()
         if page.routeProf then ns.Route.ResetBans(page.routeProf) end; page:Refresh()
     end)
-    page.resetRoute:SetPoint("LEFT", page.noAH, "RIGHT", 6, 0)
+    page.resetRoute:SetPoint("RIGHT", page.export, "LEFT", -6, 0)
+    -- Revente de ce qu'on crafte en montant : HV, marchand, désenchantement (à cocher) ; le meilleur des cochés.
+    page.sellBtns = {}
+    local SELL = {
+        { "ah", "AH", "Value what you craft at its AH price minus the 5% cut (liquid markets only)." },
+        { "vendor", "Merchant", "Value what you craft at its merchant price: guaranteed, no limit." },
+        { "de", "Disenchant", "Value what you craft at what disenchanting it gives (green, blue and purple gear only)." },
+    }
+    local sprev = page.noAH
+    for _, k in ipairs(SELL) do
+        local b = T.Button(main, Tr(k[2]), k[1] == "ah" and 40 or 74, 22, function()
+            -- Bascule ; au moins un débouché reste coché.
+            local set = {}
+            for key, on in pairs(ns.Route.SellSet(ns.db.settings.routeSell)) do set[key] = on end
+            set[k[1]] = not set[k[1]] or nil
+            if next(set) then ns.db.settings.routeSell = set end
+            page:Refresh()
+        end, "pill")
+        b:SetPoint("LEFT", sprev, "RIGHT", sprev == page.noAH and 12 or 4, 0)
+        b.tooltip = Tr(k[3]) .. "\n" .. Tr("Toggle. With several on, each recipe uses the best of them.")
+        sprev = b
+        page.sellBtns[k[1]] = b
+    end
 
     -- Tableau
     local list = CreateFrame("Frame", nil, main)
@@ -482,7 +504,12 @@ function LU.BuildPage(page)
                     local p = (P.IsVendorItem(m[1]) and P.VendorBuy(m[1])) or (st and (st.med or st.cur))
                     GameTooltip:AddDoubleLine(m[2] .. "× " .. P.Name(m[1]), p and Money(p * m[2]) or "?", 0.8, 0.8, 0.8, 1, 1, 1)
                 end
-                if (rc.resale or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Resale of what you craft"), "+" .. Money(rc.resale), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
+                -- Marché du produit : prix moyen HV sur 7 jours et ventes estimées par jour.
+                local ost = rc.out and P.Stats(rc.out)
+                if ost and ost.avg then
+                    GameTooltip:AddDoubleLine(Tr("AH average (7 days)"), Money(ost.avg), 0.7, 0.7, 0.7, 1, 1, 1)
+                    GameTooltip:AddDoubleLine(Tr("Sold/day"), ost.sales and (ost.sales >= 10 and tostring(math.floor(ost.sales + 0.5)) or ("%.1f"):format(ost.sales)) or "—", 0.7, 0.7, 0.7, 1, 1, 1)
+                end
                 if (rc.F or 0) > 0 and (row.route or row.alt).reuse then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Tr("already paid earlier in the route"), 0.7, 0.7, 0.7, 0.6, 0.6, 0.6)
                 elseif (rc.F or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Money(rc.F) .. (rc.estF and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1) end
                 GameTooltip:AddDoubleLine(Tr("Per craft (resale − materials)"), ns.FormatMoney(-(rc.c or 0), { iconSize = 11, short = true, sign = true, color = true }), 0.7, 0.7, 0.7, 1, 1, 1)
@@ -813,6 +840,9 @@ function LU.BuildPage(page)
         local isRoute = l.leveling and self.lvView == "route"
         for k, btn in pairs(self.lvBtns) do btn:SetSelected(k == self.lvView); btn:SetShown(l.leveling and true or false) end
         self.noAH:SetShown(isRoute and true or false); self.noAH:SetSelected(ns.db.settings.routeNoAH and true or false)
+        for k, btn in pairs(self.sellBtns) do
+            btn:SetSelected(ns.Route.SellSet(ns.db.settings.routeSell)[k] and true or false); btn:SetShown(isRoute and true or false)
+        end
         self.routeProf = l.leveling and l.key:sub(4) or nil
         self.resetRoute:SetShown(isRoute and ns.Route.HasBans(self.routeProf) or false)
         -- Recharges, vue par recette : la recharge et le gain par jour à la place de ventes / en vente.
@@ -916,7 +946,7 @@ function LU.BuildPage(page)
         end
         local route
         if isRoute then
-            route = ns.Route.Compute(self.routeProf, { noAH = ns.db.settings.routeNoAH })
+            route = ns.Route.Compute(self.routeProf, { noAH = ns.db.settings.routeNoAH, sell = ns.Route.SellSet(ns.db.settings.routeSell) })
             if self.routeOpenFor ~= self.routeProf then self.routeOpen, self.routeOpenFor = {}, self.routeProf end
             data = {}
             local segs = { unpack(route.segs) }

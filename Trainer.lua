@@ -152,7 +152,7 @@ local function ShowTip(a, anchor)
         Opt("On the AH  " .. M .. Tr("(− 5% cut & lost deposits)|r"), ev.ahNet, "ah",
             ev.bop and "bound, can't sell" or (ev.whiteGear and "white item, won't sell") or nil)
         Opt("To a vendor", ev.vendorNet, "vendor")
-        Opt("Disenchanted  " .. M .. (ev.deObserved and "(your results)" or "(estimate)") .. "|r", ev.deNet, "de",
+        Opt("Disenchanted  " .. M .. "(estimate)" .. "|r", ev.deNet, "de",
             (not ev.deNet and ev.whiteGear) and "can't disenchant" or nil)
 
         -- Résultat

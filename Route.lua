@@ -132,16 +132,51 @@ local function MatPrice(id, memo)
     return p
 end
 
--- Revente du produit, prudente : le prix marchand (garanti, sans limite), ou une part de la valeur HV
--- (60 % du prix net, seulement si le marché est liquide) plafonnée à 90 % du coût des composants.
--- On ne revend pas 80 objets au prix du marché : la route cherche à monter pas cher, pas à crafter pour vendre.
-local function Resale(r, matCost)
+-- Revente du produit, prudente. Chaque débouché :
+--   marchand : prix de revente au marchand (garanti, sans limite) ;
+--   HV : prix moins les 5 % de l'HV, seulement si le marché est liquide (≥ 10 en vente) ;
+--   désenchantement : valeur nette attendue des composants (HV − 5 %).
+-- Sans plafond : le coût affiché est le vrai (une recette rentable fait rapporter la route).
+-- sell : débouchés retenus, { ah = true, vendor = true, de = true } ; pour chaque recette, le meilleur d'entre eux.
+RO.SELL_KEYS = { "ah", "vendor", "de" }
+-- Réglage enregistré -> ensemble de débouchés (ancien format : "ah" / "vendor" / "de" / "mix").
+function RO.SellSet(v)
+    if type(v) == "table" and (v.ah or v.vendor or v.de) then return v end
+    if v == "ah" or v == "vendor" or v == "de" then return { [v] = true } end
+    return { ah = true, vendor = true, de = true }
+end
+local function Resale(r, sell)
     if not r.out then return 0 end
-    local vs = (select(11, ns.GetItemInfo(r.out)) or (ns.db.vsell and ns.db.vsell[r.out]) or 0) * r.n
-    local st = P.Stats(r.out)
-    local ah = st and (st.med or st.cur)
-    local ahPart = (ah and (st.qty or 0) >= 10) and math.floor(ah * 0.95 * 0.6) * r.n or 0
-    return math.max(vs, math.min(ahPart, math.floor(matCost * 0.9)))
+    local vals = {}
+    if sell.vendor then
+        vals.vendor = (P.VendorSell(r.out) or 0) * r.n
+    end
+    if sell.ah then
+        local st = P.Stats(r.out)
+        local ah = st and (st.med or st.cur)
+        vals.ah = (ah and (st.qty or 0) >= 10) and math.floor(ah * 0.95) * r.n or 0
+    end
+    if sell.de then
+        local de = P.DisenchantValue and P.DisenchantValue(r.out)
+        vals.de = de and math.floor(de) * r.n or 0
+    end
+    local best, how = 0, nil
+    for _, k in ipairs(RO.SELL_KEYS) do
+        if (vals[k] or 0) > best then best, how = vals[k], k end
+    end
+    return best, how
+end
+
+-- Coût d'un craft pour choisir la route (pas celui affiché) : un craft rentable compte pour 0,
+-- sinon la route crafterait exprès là où la chance de monter est faible, pour vendre davantage.
+-- + le temps d'un craft (2 pa) : un craft de plus ne vaut pas d'économiser moins de 2 pa, la route reste rapide.
+-- Puis, à peine moins, celle qui rapporte le plus (bonus < 0,5 cuivre : ne passe jamais devant un craft de moins).
+RO.CRAFT_TIME = 200
+local function PlanCost(c)
+    local t = RO.CRAFT_TIME
+    if c >= 0 then return c + t end
+    local p = -c
+    return t - 0.5 * p / (p + 100000)
 end
 
 local function Chance(r, s)
@@ -150,9 +185,10 @@ local function Chance(r, s)
     return (r.g - s) / math.max(1, r.g - r.y)
 end
 
--- Calcule la route. opts : { noAH = bool, from = skill }
+-- Calcule la route. opts : { noAH = bool, from = skill, sell = { ah = bool, vendor = bool, de = bool } }
 function RO.Compute(prof, opts)
     opts = opts or {}
+    local sell = RO.SellSet(opts.sell)
     local recipes = RO.Recipes(prof)
     local known = KnownSet(prof)
     local bans = (ns.db.settings.routeBan or {})[prof] or {}
@@ -173,8 +209,10 @@ function RO.Compute(prof, opts)
             end
             if F and not missing then
                 r.F, r.label, r.qtyListed, r.estF = F, label, qty, est
-                r.matCost, r.resale = cost, Resale(r, cost)
+                r.matCost = cost
+                r.resale, r.sellHow = Resale(r, sell)
                 r.c = cost - r.resale
+                r.k = PlanCost(r.c)
                 cands[#cands + 1] = r
             else
                 skipped = skipped + 1
@@ -197,7 +235,7 @@ function RO.Compute(prof, opts)
                     -- démarrer (ou redémarrer) un segment avec r en x
                     local cand = bx + (owned[r] and 0 or r.F) - PS[r]
                     if cand < M[r] then M[r], Ms[r] = cand, x end
-                    PS[r] = PS[r] + r.c / ch
+                    PS[r] = PS[r] + r.k / ch
                     local v = M[r] + PS[r]
                     if v < bestNext then bestNext, br, bs = v, r, Ms[r] end
                 else
@@ -218,38 +256,41 @@ function RO.Compute(prof, opts)
         end
         return segs, (best[300] or INF) < INF
     end
+    -- Coût réel (affiché), nombre de crafts et coût pour choisir la route (PlanCost).
     local function SegCost(r, a, b, free)
-        local total, crafts = free and 0 or r.F, 0
+        local total, crafts, plan = free and 0 or r.F, 0, free and 0 or r.F
         for x = a, b - 1 do
             local ch = Chance(r, x)
             if ch <= 0 then return nil end
             total = total + r.c / ch
+            plan = plan + r.k / ch
             crafts = crafts + 1 / ch
         end
-        return total, crafts
+        return total, crafts, plan
     end
-    -- Coût réel d'une route : chaque recette payée une seule fois (à sa première tranche).
+    -- Coût d'une route : chaque recette payée une seule fois (à sa première tranche).
     local function Price(segs)
-        local paid, total = {}, 0
+        local paid, total, plan = {}, 0, 0
         for _, sg in ipairs(segs) do
             sg.reuse = paid[sg.r] or nil
-            sg.cost, sg.crafts = SegCost(sg.r, sg.from, sg.to, sg.reuse)
+            sg.cost, sg.crafts, sg.plan = SegCost(sg.r, sg.from, sg.to, sg.reuse)
             paid[sg.r] = true
             total = total + (sg.cost or 0)
+            plan = plan + (sg.plan or 0)
         end
-        return total, paid
+        return total, paid, plan
     end
     -- Passe 1 sans rien de payé ; puis on refait la route en considérant acquises les recettes déjà
-    -- choisies (le prix de leur apprentissage compte une fois), tant que la route réelle baisse.
+    -- choisies (le prix de leur apprentissage compte une fois), tant que la route baisse.
     local segs, reached = Solve({})
-    local total, paid = Price(segs)
+    local total, paid, plan = Price(segs)
     for _ = 1, 4 do
         if not reached then break end
         local s2, ok2 = Solve(paid)
         if not ok2 then break end
-        local t2, p2 = Price(s2)
-        if t2 >= total - 1 then break end
-        segs, total, paid = s2, t2, p2
+        local t2, p2, pl2 = Price(s2)
+        if pl2 >= plan - 1 then break end
+        segs, total, paid, plan = s2, t2, p2, pl2
     end
     Price(segs) -- remet sg.cost / sg.reuse de la route retenue
     local maxPct = (ns.db.settings.routeAltPct or 30) / 100
@@ -258,13 +299,13 @@ function RO.Compute(prof, opts)
         local alts = {}
         for _, r in ipairs(cands) do
             if r ~= sg.r then
-                local c, cr = SegCost(r, sg.from, sg.to, paid[r])
-                if c and sg.cost and (c - sg.cost <= math.max(math.abs(sg.cost) * maxPct, maxAbs)) then
-                    alts[#alts + 1] = { r = r, cost = c, crafts = cr, reuse = paid[r] or nil }
+                local c, cr, pl = SegCost(r, sg.from, sg.to, paid[r])
+                if c and sg.plan and (pl - sg.plan <= math.max(math.abs(sg.plan) * maxPct, maxAbs)) then
+                    alts[#alts + 1] = { r = r, cost = c, crafts = cr, plan = pl, reuse = paid[r] or nil }
                 end
             end
         end
-        table.sort(alts, function(a, b) return a.cost < b.cost end)
+        table.sort(alts, function(a, b) return a.plan < b.plan end)
         for k = #alts, 4, -1 do alts[k] = nil end
         sg.alts = alts
     end

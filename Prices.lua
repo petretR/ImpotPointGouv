@@ -120,6 +120,7 @@ function P.Stats(id)
         local sum = 0
         for _, v in ipairs(vals) do sum = sum + v end
         local mean = sum / #vals
+        st.avg = mean
         local var = 0
         for _, v in ipairs(vals) do var = var + (v - mean) ^ 2 end
         st.cv = mean > 0 and math.sqrt(var / #vals) / mean or 0
@@ -201,94 +202,79 @@ function P.VendorBuy(id)
 end
 
 -- ------------------------------------------------------------ désenchantement
--- Table Classic (WoW Forever peut l'avoir modifiée : valeur indicative).
--- Pour chaque tranche de niveau d'objet : { {itemID, chance, qtéMoyenne}, ... }
--- Armures vertes : surtout poussière ; armes vertes : surtout essence (75/20 inversé).
-P.DE_MATS = { 10940, 10938, 10939, 10978, 10998, 11082, 11083, 11084, 11134, 11135, 11137, 11138, 11139 }
-local DE_GREEN = {
-    { 15, { { 10940, 0.80, 1.5 }, { 10938, 0.20, 1.5 } } },
-    { 20, { { 10940, 0.75, 2.5 }, { 10939, 0.20, 1.5 }, { 10978, 0.05, 1 } } },
-    { 25, { { 10940, 0.75, 5.0 }, { 10998, 0.15, 1.5 }, { 10978, 0.10, 1 } } },
-    { 30, { { 11083, 0.75, 1.5 }, { 11082, 0.20, 1.5 }, { 11084, 0.05, 1 } } },
-    { 35, { { 11083, 0.75, 3.5 }, { 11134, 0.20, 1.5 }, { 11138, 0.05, 1 } } },
-    { 40, { { 11137, 0.75, 1.5 }, { 11135, 0.20, 1.5 }, { 11139, 0.05, 1 } } },
+-- Table Classic d'Auctionator (Source_Classic/Enchant/DisenchantingProbabilities.lua), niveaux 5 à 65.
+-- WoW Forever peut l'avoir modifiée : valeur indicative.
+-- Chaque ligne : { niveau min, niveau max, chance %, quantité, composant, chance %, quantité, composant, ... }
+P.DE_MATS = { 10940, 10938, 10939, 10978, 10998, 11082, 11083, 11084, 11134, 11135, 11137, 11138, 11139,
+    11174, 11175, 11176, 11177, 11178, 14343, 14344, 16202, 16203, 16204, 20725 }
+local DE_RARE = { -- bleus, armes et armures
+    { 11, 25, 100, 1, 10978 }, { 26, 30, 100, 1, 11084 }, { 31, 35, 100, 1, 11138 }, { 36, 40, 100, 1, 11139 },
+    { 41, 45, 100, 1, 11177 }, { 46, 50, 100, 1, 11178 }, { 51, 55, 100, 1, 14343 },
+    { 56, 65, 99.5, 1, 14344, 0.5, 1, 20725 },
 }
-local DE_BLUE = { { 25, 10978 }, { 30, 11084 }, { 35, 11138 }, { 40, 11139 } }
-
--- Résultats réels (journal des désenchantements) regroupés par tranche : qualité / niveau d'objet / arme-armure.
-local obs, obsDirty = {}, true
-ns.On("DE_LOGGED", function() obsDirty = true end)
-
-local function TrancheKey(quality, ilvl, classID)
-    local table_ = quality == 3 and DE_BLUE or DE_GREEN
-    for i, row in ipairs(table_) do
-        if ilvl <= row[1] then return quality .. ":" .. i .. ":" .. (classID == 2 and "w" or "a") end
-    end
+local function Epic(nexus6180)
+    return {
+        { 40, 45, 100 / 3, 2, 11177, 100 / 3, 3, 11177, 100 / 3, 4, 11177 },
+        { 46, 50, 100 / 3, 2, 11178, 100 / 3, 3, 11178, 100 / 3, 4, 11178 },
+        { 51, 55, 100 / 3, 2, 14343, 100 / 3, 3, 14343, 100 / 3, 4, 14343 },
+        { 56, 60, 100, 1, 20725 },
+        nexus6180,
+    }
 end
-
-local function BuildObserved()
-    wipe(obs)
-    for _, e in ipairs(ns.db.deLog or {}) do
-        if e.id then
-            local _, _, q, il, _, _, _, _, _, _, _, cid = ns.GetItemInfo(e.id)
-            q, il = e.q or q, e.ilvl or il
-            local key = q and il and TrancheKey(q, il, cid)
-            if key then
-                local o = obs[key] or { n = 0, out = {} }
-                obs[key] = o
-                o.n = o.n + 1
-                for _, out in ipairs(e.out) do o.out[out[1]] = (o.out[out[1]] or 0) + out[2] end
-            end
-        end
-    end
-    obsDirty = false
-end
-
-P.MIN_DE_SAMPLES = 5
+local DE_TABLE = {
+    [4] = { -- armures
+        [2] = {
+            { 5, 15, 40, 1, 10940, 40, 2, 10940, 10, 1, 10938, 10, 2, 10938 },
+            { 16, 20, 37.5, 2, 10940, 37.5, 3, 10940, 10, 1, 10939, 10, 2, 10939, 5, 1, 10978 },
+            { 21, 25, 25, 4, 10940, 25, 5, 10940, 25, 6, 10940, 7.5, 1, 10998, 7.5, 2, 10998, 10, 1, 10978 },
+            { 26, 30, 37.5, 1, 11083, 37.5, 2, 11083, 10, 1, 11082, 10, 2, 11082, 5, 1, 11084 },
+            { 31, 35, 18.75, 2, 11083, 18.75, 3, 11083, 18.75, 4, 11083, 18.75, 5, 11083, 10, 1, 11134, 10, 2, 11134, 5, 1, 11138 },
+            { 36, 40, 37.5, 1, 11137, 37.5, 2, 11137, 10, 1, 11135, 10, 2, 11135, 5, 1, 11139 },
+            { 41, 45, 18.75, 2, 11137, 18.75, 3, 11137, 18.75, 4, 11137, 18.75, 5, 11137, 10, 1, 11174, 10, 2, 11174, 5, 1, 11177 },
+            { 46, 50, 37.5, 1, 11176, 37.5, 2, 11176, 10, 1, 11175, 10, 2, 11175, 5, 1, 11178 },
+            { 51, 55, 18.75, 2, 11176, 18.75, 3, 11176, 18.75, 4, 11176, 18.75, 5, 11176, 10, 1, 16202, 10, 2, 16202, 5, 1, 14343 },
+            { 56, 60, 37.5, 1, 16204, 37.5, 2, 16204, 10, 1, 16203, 10, 2, 16203, 5, 1, 14344 },
+            { 61, 65, 18.75, 2, 16204, 18.75, 3, 16204, 18.75, 4, 16204, 18.75, 5, 16204, 10, 2, 16203, 10, 3, 16203, 5, 1, 14344 },
+        },
+        [3] = DE_RARE,
+        [4] = Epic({ 61, 80, 50, 1, 20725, 50, 2, 20725 }),
+    },
+    [2] = { -- armes
+        [2] = {
+            { 6, 15, 10, 1, 10940, 10, 2, 10940, 40, 1, 10938, 40, 2, 10938 },
+            { 16, 20, 10, 2, 10940, 10, 3, 10940, 37.5, 1, 10939, 37.5, 2, 10939, 5, 1, 10978 },
+            { 21, 25, 5, 4, 10940, 5, 5, 10940, 5, 6, 10940, 37.5, 1, 10939, 37.5, 2, 10939, 10, 1, 10978 },
+            { 26, 30, 10, 1, 11083, 10, 2, 11083, 37.5, 1, 10939, 37.5, 2, 10939, 5, 1, 11084 },
+            { 31, 35, 5, 2, 11083, 5, 3, 11083, 5, 4, 11083, 5, 5, 11083, 37.5, 1, 11134, 37.5, 2, 11134, 5, 1, 11138 },
+            { 36, 40, 10, 1, 11137, 10, 2, 11137, 37.5, 1, 11135, 37.5, 2, 11135, 5, 1, 11139 },
+            { 41, 45, 5, 2, 11137, 5, 3, 11137, 5, 4, 11137, 5, 5, 11137, 37.5, 1, 11174, 37.5, 2, 11174, 5, 1, 11177 },
+            { 46, 50, 10, 1, 11176, 10, 2, 11176, 37.5, 1, 11175, 37.5, 2, 11175, 5, 1, 11178 },
+            { 51, 55, 5.5, 2, 11176, 5.5, 3, 11176, 5.5, 4, 11176, 5.5, 5, 11176, 37.5, 1, 16202, 37.5, 2, 16202, 5, 1, 14343 },
+            { 56, 60, 11, 1, 16204, 11, 2, 16204, 37.5, 1, 16203, 37.5, 2, 16203, 5, 1, 14344 },
+            { 61, 65, 5.5, 2, 16204, 5.5, 3, 16204, 5.5, 4, 16204, 5.5, 5, 16204, 37.5, 2, 16203, 37.5, 3, 16203, 5, 1, 14344 },
+        },
+        [3] = DE_RARE,
+        [4] = Epic({ 61, 80, 33.3, 1, 20725, 66.6, 2, 20725 }),
+    },
+}
+P.DE_TABLE = DE_TABLE
 
 -- Valeur nette attendue (HV − 5 %) d'un désenchantement, ou nil si non désenchantable / prix inconnus.
--- 2e valeur : "observed" (vos résultats, ≥ 5 désenchantements de cette tranche) ou "table" (table Classic).
+-- Composants sans prix connu : comptés à 0 (comme Auctionator) ; nil si aucun n'a de prix.
 function P.DisenchantValue(id)
-    local v, src = P.DisenchantValueRaw(id)
-    return v, src
-end
-
-function P.DisenchantValueRaw(id)
     if not id then return nil end
     local _, _, quality, ilvl, _, _, _, _, equipLoc, _, _, classID = ns.GetItemInfo(id)
-    if not quality or not ilvl or quality < 2 or quality > 3 then return nil end
-    if classID and classID ~= 2 and classID ~= 4 then return nil end
+    if not quality or not ilvl or not classID then return nil end
     if not equipLoc or equipLoc == "" or equipLoc == "INVTYPE_BAG" then return nil end
-    local function Price(mat) local v = P.AHValue(mat); return v and v * 0.95 end
-    if obsDirty then BuildObserved() end
-    local o = obs[TrancheKey(quality, ilvl, classID) or ""]
-    if o and o.n >= P.MIN_DE_SAMPLES then
-        local total, known = 0, false
-        for mat, qty in pairs(o.out) do
-            local p = Price(mat)
-            if p then total = total + p * qty / o.n; known = true end
-        end
-        if known then return total, "observed" end
-    end
-    if quality == 3 then
-        for _, row in ipairs(DE_BLUE) do
-            if ilvl <= row[1] then return Price(row[2]), "table" end
-        end
-        return nil
-    end
-    for _, row in ipairs(DE_GREEN) do
-        if ilvl <= row[1] then
-            local outs = row[2]
-            if classID == 2 and outs[2] then -- arme : chances poussière/essence inversées
-                outs = { { outs[1][1], outs[2][2], outs[1][3] }, { outs[2][1], outs[1][2], outs[2][3] }, outs[3] }
-            end
+    local rows = DE_TABLE[classID] and DE_TABLE[classID][quality]
+    for _, row in ipairs(rows or {}) do
+        if ilvl >= row[1] and ilvl <= row[2] then
             local total, known = 0, false
-            for _, o in ipairs(outs) do
-                local p = Price(o[1])
-                if p then total = total + p * o[2] * o[3]; known = true end
+            for x = 3, #row, 3 do
+                local v = P.AHValue(row[x + 2])
+                if v then total = total + row[x] / 100 * row[x + 1] * v * 0.95; known = true end
             end
-            if known then return total, "table" end
-            return nil
+            return known and total or nil
         end
     end
 end
