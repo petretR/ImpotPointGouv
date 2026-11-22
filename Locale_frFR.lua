@@ -513,6 +513,8 @@ ns.AddLocale("frFR", {
     ["7 days"] = "7 jours",
     ["Sold/day"] = "Vendus/j",
     ["AH average (7 days)"] = "Moyenne HV (7 jours)",
+    ["Instead of %s"] = "Au lieu de %s",
+    ["crafts"] = "crafts",
     ["Listed"] = "En vente",
     ["Have"] = "Stock",
     ["From %d%s to 300: %s in %d steps"] = "De %d%s à 300 : %s en %d étapes",

@@ -159,8 +159,8 @@ DrawRouteRow = function(r, row, absIndex, page)
         T.SetFont(rt.cost, 13, true)
         if v > 0 then rt.cost:SetTextColor(0.36, 0.82, 0.45) else rt.cost:SetTextColor(0.93, 0.90, 0.84) end
     else
-        local d = (row.seg.cost or 0) - x.cost -- ce que tu perds en prenant cette alternative
-        rt.cost:SetText(RMoney(d, { icon = 10, sign = true }))
+        -- Alternative : son propre coût, même signe que les étapes (l'écart avec l'étape choisie est dans l'infobulle).
+        rt.cost:SetText(RMoney(-(x.cost or 0), { icon = 10, sign = true }))
         T.SetFont(rt.cost, 11, false); rt.cost:SetTextColor(unpack(C.muted))
     end
     for k = 1, 7 do r.bars[k]:Hide() end
@@ -514,7 +514,15 @@ function LU.BuildPage(page)
                 elseif (rc.F or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Money(rc.F) .. (rc.estF and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1) end
                 GameTooltip:AddDoubleLine(Tr("Per craft (resale − materials)"), ns.FormatMoney(-(rc.c or 0), { iconSize = 11, short = true, sign = true, color = true }), 0.7, 0.7, 0.7, 1, 1, 1)
                 GameTooltip:AddLine(" ")
-                if row.alt then GameTooltip:AddLine(Tr("Click: use this recipe instead"), 0.88, 0.66, 0.24)
+                if row.alt then
+                    local seg = row.seg
+                    if seg and seg.cost and row.alt.cost then
+                        GameTooltip:AddDoubleLine((Tr("Instead of %s")):format(seg.r.name or "?"),
+                            ns.FormatMoney(seg.cost - row.alt.cost, { iconSize = 11, short = true, sign = true, color = true })
+                            .. "  |cff8a877f" .. ("%+d"):format(math.floor((row.alt.crafts or 0) - (seg.crafts or 0) + 0.5)) .. " " .. Tr("crafts") .. "|r",
+                            0.7, 0.7, 0.7, 1, 1, 1)
+                    end
+                    GameTooltip:AddLine(Tr("Click: use this recipe instead"), 0.88, 0.66, 0.24)
                 else
                     if #(row.route.alts or {}) > 0 then GameTooltip:AddLine(Tr("Click: show the alternatives"), 0.88, 0.66, 0.24) end
                     GameTooltip:AddLine(Tr("Right-click: skip this recipe"), 0.88, 0.66, 0.24)
