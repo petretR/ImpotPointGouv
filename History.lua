@@ -320,9 +320,43 @@ local function Pool(list, i, create)
 end
 local function HideFrom(list, n) for i = n, #list do list[i]:Hide() end end
 
+-- Repris de la fiche prix (v0.24.0) : écarts en %, rareté à l'HV, prix à un instant donné.
+local function Pct(a, b)
+    if not a or not b or b <= 0 then return nil end
+    return (a / b - 1) * 100
+end
+local function PctText(v)
+    if not v then return "|cff615f5c—|r" end
+    local col = v > 0.5 and "|cff5cd173" or v < -0.5 and "|cffed5c52" or "|cffece6d6"
+    return ("%s%s%d%%|r"):format(col, v > 0 and "+" or (v < 0 and "−" or ""), math.floor(math.abs(v) + 0.5))
+end
+local function Scarcity(qty)
+    if not qty or qty == 0 then return Tr("Not listed"), C.neg end
+    if qty < 25 then return Tr("Scarce"), { 0.36, 0.82, 0.45 } end
+    if qty < 250 then return Tr("Limited"), C.gold end
+    return Tr("Plentiful"), C.muted
+end
+local function LowAt(pts, t)
+    local v
+    for _, p in ipairs(pts) do
+        if p.low then
+            if p.t <= t then v = p.low else break end
+        end
+    end
+    if v then return v end
+    for _, p in ipairs(pts) do if p.low then return p.low end end
+end
+local function Tile(parent)
+    local t = CreateFrame("Frame", nil, parent)
+    T.Surface(t, C.surface, 8)
+    t.label = T.Text(t, 9, { bold = true, color = C.faint, justify = "CENTER" }); t.label:SetPoint("TOP", 0, -8)
+    t.value = T.Text(t, 15, { bold = true, justify = "CENTER" }); t.value:SetPoint("TOP", 0, -23)
+    return t
+end
+
 local function Build()
     local f = CreateFrame("Frame", "ImpotPointGouvHistory", UIParent)
-    f:SetSize(700, 430)
+    f:SetSize(700, 460)
     f:SetPoint("CENTER", 120, 40)
     f:SetFrameStrata("DIALOG")
     f:SetToplevel(true)
@@ -344,9 +378,19 @@ local function Build()
     f.iconHit:SetScript("OnEnter", function(self) if H.id then T.ItemTooltip(self, H.id) end end)
     f.iconHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
     f.name = T.Text(f, 14, { bold = true }); f.name:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 12, 1)
+    f.name:SetWidth(230); f.name:SetWordWrap(false)
     f.price = T.Text(f, 22, { bold = true }); f.price:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -4)
     f.change = T.Text(f, 12); f.change:SetPoint("TOPLEFT", f.price, "BOTTOMLEFT", 0, -3)
     f.last = T.Text(f, 11, { color = C.faint }); f.last:SetPoint("TOPLEFT", f.change, "BOTTOMLEFT", 0, -3)
+
+    -- Chiffres clés (repris de la fiche prix) : écart au prix marchand ou habituel, 4 jours, 1er scan, offre.
+    f.tiles = {}
+    for i = 1, 4 do
+        local t = Tile(f)
+        t:SetSize(92, 46)
+        t:SetPoint("TOPRIGHT", -40 - (4 - i) * 98, -18)
+        f.tiles[i] = t
+    end
 
     -- Légende
     local leg, prevL = {}, nil
@@ -364,7 +408,7 @@ local function Build()
     -- Zone du graphique : prix en haut, barres en bas.
     local plot = CreateFrame("Frame", nil, f)
     plot:SetPoint("TOPLEFT", 18, -134)
-    plot:SetPoint("BOTTOMRIGHT", -70, 112)
+    plot:SetPoint("BOTTOMRIGHT", -70, 140)
     f.plot = plot
     local bars = CreateFrame("Frame", nil, f)
     bars:SetPoint("TOPLEFT", plot, "BOTTOMLEFT", 0, -6)
@@ -374,6 +418,10 @@ local function Build()
     local base = bars:CreateTexture(nil, "BACKGROUND"); base:SetTexture(T.WHITE); base:SetVertexColor(1, 1, 1, 0.07)
     base:SetHeight(1); base:SetPoint("BOTTOMLEFT"); base:SetPoint("BOTTOMRIGHT")
     f.lines, f.dots, f.bars, f.grids, f.ylabels, f.xlabels = {}, {}, {}, {}, {}, {}
+    f.refTex, f.refLabels = {}, {}
+    -- Lecture des fluctuations : prix habituel, fourchette, volatilité, ventes, verdict.
+    f.stats = T.Text(f, 12, { color = C.muted }); f.stats:SetPoint("BOTTOMLEFT", 20, 50)
+    f.stats:SetWidth(660); f.stats:SetWordWrap(false)
     f.empty = T.Text(f, 13, { color = C.muted, justify = "CENTER", wrap = true })
     f.empty:SetPoint("CENTER", plot, "CENTER"); f.empty:SetWidth(420)
     f.tag = CreateFrame("Frame", nil, f); f.tag:SetSize(56, 16)
@@ -438,7 +486,7 @@ end
 
 local function Money(v) return ns.FormatMoney(v, { iconSize = 14 }) end
 
-local function Draw(f, pts)
+local function Draw(f, pts, refs, band)
     local plot, barsF = f.plot, f.barsFrame
     local W, Hh, BH = plot:GetWidth(), plot:GetHeight(), barsF:GetHeight()
     f.coords = {}
@@ -453,11 +501,16 @@ local function Draw(f, pts)
     if not any or W <= 0 then
         HideFrom(f.lines, 1); HideFrom(f.dots, 1); HideFrom(f.bars, 1); HideFrom(f.grids, 1)
         HideFrom(f.ylabels, 1); HideFrom(f.xlabels, 1); f.tag:Hide()
+        HideFrom(f.refTex, 1); HideFrom(f.refLabels, 1)
         f.empty:SetText(Tr("No scans for this item in this period. Scan its list (or do a full scan) at the AH."))
         f.empty:Show()
         return
     end
     f.empty:Hide()
+    -- Lignes de référence (prix marchand, habituel) : seulement si elles restent proches de la courbe.
+    for _, ref in ipairs(refs or {}) do
+        if ref.v and ref.v > 0 and ref.v <= vmax * 1.6 then vmin = math.min(vmin, ref.v); vmax = math.max(vmax, ref.v) end
+    end
     if vmax == vmin then vmax, vmin = vmax * 1.05 + 1, math.max(0, vmin * 0.95 - 1) end
     local step = NiceStep(vmax - vmin, 4)
     local lo, hi = math.floor(vmin / step) * step, math.ceil(vmax / step) * step
@@ -489,6 +542,38 @@ local function Draw(f, pts)
         l:SetPoint(i == 1 and "TOPLEFT" or i == 5 and "TOPRIGHT" or "TOP", barsF, "BOTTOMLEFT", X(t), -5)
         l:SetText(date(fmt, math.floor(t)))
     end
+
+    -- Bande du prix habituel (bas–haut) et lignes de référence en pointillés (repris de la fiche prix).
+    local ri = 0
+    local function Tex(layer, sub)
+        ri = ri + 1
+        return Pool(f.refTex, ri, function() local tx = plot:CreateTexture(nil, layer, nil, sub); tx:SetTexture(T.WHITE); return tx end)
+    end
+    if band and band[1] and band[2] and band[2] > band[1] then
+        local y1, y2 = math.max(0, Y(band[1])), math.min(Hh, Y(band[2]))
+        if y2 > y1 then
+            local b = Tex("BACKGROUND", 2)
+            b:ClearAllPoints(); b:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", 0, y1); b:SetSize(W, y2 - y1)
+            b:SetVertexColor(1, 1, 1, 0.035)
+        end
+    end
+    local rl = 0
+    for _, ref in ipairs(refs or {}) do
+        local y = ref.v and Y(ref.v)
+        if y and y >= 0 and y <= Hh then
+            local col = ref.color
+            for x = 0, W, 9 do
+                local d = Tex("ARTWORK", 0)
+                d:ClearAllPoints(); d:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", x, y); d:SetSize(5, 1)
+                d:SetVertexColor(col[1], col[2], col[3], ref.alpha)
+            end
+            rl = rl + 1
+            local lbl = Pool(f.refLabels, rl, function() return T.Text(f, 10, { color = C.faint }) end)
+            lbl:ClearAllPoints(); lbl:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", 4, y + 2)
+            lbl:SetText(ref.label); lbl:SetTextColor(col[1], col[2], col[3], 0.8)
+        end
+    end
+    HideFrom(f.refTex, ri + 1); HideFrom(f.refLabels, rl + 1)
 
     -- Courbes : un point par scan, reliés au scan suivant quand les deux ont une valeur.
     local li, di = 0, 0
@@ -588,7 +673,48 @@ function H.Refresh()
         f.rangeBtns[r[1]]:SetSelected(r[1] == key)
         if r[1] == key then span = r[3] end
     end
-    Draw(f, H.Series(id, span))
+    local st = P.Stats(id) or {}
+    local vs = P.VendorSell(id)
+    local all = H.Series(id, nil)
+    -- Chiffres clés.
+    local tl = f.tiles
+    if vs and cur then
+        tl[1].label:SetText(Tr("VS VENDOR PRICE"))
+        local x = cur / vs
+        tl[1].value:SetText((x < 1.05 and "|cffed5c52" or "|cffece6d6") .. ("%.1f×"):format(x) .. "|r")
+    else
+        tl[1].label:SetText(Tr("VS USUAL PRICE"))
+        tl[1].value:SetText(PctText(Pct(cur, st.med)))
+    end
+    tl[2].label:SetText(Tr("LAST 4 DAYS"))
+    tl[2].value:SetText(PctText(Pct(cur, LowAt(all, time() - 4 * 86400))))
+    tl[3].label:SetText(Tr("SINCE FIRST SCAN"))
+    tl[3].value:SetText(PctText(Pct(cur, LowAt(all, 0))))
+    local sc, scCol = Scarcity((sm and sm.qty) or (e and e.qty))
+    tl[4].label:SetText(Tr("AH SUPPLY"))
+    tl[4].value:SetText(sc); tl[4].value:SetTextColor(scCol[1], scCol[2], scCol[3])
+    -- Fluctuations.
+    local s = {}
+    if st.med then s[#s + 1] = Tr("Usual ") .. ns.FormatMoney(st.med, { iconSize = 11, short = true }) end
+    if st.low and st.high then
+        s[#s + 1] = Tr("usual range ") .. ns.FormatMoney(st.low, { iconSize = 11, short = true }) .. " – " ..
+            ns.FormatMoney(st.high, { iconSize = 11, short = true })
+    end
+    if st.cv and st.n and st.n >= 3 then
+        local v = st.cv
+        local word = v < 0.10 and Tr("stable") or v < 0.25 and Tr("moves a little") or v < 0.5 and Tr("volatile") or Tr("very volatile")
+        s[#s + 1] = (Tr("volatility %d%% (%s)")):format(math.floor(v * 100 + 0.5), word)
+    end
+    if st.sales then s[#s + 1] = (Tr("~%s sold/day")):format(st.sales >= 10 and tostring(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) end
+    if vs then s[#s + 1] = Tr("Vendor price: ") .. ns.FormatMoney(vs, { iconSize = 11, short = true }) end
+    local v = ns.Lists and ns.Lists.Verdict and ns.Lists.Verdict({ id = id, kind = "mat", uses = 1, roles = {} }, P.Stats(id))
+    if v == "buy" then s[#s + 1] = "|cff5cd173" .. Tr("good time to buy") .. "|r"
+    elseif v == "sell" then s[#s + 1] = "|cffe0a83d" .. Tr("good time to sell") .. "|r" end
+    f.stats:SetText(#s > 0 and table.concat(s, "  ·  ") or Tr("Scan the AH a few times to read this item's fluctuations."))
+    local refs = {}
+    if vs then refs[#refs + 1] = { v = vs, label = Tr("vendor price"), color = { 0.45, 0.68, 0.95 }, alpha = 0.55 } end
+    if st.med then refs[#refs + 1] = { v = st.med, label = Tr("usual"), color = { 0.93, 0.90, 0.84 }, alpha = 0.3 } end
+    Draw(f, H.Series(id, span), refs, st.low and st.high and { st.low, st.high })
 end
 
 -- Ouvre la fenêtre sur un objet (ou change d'objet si elle est déjà ouverte).
@@ -607,12 +733,17 @@ function H.Command(arg)
     arg = arg or ""
     local id = tonumber(arg) or tonumber(arg:match("item:(%d+)"))
     if not id and arg ~= "" then
-        local want = arg:lower()
+        local want, partial = arg:lower(), nil
         for iid, n in pairs(ns.db.items or {}) do
-            if type(n) == "string" and n:lower() == want then id = iid; break end
+            if type(n) == "string" then
+                local ln = n:lower()
+                if ln == want then id = iid; break end
+                if not partial and ln:find(want, 1, true) then partial = iid end
+            end
         end
+        id = id or partial
     end
-    if id then H.Show(id) else ns.Print(Tr("usage: /ipg item <item link, id or exact name>")) end
+    if id then H.Show(id) else ns.Print(Tr("usage: /ipg item <item link, id or name>")) end
 end
 
 ns.On("PRICES_CHANGED", function() if H.frame and H.frame:IsShown() then H.dirty = true end end)

@@ -115,7 +115,8 @@ local function EnsureChar()
         db.chars[guid] = c
         isNew = true
     end
-    c.name, c.realm, c.class = name, realm, class
+    c.name, c.class = name, class
+    if realm ~= "" then c.realm = realm end -- vide depuis le correctif 1.60.1 : on garde l'ancien
     local full = L.DetectFullName(name)
     if full and c.full ~= full then
         c.full = full

@@ -613,7 +613,7 @@ function LU.BuildPage(page)
                     if listed > 0 then GameTooltip:AddDoubleLine("  " .. Tr("Listed at the AH"), tostring(listed), 0.8, 0.8, 0.8, 0.8, 0.8, 0.8) end
                 end
             end
-            GameTooltip:AddLine(Tr("Right-click: add to one of your lists"), 0.88, 0.66, 0.24)
+            GameTooltip:AddLine(Tr("Click: price history  ·  Right-click: add to one of your lists"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)

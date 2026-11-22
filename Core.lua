@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 local Tr = ns.L
 ns.name = ADDON
-ns.version = "0.23.0"
+ns.version = "0.25.0"
 _G.ImpotPointGouv = ns
 
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. Tr("\\media\\")
@@ -102,7 +102,7 @@ ns.RepairDoubleOffline = RepairDoubleOffline
 -- ---------------------------------------------------------------- royaume
 -- Nom du royaume, même quand le jeu renvoie une chaîne vide (vu sur Forever : toute une session sans nom).
 -- Repli : le nom déjà vu pour ce numéro de royaume (dans l'identifiant du perso, "Player-6923-…"),
--- puis le seul royaume présent dans les données.
+-- puis le dernier nom connu, puis le royaume qui a le plus de prix.
 local function RealmId()
     local guid = UnitGUID and UnitGUID("player")
     return guid and guid:match("^Player%-(%d+)%-")
@@ -115,18 +115,22 @@ function ns.Realm()
         if db then
             db.realmById = db.realmById or {}
             if rid then db.realmById[rid] = r end
-            db.lastRealm = r
+            db.lastRealm, db.realmKey = r, r -- realmKey : nom gardé par la v0.23.1 / 0.24.0
         end
         return r
     end
     if db then
         if rid and db.realmById and db.realmById[rid] then return db.realmById[rid] end
-        local only, n = nil, 0
-        for k in pairs(db.prices or {}) do
-            if k ~= "" and k ~= "?" then only, n = k, n + 1 end
-        end
-        if n == 1 then return only end
+        if db.realmKey and db.realmKey ~= "" then return db.realmKey end
         if db.lastRealm then return db.lastRealm end
+        -- Aucun nom connu : le royaume qui a le plus de prix enregistrés.
+        local best, most = nil, -1
+        for k, t in pairs(db.prices or {}) do
+            local n = 0
+            for _ in pairs(t) do n = n + 1 end
+            if k ~= "" and k ~= "?" and n > most then best, most = k, n end
+        end
+        if best then return best end
     end
     return "?"
 end
