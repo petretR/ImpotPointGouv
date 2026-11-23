@@ -134,6 +134,8 @@ ns.AddLocale("frFR", {
     ["Takes the gold and items from every mail (except C.O.D.)."] = "Prend l'or et les objets de chaque courrier (sauf contre-remboursement).",
     ["Collect gold"] = "Récupérer l'or",
     ["Takes only the gold: items stay in the mailbox."] = "Prend seulement l'or : les objets restent au courrier.",
+    ["Collect expired"] = "Enchères expirées",
+    ["Takes back the items of your expired and cancelled auctions."] = "Reprend les objets de tes enchères expirées et annulées.",
     ["Click: collect this mail"] = "Clic : récupérer ce courrier",
     ["C.O.D. mail: open it from the Blizzard mailbox to confirm payment."] = "Courrier contre-remboursement : ouvre-le depuis la boîte Blizzard pour confirmer le paiement.",
     ["this mail only contains text: read it from the Blizzard mailbox."] = "ce courrier ne contient que du texte : lis-le depuis la boîte Blizzard.",

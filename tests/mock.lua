@@ -166,6 +166,10 @@ SendMail = function(to)
 end
 Enum = { CraftingReagentType = { Basic = 1 }, AuctionHouseSortOrder = { Price = 0 }, BagIndex = {} }
 
+-- Auction mail subjects (the game's globals), used to tell expired and cancelled auctions apart.
+AUCTION_EXPIRED_MAIL_SUBJECT = "Auction expired: %s"
+AUCTION_REMOVED_MAIL_SUBJECT = "Auction cancelled: %s"
+
 -- Mailbox: a list of mails the tests fill; taking from a mail answers after 0.15 s, like the server.
 inbox = {}
 GetInboxNumItems = function() return #inbox, #inbox end
@@ -180,7 +184,8 @@ GetInboxItem = function(i, a)
 end
 GetInboxInvoiceInfo = function(i)
     local m = inbox[i]
-    if m and m.sender == "Auction House" then return "seller", "Linen Cloth", "Buyer", m.money end
+    -- Only sales carry an invoice (expired and cancelled auctions don't).
+    if m and m.sender == "Auction House" and (m.money or 0) > 0 then return "seller", "Linen Cloth", "Buyer", m.money end
 end
 CheckInbox = function() end
 mailTakes = 0
