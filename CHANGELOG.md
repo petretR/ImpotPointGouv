@@ -5,6 +5,10 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-23
+
+First stable release: everything up to 0.25.0, now developed by two maintainers through reviewed pull requests.
+
 ### Added
 - CI on every pull request: Lua 5.1 syntax check, toc check, smoke tests in English and French (`tests/run.lua`).
 - `CONTRIBUTING.md`: branches, pull requests, changelog, versioning and release process.
