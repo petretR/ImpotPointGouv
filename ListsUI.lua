@@ -1,11 +1,11 @@
--- ImpotPointGouv : onglet "Lists" de la fenêtre principale.
--- À gauche : les listes (avec le nombre d'affaires). À droite : les objets de la liste choisie,
--- prix actuel / habituel, courbe 7 jours, ventes estimées, stock, verdict et achat des affaires.
+-- ImpotPointGouv: "Lists" tab of the main window.
+-- Left: the lists (with their number of deals). Right: the items of the selected list,
+-- current / usual price, 7-day curve, estimated sales, stock, verdict and deal buying.
 local _, ns = ...
 local Tr = ns.L
 local T, P, LS = ns.Theme, ns.Prices, ns.Lists
 local C = T.C
--- Icônes en ligne : prix instable (triangle d'alerte teinté rouge) et fourniture de marchand (sac du marchand).
+-- Inline icons: unstable price (red-tinted warning triangle) and vendor supply (vendor bag).
 local UNSTABLE_ICON = "|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:13:13:0:0:64:64:0:64:0:64:237:92:82|t"
 local MERCHANT_ICON = "|TInterface\\GossipFrame\\VendorGossipIcon:11:11:0:0|t"
 local LU = {}
@@ -24,8 +24,8 @@ local VERDICT = {
 local DrawRouteRow
 local function Money(v) return v and ns.FormatMoney(v, { iconSize = 11, short = true }) or "|cff615f5c—|r" end
 
--- ------------------------------------------------------------ tri par colonne
--- Trie arr selon val(élément) ; les valeurs inconnues (nil) toujours en dernier, égalités départagées par tie.
+-- ------------------------------------------------------------ sorting by column
+-- Sorts arr by val(element); unknown values (nil) always last, ties broken by tie.
 function LU.SortBy(arr, val, desc, tie)
     local v, t = {}, {}
     for _, a in ipairs(arr) do v[a] = val(a); t[a] = tie(a) or "" end
@@ -40,7 +40,7 @@ function LU.SortBy(arr, val, desc, tie)
         return t[a] < t[b]
     end)
 end
--- Durée de recharge lisible : "1 d", "3 d", "20 h".
+-- Readable cooldown duration: "1 d", "3 d", "20 h".
 function LU.FmtCooldown(secs)
     if not secs or secs <= 0 then return "|cff615f5c—|r" end
     if secs >= 86400 then
@@ -50,7 +50,7 @@ function LU.FmtCooldown(secs)
     return ("%d"):format(math.floor(secs / 3600 + 0.5)) .. " " .. Tr("h")
 end
 
--- Valeur d'une colonne pour un objet (vue liste) : nom, prix, volatilité, ventes, en vente, possédés, verdict.
+-- Value of a column for an item (list view): name, price, volatility, sales, listed, owned, verdict.
 local VERDICT_RANK = { buy = 3, sell = 2, farm = 1 }
 function LU.ListValue(key, id, st, verdict)
     if key == "name" then return P.Name(id):lower() end
@@ -62,8 +62,8 @@ function LU.ListValue(key, id, st, verdict)
     elseif key == "listed" then return st.qty end
 end
 
--- ------------------------------------------------------------ route de montée : lignes dédiées
--- Montant arrondi : à l'argent près dès 1 pa, à l'or près dès 100 po.
+-- ------------------------------------------------------------ leveling route: dedicated rows
+-- Rounded amount: to the silver from 1 s, to the gold from 100 g.
 local function RMoney(v, opts)
     if not v then return "|cff615f5c—|r" end
     local a = math.abs(v)
@@ -108,7 +108,7 @@ DrawRouteRow = function(r, row, absIndex, page)
     local x = row.route or row.alt
     local rc = x.r
     rc.name = rc.name or "?"
-    -- Palier + petite jauge de progression vers 300.
+    -- Skill range + small progress gauge towards 300.
     if main then
         rt.range:SetText(("%d – %d"):format(x.from, x.to))
         local w = 54
@@ -117,7 +117,7 @@ DrawRouteRow = function(r, row, absIndex, page)
         rt.fill:SetWidth(math.max(2, math.floor(w * (x.to - x.from) / 300)))
     end
     rt.range:SetShown(main); rt.track:SetShown(main); rt.fill:SetShown(main)
-    -- Icône + nom.
+    -- Icon + name.
     local left = main and 86 or 104
     local tex = rc.out and ns.GetItemIcon(rc.out) or (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(rc.spell)) or "Interface\\Icons\\INV_Misc_QuestionMark"
     r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", left, 0); r.icon:SetTexture(tex)
@@ -138,7 +138,7 @@ DrawRouteRow = function(r, row, absIndex, page)
     rt.name:SetText(label)
     -- Crafts.
     rt.crafts:SetText(("×%d"):format(math.floor((x.crafts or 0) + 0.5)))
-    -- Source : pastille colorée, puis le coût d'apprentissage.
+    -- Source: colored pill, then the learning cost.
     local st = SRC_STYLE[rc.label] or { rc.label or "?", C.muted }
     local col = st[2]
     local txt = Tr(st[1])
@@ -151,15 +151,15 @@ DrawRouteRow = function(r, row, absIndex, page)
     else
         rt.learn:SetText("")
     end
-    -- Coût total de la tranche ; pour une alternative, l'écart avec l'étape choisie.
+    -- Total cost of the step; for an alternative, the difference with the chosen step.
     if main then
-        -- Signe du point de vue de ta bourse : − ça coûte, + ça rapporte.
+        -- Sign from your wallet's point of view: − it costs, + it earns.
         local v = -(x.cost or 0)
         rt.cost:SetText(RMoney(v, { sign = true }))
         T.SetFont(rt.cost, 13, true)
         if v > 0 then rt.cost:SetTextColor(0.36, 0.82, 0.45) else rt.cost:SetTextColor(0.93, 0.90, 0.84) end
     else
-        -- Alternative : son propre coût, même signe que les étapes (l'écart avec l'étape choisie est dans l'infobulle).
+        -- Alternative: its own cost, same sign as the steps (the difference with the chosen step is in the tooltip).
         rt.cost:SetText(RMoney(-(x.cost or 0), { icon = 10, sign = true }))
         T.SetFont(rt.cost, 11, false); rt.cost:SetTextColor(unpack(C.muted))
     end
@@ -173,7 +173,7 @@ end
 
 local function AHOpen() return AuctionHouseFrame and AuctionHouseFrame:IsShown() end
 
--- ------------------------------------------------------------ petit menu contextuel
+-- ------------------------------------------------------------ small context menu
 local pop
 local function Popup(anchor, entries)
     if not pop then
@@ -250,7 +250,7 @@ function LU.BuildPage(page)
     page.dealsOnly = false
     LU.select = LU.select or ns.db.settings.listSelect or "consum"
 
-    -- Colonne de gauche : les listes
+    -- Left column: the lists
     local side = CreateFrame("Frame", nil, page)
     side:SetPoint("TOPLEFT", 0, 0); side:SetPoint("BOTTOMLEFT", 0, 0); side:SetWidth(SIDE_W)
     T.Surface(side, C.surface, 10)
@@ -303,7 +303,7 @@ function LU.BuildPage(page)
     page.side = side
     page.HEAD_H, page.ITEM_H = HEAD_H, ITEM_H
 
-    -- En-tête de droite
+    -- Right header
     local main = CreateFrame("Frame", nil, page)
     main:SetPoint("TOPLEFT", SIDE_W + 12, 0); main:SetPoint("BOTTOMRIGHT", 0, 0)
     page.title = T.Text(main, 18, { bold = true }); page.title:SetPoint("TOPLEFT", 0, -2)
@@ -328,7 +328,7 @@ function LU.BuildPage(page)
     page.export:SetPoint("RIGHT", page.scan, "LEFT", -6, 0)
     page.export.tooltip = Tr("Creates an Auctionator shopping list with these items, to look at prices there. Auctionator buys whatever you click: buy deals from here instead.")
 
-    -- Filtres
+    -- Filters
     local fy = -44
     page.roleBtns = {}
     local prev
@@ -360,7 +360,7 @@ function LU.BuildPage(page)
         fprev = b
         page.foodBtns[f[1]] = b
     end
-    -- Vue : par recette (produit / enchantement puis ses composants) ou liste à plat.
+    -- View: by recipe (product / enchant then its materials) or flat list.
     page.view = ns.db.settings.listView or "recipe"
     page.viewBtns = {}
     local kprev
@@ -374,7 +374,7 @@ function LU.BuildPage(page)
         kprev = b
         page.viewBtns[k[1]] = b
     end
-    -- Listes de montée de métier : liste de courses ou meilleure route.
+    -- Profession leveling lists: shopping list or best route.
     page.lvView = ns.db.settings.lvView or "route"
     page.lvBtns = {}
     local lprev
@@ -396,7 +396,7 @@ function LU.BuildPage(page)
         if page.routeProf then ns.Route.ResetBans(page.routeProf) end; page:Refresh()
     end)
     page.resetRoute:SetPoint("RIGHT", page.export, "LEFT", -6, 0)
-    -- Revente de ce qu'on crafte en montant : HV, marchand, désenchantement (à cocher) ; le meilleur des cochés.
+    -- Resale of what you craft while leveling: AH, vendor, disenchant (toggles); the best of those on.
     page.sellBtns = {}
     local SELL = {
         { "ah", "AH", "Value what you craft at its AH price minus the 5% cut (liquid markets only)." },
@@ -406,7 +406,7 @@ function LU.BuildPage(page)
     local sprev = page.noAH
     for _, k in ipairs(SELL) do
         local b = T.Button(main, Tr(k[2]), k[1] == "ah" and 40 or 74, 22, function()
-            -- Bascule ; au moins un débouché reste coché.
+            -- Toggle; at least one outlet stays on.
             local set = {}
             for key, on in pairs(ns.Route.SellSet(ns.db.settings.routeSell)) do set[key] = on end
             set[k[1]] = not set[k[1]] or nil
@@ -419,7 +419,7 @@ function LU.BuildPage(page)
         page.sellBtns[k[1]] = b
     end
 
-    -- Tableau
+    -- Table
     local list = CreateFrame("Frame", nil, main)
     T.Surface(list, C.surface, 10)
     list:SetPoint("TOPLEFT", 0, -74); list:SetPoint("BOTTOMRIGHT", 0, 0)
@@ -433,7 +433,7 @@ function LU.BuildPage(page)
         local t = T.Text(list, 10, { bold = true, color = C.faint, text = h[1], justify = h[4] and "LEFT" or h[2] })
         if h[4] then t:SetPoint("TOPLEFT", list, "TOPRIGHT", h[3], -9) else t:SetPoint("TOP" .. h[2], h[3], -9) end
         page.heads[k] = t
-        -- Zone cliquable sur le titre : trie la colonne.
+        -- Clickable area on the header: sorts the column.
         local b = CreateFrame("Button", nil, list)
         b:SetPoint("TOPLEFT", t, "TOPLEFT", -4, 4); b:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", 4, -4)
         b:SetScript("OnClick", function() page:SortBy(k) end)
@@ -447,7 +447,7 @@ function LU.BuildPage(page)
         b:SetScript("OnLeave", function() GameTooltip:Hide(); page:Heads() end)
     end
 
-    -- Tri par colonne : une clé par colonne, selon la vue (listes ou route de montée).
+    -- Sorting by column: one key per column, depending on the view (lists or leveling route).
     local SORT_COLS = {
         list = { "name", "now", "usual", "vol", "sales", "listed", "have", "tag" },
         route = { "skill", "recipe", nil, nil, "crafts", "source", "cost" },
@@ -485,7 +485,7 @@ function LU.BuildPage(page)
         r:SetPoint("TOPLEFT", 6, -26 - (i - 1) * ROW_H); r:SetPoint("TOPRIGHT", -6, -26 - (i - 1) * ROW_H)
         r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         r.hl = T.Rounded(r, { 1, 1, 1, 0 }, 6, "BACKGROUND")
-        -- Ligne de recette : bande de fond + trait or au-dessus, pour séparer chaque recette.
+        -- Recipe row: background band + gold line above, to separate each recipe.
         r.band = T.Rounded(r, { C.gold[1], C.gold[2], C.gold[3], 0.07 }, 6, "BACKGROUND", -1)
         r.sep = r:CreateTexture(nil, "ARTWORK"); r.sep:SetTexture(T.WHITE); r.sep:SetHeight(1)
         r.sep:SetPoint("TOPLEFT", 4, 2); r.sep:SetPoint("TOPRIGHT", -4, 2); r.sep:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.35)
@@ -494,7 +494,7 @@ function LU.BuildPage(page)
         r.name = T.Text(r, 12); r.name:SetPoint("LEFT", 32, 0); r.name:SetWidth(176); r.name:SetWordWrap(false)
         r.now = T.Text(r, 12, { justify = "RIGHT" }); r.now:SetPoint("RIGHT", -396, 0)
         r.usual = T.Text(r, 12, { justify = "RIGHT", color = C.muted }); r.usual:SetPoint("RIGHT", -324, 0)
-        -- Courbe : 7 barres (plus bas prix du jour), la plus récente en or.
+        -- Curve: 7 bars (daily lowest price), the most recent in gold.
         r.bars = {}
         for k = 1, 7 do
             local t = r:CreateTexture(nil, "ARTWORK"); t:SetTexture(T.WHITE)
@@ -523,7 +523,7 @@ function LU.BuildPage(page)
                     local p = (P.IsVendorItem(m[1]) and P.VendorBuy(m[1])) or (st and (st.med or st.cur))
                     GameTooltip:AddDoubleLine(m[2] .. "× " .. P.Name(m[1]), p and Money(p * m[2]) or "?", 0.8, 0.8, 0.8, 1, 1, 1)
                 end
-                -- Marché du produit : prix moyen HV sur 7 jours et ventes estimées par jour.
+                -- Product market: 7-day average AH price and estimated sales per day.
                 local ost = rc.out and P.Stats(rc.out)
                 if ost and ost.avg then
                     GameTooltip:AddDoubleLine(Tr("AH average (7 days)"), Money(ost.avg), 0.7, 0.7, 0.7, 1, 1, 1)
@@ -613,7 +613,7 @@ function LU.BuildPage(page)
             local rl = {}
             for _, r2 in ipairs(LS.ROLES) do if e.roles[r2[1]] then rl[#rl + 1] = Tr(r2[2]) end end
             if #rl > 0 and #rl < 5 then GameTooltip:AddLine(Tr("Used by: ") .. table.concat(rl, ", "), 0.6, 0.6, 0.6) end
-            -- Où sont vos exemplaires (sacs, banque, courrier, en route, en vente).
+            -- Where your copies are (bags, bank, mail, in transit, listed).
             local I = ns.Inventory
             if I and I.Breakdown then
                 local rows, listed, transit, warband = I.Breakdown(row.id)
@@ -677,7 +677,7 @@ function LU.BuildPage(page)
         page:Draw()
     end)
 
-    -- ---------------------------------------------------------- dessin
+    -- ---------------------------------------------------------- drawing
     function page:DrawSide()
         local items = self.sideItems or {}
         local y = -8
@@ -688,7 +688,7 @@ function LU.BuildPage(page)
             local it = items[self.sideOffset + i]
             b.item = it
             local h = it and (it.header and self.HEAD_H or self.ITEM_H) or 0
-            if it and it.header and i > 1 then y = y - 6 end -- un peu d'air avant chaque groupe
+            if it and it.header and i > 1 then y = y - 6 end -- a little space before each group
             if it and y - h >= maxY then
                 b:ClearAllPoints()
                 b:SetPoint("TOPLEFT", 6, y); b:SetPoint("TOPRIGHT", -6, y); b:SetHeight(h)
@@ -742,7 +742,7 @@ function LU.BuildPage(page)
             if isRouteRow then
                 DrawRouteRow(r, row, self.offset + i, self)
             elseif row and row.head and not row.id then
-                -- En-tête d'enchantement (pas d'objet) : coût des composants.
+                -- Enchant header (no item): materials cost.
                 local rec = row.rec
                 local tex = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(rec.spell)) or "Interface\\Icons\\Trade_Engraving"
                 r.icon:SetTexture(tex)
@@ -766,7 +766,7 @@ function LU.BuildPage(page)
                 r.name:SetText(Build((row.head and row.rec and row.rec.cd) and Tr(row.rec.name) or ns.Prices.Name(id)))
                 r.now:SetText(st and st.cur and Money(st.cur) or (st and st.med and "|cff6fa8f0none|r" or Money(nil)))
                 r.usual:SetText(Money(st and st.med))
-                -- barres de la courbe
+                -- curve bars
                 local sp = st and st.spark or {}
                 local lo, hi
                 for k = 1, 7 do local v = sp[k]; if v then lo = lo and math.min(lo, v) or v; hi = hi and math.max(hi, v) or v end end
@@ -785,7 +785,7 @@ function LU.BuildPage(page)
                 r.sales:SetText(st and st.sales and (st.sales >= 10 and ("%d"):format(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) or "|cff615f5c—|r")
                 r.listed:SetText(st and st.qty and (st.qty >= 10000 and (Tr("%dk")):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
                 if self.cdView then
-                    -- Recharge et gain par jour sur la ligne de la recette ; rien sur ses composants.
+                    -- Cooldown and gain per day on the recipe row; nothing on its materials.
                     if row.head then
                         r.sales:SetText(LU.FmtCooldown(row.cdSecs))
                         r.listed:SetText(row.perDay and ns.FormatMoney(row.perDay, { iconSize = 10, short = true, sign = true, color = true }) or "|cff615f5c—|r")
@@ -809,21 +809,21 @@ function LU.BuildPage(page)
                     r.buy:SetDisabled(b ~= nil and not buying)
                 end
                 if row.head then
-                    -- Recette : gain net par craft (valeur HV après commission − composants).
+                    -- Recipe: net gain per craft (AH value after commission − materials).
                     if row.value and row.missing == 0 then
                         r.tag:SetText(ns.FormatMoney(row.value - row.cost, { sign = true, color = true, iconSize = 10, short = true }))
                     else
                         r.tag:SetText("")
                     end
                 elseif row.choice then
-                    -- Intermédiaire : l'acheter ou le fabriquer, le moins cher des deux.
+                    -- Intermediate: buy it or craft it, the cheaper of the two.
                     local craft = row.choice.best == "craft"
                     r.tag:SetText(craft and Tr("CRAFT") or Tr("BUY IT"))
                     r.tag:SetTextColor(unpack(craft and VERDICT.buy[2] or C.gold))
                 elseif v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
                 if row.merchant then
-                    -- Fourniture de marchand : prix chez le marchand, pas de courbe ni de verdict HV.
-                    -- Ventes / jour et quantité en vente restent affichées quand l'objet se vend aussi à l'HV.
+                    -- Vendor supply: vendor price, no curve or AH verdict.
+                    -- Sales / day and quantity listed stay shown when the item also sells at the AH.
                     r.now:SetText(Money(row.vendorPrice)); r.usual:SetText("")
                     r.vol:SetText("")
                     for k = 1, 7 do r.bars[k]:Hide() end
@@ -839,7 +839,7 @@ function LU.BuildPage(page)
 
     function page:Refresh()
         local groups = LS.Groups()
-        -- colonne de gauche
+        -- left column
         local items = {}
         for _, g in ipairs(groups) do
             local open = not self.collapsed[g.key]
@@ -860,7 +860,7 @@ function LU.BuildPage(page)
         if not l then return end
         LU.select = l.key
         self.title:SetText(Tr(l.title))
-        -- Rôles : seulement pour ce qui dépend des spés (consommables, enchantements, pré-BiS).
+        -- Roles: only for what depends on specs (consumables, enchants, pre-BiS).
         local showRoles = not (l.leveling or l.custom or l.cd or l.noRoles)
         local showKinds = not (l.leveling or l.custom) and #l.recipes > 0
         local role = showRoles and self.role or "all"
@@ -887,7 +887,7 @@ function LU.BuildPage(page)
         end
         self.routeProf = l.leveling and l.key:sub(4) or nil
         self.resetRoute:SetShown(isRoute and ns.Route.HasBans(self.routeProf) or false)
-        -- Recharges, vue par recette : la recharge et le gain par jour à la place de ventes / en vente.
+        -- Cooldowns, by recipe view: the cooldown and gain per day instead of sales / listed.
         local cdView = l.cd and byRecipe or false
         self.cdView = cdView
         local H = isRoute and { Tr("Skill"), Tr("Recipe"), "", "", Tr("Crafts"), Tr("Source"), Tr("Cost"), "" }
@@ -897,7 +897,7 @@ function LU.BuildPage(page)
         local sortS = self.sortState[self.sortMode]
         self.headLabels = H
         self:Heads()
-        -- Colonnes : celles de la route ou celles des listes.
+        -- Columns: the route's or the lists'.
         local HP = isRoute and {
             { "LEFT", 14 }, { "LEFT", 112 }, { "RIGHT", -300 }, { "RIGHT", -300 },
             { "RIGHT", -278 }, { "TOPLEFT", -252 }, { "RIGHT", -22 } }
@@ -913,7 +913,7 @@ function LU.BuildPage(page)
         self.listFrame:SetPoint("TOPLEFT", 0, (showRoles or isCook or l.leveling) and -74 or -44)
         self.listFrame:SetPoint("BOTTOMRIGHT", 0, 0)
 
-        -- lignes filtrées et triées : affaires, puis produits, puis demande
+        -- filtered and sorted rows: deals, then products, then demand
         local data = {}
         for _, e in ipairs(l.entries) do
             if (role == "all" or e.roles[role]) and (kind == "all" or e.kind == kind or (kind == "mat" and e.kind == "tool"))
@@ -934,7 +934,7 @@ function LU.BuildPage(page)
                 sortS.desc, function(row) return P.Name(row.id) end)
         end
         if byRecipe then
-            -- Une ligne par recette, puis ses composants en retrait.
+            -- One row per recipe, then its materials indented.
             local recs = {}
             for _, rec in ipairs(l.recipes) do
                 if (role == "all" or (rec.roles and rec.roles[role])) and LS.FoodMatch(rec.id, food) then
@@ -1011,7 +1011,7 @@ function LU.BuildPage(page)
         self.data = data
         self.offset = math.min(self.offset, math.max(0, #data - ROWS))
 
-        -- sous-titre
+        -- subtitle
         local sub = byRecipe and (Tr("%d recipes")):format(#(function() local n = {} for _, d in ipairs(data) do if d.head then n[#n + 1] = d end end return n end)())
             or (Tr("%d items")):format(#data)
         if isRoute then
@@ -1067,7 +1067,7 @@ local function RefreshIfShown()
     local f = _G.ImpotPointGouvFrame
     if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "lists" then ns.UI.Refresh() end
 end
--- Au plus un rafraîchissement toutes les 2 s : les infos d'objets arrivent par centaines.
+-- At most one refresh every 2 s: item info arrives by the hundreds.
 local pend, lastRefresh = false, 0
 local function Soon()
     if pend then return end

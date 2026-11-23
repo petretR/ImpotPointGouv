@@ -1,6 +1,6 @@
--- ImpotPointGouv : onglet Stock. Tout ce que vous possédez (sacs, banques, courrier, en vente,
--- en route, bataillon), tous personnages, avec sa valeur : HV nette (après la commission de 5 %)
--- ou prix marchand, le meilleur des deux. Les objets liés ne valent que le prix marchand.
+-- ImpotPointGouv: Stock tab. Everything you own (bags, banks, mail, listed,
+-- in transit, warband), all characters, with its value: net AH (after the 5 % commission)
+-- or vendor price, the better of the two. Bound items are worth the vendor price only.
 local _, ns = ...
 local Tr = ns.L
 local T, P, I = ns.Theme, ns.Prices, ns.Inventory
@@ -8,7 +8,7 @@ local C = T.C
 local S = {}
 ns.Stock = S
 
--- Valeur d'une unité : prix, source ("ah" | "vendor"), ou nil si aucun prix connu.
+-- Value of one unit: price, source ("ah" | "vendor"), or nil if no price is known.
 function S.Unit(id)
     local vs = P.VendorSell(id) or 0
     if I.IsBound(id) then
@@ -22,7 +22,7 @@ function S.Unit(id)
     return nil
 end
 
--- Lignes du stock : { id, q (détail), unit, src, total }.
+-- Stock rows: { id, q (detail), unit, src, total }.
 function S.Rows()
     local rows, total, n, unpriced = {}, 0, 0, 0
     for id, q in pairs(I.AllStock()) do
@@ -36,9 +36,13 @@ function S.Rows()
     return rows, math.floor(total), n, unpriced
 end
 
--- Pour la carte de la page Bilan.
+-- For the Overview card. Items with no price yet whose info the game has not loaded are requested,
+-- so their vendor price arrives and the card catches up (see the redraw below).
 function S.Value()
-    local _, total, n = S.Rows()
+    local rows, total, n = S.Rows()
+    for _, row in ipairs(rows) do
+        if not row.unit and not ns.GetItemInfo(row.id) then ns.RequestItem(row.id) end
+    end
     return total, n
 end
 
@@ -84,7 +88,7 @@ function S.BuildPage(page)
     local list = CreateFrame("Frame", nil, page)
     T.Surface(list, C.surface, 10)
     list:SetPoint("TOPLEFT", 0, -46); list:SetPoint("BOTTOMRIGHT", 0, 0)
-    -- En-têtes cliquables pour trier.
+    -- Clickable headers to sort.
     local heads = {
         { "Item", "LEFT", 44, "name" }, { "Where", "LEFT", 330 }, { "Qty", "RIGHT", -330, "qty" },
         { "Unit value", "RIGHT", -210, "unit" }, { "Total", "RIGHT", -20, "total" },
@@ -156,7 +160,7 @@ function S.BuildPage(page)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
-        -- Clic : historique des prix ; Maj-clic : lien dans la discussion.
+        -- Click: price history; Shift-click: link in chat.
         r:SetScript("OnMouseUp", function(self, button)
             local row = self.row
             if not row or button ~= "LeftButton" then return end
@@ -226,7 +230,13 @@ function S.BuildPage(page)
     end
 end
 
--- Noms et prix marchands qui arrivent après coup : redessine la page.
+-- Names and vendor prices that arrive later, and inventory changes: redraw the Stock tab and the
+-- Overview (its Stock value card), at most every 2 s.
+local function ShowsStock()
+    local f = _G.ImpotPointGouvFrame
+    local cur = ns.UI.Current and ns.UI.Current()
+    return f and f:IsShown() and (cur == "stock" or cur == "bilan")
+end
 local pend
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Stock") end
@@ -239,10 +249,16 @@ ev:SetScript("OnEvent", function(_, _, id, success)
     C_Timer.After(math.max(0.6, 2 - (GetTime() - lastDraw)), function()
         pend = false
         lastDraw = GetTime()
-        local f = _G.ImpotPointGouvFrame
-        if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "stock" then ns.UI.Refresh() end
+        if ShowsStock() then ns.UI.Refresh() end
     end)
 end)
+local invPend
 ns.On("INVENTORY_CHANGED", function()
-    if ns.UI.Current and ns.UI.Current() == "stock" then ns.UI.Refresh() end
+    if invPend or not ShowsStock() then return end
+    invPend = true
+    C_Timer.After(math.max(0.3, 2 - (GetTime() - lastDraw)), function()
+        invPend = false
+        lastDraw = GetTime()
+        if ShowsStock() then ns.UI.Refresh() end
+    end)
 end)

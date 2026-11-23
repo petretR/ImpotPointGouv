@@ -6,6 +6,8 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 ## [Unreleased]
 
 ### Added
+- Mail: "Collect expired" button next to Collect gold, to take back the items of expired and cancelled auctions (sales and other mail stay).
+- Mail: send part of a stack. Click the quantity of a checked item to type it, or use Shift with − / +; the addon splits the stack into a free bag slot when you send.
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
 
 ### Changed
@@ -13,6 +15,8 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
 
 ### Fixed
+- Mail: the "Collect only" buttons no longer try to take items when your bags are full (they waited 4 s on each mail); they take the gold and stop.
+- Overview: the Stock value card now matches the Stock tab. It updates when your bags change and when the game loads item prices it did not have yet.
 - Leveling route showed recipes as Known after you looked at someone else's profession (a link, guild or NPC window). Those recipes are no longer saved, and the wrong ones are cleaned up at login or when you next open your own profession window.
 - Item names that never appeared or blinked every few seconds in Lists, Market and Stock; prices next to recipes in the profession window no longer redraw constantly.
 

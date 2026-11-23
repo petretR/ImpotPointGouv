@@ -1,20 +1,20 @@
--- ImpotPointGouv : historique de marché par objet (fenêtre "Price history").
--- * Enregistrement : pour chaque objet des listes, un point par scan (7 jours) et un résumé par jour (2 ans).
---   Point = prix le plus bas (sans les annonces appâts), prix du marché (moyenne des 15 à 30 % les moins chers,
---   à la TSM, sans valeurs aberrantes), quantité en vente, unités parties et unités ajoutées depuis le scan précédent.
--- * Fenêtre : une seule, réutilisée ; deux courbes (bas / marché), un point par scan, barres parties / ajoutées.
+-- ImpotPointGouv: market history per item ("Price history" window).
+-- * Recording: for each item in the lists, one point per scan (7 days) and one summary per day (2 years).
+--   Point = lowest price (without bait listings), market price (average of the cheapest 15 to 30 %,
+--   TSM-style, without outliers), quantity listed, units gone and units added since the previous scan.
+-- * Window: a single one, reused; two curves (low / market), one point per scan, gone / added bars.
 local _, ns = ...
 local Tr = ns.L
 local P = ns.Prices
 local H = {}
 ns.History = H
 
-local KEEP_SCANS = 7 * 86400   -- points par scan gardés
-local MAX_SCANS = 400          -- par objet
-local KEEP_DAYS = 730          -- résumés par jour gardés
-local MERGE = 120              -- deux enregistrements à moins de 2 min = le même scan
-local DIFF_MAX_GAP = 48 * 3600 -- au-delà, on ne compare plus deux scans (parties / ajoutées inconnues)
-local LADDER_LEVELS = 60       -- paliers de prix gardés pour comparer au scan suivant
+local KEEP_SCANS = 7 * 86400   -- points per scan kept
+local MAX_SCANS = 400          -- per item
+local KEEP_DAYS = 730          -- daily summaries kept
+local MERGE = 120              -- two recordings less than 2 min apart = the same scan
+local DIFF_MAX_GAP = 48 * 3600 -- beyond that, two scans are no longer compared (gone / added unknown)
+local LADDER_LEVELS = 60       -- price levels kept to compare with the next scan
 
 local function Realm() return ns.Realm() end
 local function Root()
@@ -24,8 +24,8 @@ local function Root()
     return ns.db.hist[r]
 end
 
--- ------------------------------------------------------------ analyse d'un scan
--- ladder : { [prix unitaire] = quantité } -> paliers triés { {prix, qté}, ... }
+-- ------------------------------------------------------------ analysing a scan
+-- ladder: { [unit price] = quantity } -> sorted levels { {price, qty}, ... }
 local function Levels(ladder)
     local lv = {}
     for p, q in pairs(ladder or {}) do if p and p > 0 and q and q > 0 then lv[#lv + 1] = { p, q } end end
@@ -33,7 +33,7 @@ local function Levels(ladder)
     return lv
 end
 
--- Prix au quantile f (0..1) des unités de lv, à partir du palier first.
+-- Price at quantile f (0..1) of the units of lv, starting at level first.
 local function Quantile(lv, f, first)
     local total = 0
     for i = first, #lv do total = total + lv[i][2] end
@@ -45,10 +45,10 @@ local function Quantile(lv, f, first)
     return lv[#lv] and lv[#lv][1]
 end
 
--- Renvoie le prix le plus bas (sans appâts) et le prix du marché, d'après les paliers triés.
--- Appât : un palier de 2 unités au plus (ou < 5 % du total) à moins de 60 % du prix de référence ;
--- on en écarte trois au plus. Marché : au moins 15 % des unités, jusqu'à 30 % tant que le palier suivant
--- ne saute pas de plus de 20 % ; puis on retire ce qui s'écarte de plus de 1,5 écart-type et on fait la moyenne.
+-- Returns the lowest price (without baits) and the market price, from the sorted levels.
+-- Bait: a level of at most 2 units (or < 5 % of the total) below 60 % of the reference price;
+-- at most three are dropped. Market: at least 15 % of the units, up to 30 % as long as the next level
+-- does not jump by more than 20 %; then drop what is more than 1.5 standard deviations away and average.
 function H.Analyze(lv)
     if #lv == 0 then return nil, nil end
     local first, total = 1, 0
@@ -65,7 +65,7 @@ function H.Analyze(lv)
         end
     end
     local low = lv[first][1]
-    -- tranche des moins chers
+    -- cheapest slice
     local minU, maxU = total * 0.15, total * 0.30
     local slice, taken, prev = {}, 0, nil
     for i = first, #lv do
@@ -95,7 +95,7 @@ function H.Analyze(lv)
     return low, math.floor(mean + 0.5)
 end
 
--- Paliers <-> texte compact "prix:qté,prix:qté" (les LADDER_LEVELS moins chers).
+-- Levels <-> compact text "price:qty,price:qty" (the LADDER_LEVELS cheapest).
 local function PackLadder(lv)
     local parts = {}
     for i = 1, math.min(#lv, LADDER_LEVELS) do parts[i] = lv[i][1] .. ":" .. lv[i][2] end
@@ -107,7 +107,7 @@ local function UnpackLadder(s)
     return m
 end
 
--- Unités parties / ajoutées entre deux scans, sur la plage de prix que les deux ont vue.
+-- Units gone / added between two scans, over the price range both have seen.
 local function Diff(prev, prevHi, now, nowHi)
     local hi = math.min(prevHi or 0, nowHi or 0)
     local gone, new = 0, 0
@@ -123,8 +123,8 @@ local function Diff(prev, prevHi, now, nowHi)
     return gone, new
 end
 
--- ------------------------------------------------------------ stockage
--- Point par scan : "t,bas,marché,qté,parties,ajoutées" ; résumé du jour : "jour,bas,Σmarché,n marché,qté,parties,ajoutées,scans".
+-- ------------------------------------------------------------ storage
+-- Point per scan: "t,low,market,qty,gone,added"; daily summary: "day,low,Σmarket,n market,qty,gone,added,scans".
 local function Num(v) return v and tostring(math.floor(v + 0.5)) or "" end
 local function Split(s)
     local out, i = {}, 0
@@ -133,7 +133,7 @@ local function Split(s)
 end
 H._Split = Split
 
--- Reprend l'historique déjà connu (points par scan et prix du jour) la première fois.
+-- Takes over the history already known (points per scan and daily prices) the first time.
 local function Import(id, h)
     local e = P.Entry(id)
     if not e then return end
@@ -148,7 +148,7 @@ local function Import(id, h)
     end
 end
 
--- merged : même scan déjà compté (pas de scan ni de prix du marché en plus, seulement les écarts).
+-- merged: same scan already counted (no extra scan or market price, only the differences).
 local function AddDaily(h, t, low, mkt, qty, gone, new, merged)
     local day = math.floor(t / 86400)
     local last = h.d[#h.d] and Split(h.d[#h.d])
@@ -168,8 +168,8 @@ local function AddDaily(h, t, low, mkt, qty, gone, new, merged)
     end
 end
 
--- Appelé par Prices.Record pour un objet suivi après une recherche complète.
--- ladder : paliers de prix vus (nil si le scan n'en donne pas, ex. recherche "browse" : bas et quantité seulement).
+-- Called by Prices.Record for a tracked item after a full search.
+-- ladder: price levels seen (nil if the scan gives none, e.g. a "browse" search: low and quantity only).
 function H.Note(id, low, qty, ladder)
     if not id then return end
     local root = Root()
@@ -185,18 +185,18 @@ function H.Note(id, low, qty, ladder)
         local lv = Levels(ladder)
         local lo
         lo, mkt = H.Analyze(lv)
-        low = lo -- nil s'il n'y a plus rien en vente
+        low = lo -- nil if nothing is listed any more
         local nowHi = #lv == 0 and math.huge or lv[math.min(#lv, LADDER_LEVELS)][1]
         if h.lad and h.lt and now - h.lt <= DIFF_MAX_GAP then
             gone, new = Diff(UnpackLadder(h.lad), (h.lhi == -1) and math.huge or h.lhi, ladder, nowHi)
         end
-        -- lhi = plus haut prix vu (-1 : rien en vente, tout palier futur compte comme ajouté)
+        -- lhi = highest price seen (-1: nothing listed, every future level counts as added)
         h.lad, h.lhi, h.lt = PackLadder(lv), nowHi ~= math.huge and nowHi or -1, now
     end
     local last = h.s[#h.s] and Split(h.s[#h.s])
     local merged = last and last[1] and now >= last[1] and now - last[1] < MERGE
     if merged then
-        -- même scan vu par deux chemins (scan complet puis recherche) : on garde le plus récent, on cumule les écarts
+        -- same scan seen through two paths (full scan then search): keep the latest, add up the differences
         local g = (gone or last[5]) and ((last[5] or 0) + (gone or 0)) or nil
         local a = (new or last[6]) and ((last[6] or 0) + (new or 0)) or nil
         h.s[#h.s] = table.concat({ Num(last[1]), Num(low), Num(mkt or last[3]), Num(qty), Num(g), Num(a) }, ",")
@@ -208,7 +208,7 @@ function H.Note(id, low, qty, ladder)
     if H.frame and H.frame:IsShown() and H.id == id then H.dirty = true end
 end
 
--- Pas encore d'historique : ce que les prix gardent déjà (points par scan des listes, plus bas du jour).
+-- No history yet: what prices already keep (list points per scan, daily lows).
 local function FromPrices(id, span)
     local e = P.Entry(id)
     local out = {}
@@ -230,7 +230,7 @@ local function FromPrices(id, span)
     return out
 end
 
--- Points d'une période : { t, low, mkt, qty, gone, new } ; par scan jusqu'à 7 jours, par jour au-delà.
+-- Points of a period: { t, low, mkt, qty, gone, new }; per scan up to 7 days, per day beyond.
 function H.Series(id, span)
     local h = Root()[id]
     if not h then return FromPrices(id, span) end
@@ -248,7 +248,7 @@ function H.Series(id, span)
         end
     end
     if span and span <= KEEP_SCANS then
-        -- Points par scan ; avant le premier, les résumés du jour (objet suivi depuis peu).
+        -- Points per scan; before the first one, the daily summaries (item tracked recently).
         local first = h.s[1] and Split(h.s[1])[1]
         Daily(first or now + 1)
         for _, s in ipairs(h.s) do
@@ -263,11 +263,11 @@ function H.Series(id, span)
     return out
 end
 
--- Résumé pour l'en-tête : dernier point, point d'il y a 24 h, scans aujourd'hui.
+-- Summary for the header: last point, point from 24 h ago, scans today.
 function H.Summary(id)
     local h = Root()[id]
     if not h then
-        -- d'après les plus bas du jour gardés par les prix
+        -- from the daily lows kept by prices
         local e = P.Entry(id)
         if not e or not e.d or #e.d == 0 then return nil end
         local today = math.floor(time() / 86400)
@@ -295,7 +295,7 @@ function H.Summary(id)
         ago = ago and ago[2], today = today }
 end
 
--- ------------------------------------------------------------ fenêtre
+-- ------------------------------------------------------------ window
 local T = ns.Theme
 local C = T.C
 local BLUE = { 0.45, 0.68, 0.95, 1 }
@@ -320,7 +320,7 @@ local function Pool(list, i, create)
 end
 local function HideFrom(list, n) for i = n, #list do list[i]:Hide() end end
 
--- Repris de la fiche prix (v0.24.0) : écarts en %, rareté à l'HV, prix à un instant donné.
+-- Taken from the price card (v0.24.0): differences in %, AH scarcity, price at a given time.
 local function Pct(a, b)
     if not a or not b or b <= 0 then return nil end
     return (a / b - 1) * 100
@@ -371,7 +371,7 @@ local function Build()
     local close = T.CloseButton(f, function() f:Hide() end)
     close:SetPoint("TOPRIGHT", -10, -10)
 
-    -- En-tête
+    -- Header
     f.icon = f:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(40, 40); f.icon:SetPoint("TOPLEFT", 18, -18)
     f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     f.iconHit = CreateFrame("Frame", nil, f); f.iconHit:SetAllPoints(f.icon)
@@ -383,7 +383,7 @@ local function Build()
     f.change = T.Text(f, 12); f.change:SetPoint("TOPLEFT", f.price, "BOTTOMLEFT", 0, -3)
     f.last = T.Text(f, 11, { color = C.faint }); f.last:SetPoint("TOPLEFT", f.change, "BOTTOMLEFT", 0, -3)
 
-    -- Chiffres clés (repris de la fiche prix) : écart au prix marchand ou habituel, 4 jours, 1er scan, offre.
+    -- Key numbers (from the price card): difference to vendor or usual price, 4 days, 1st scan, supply.
     f.tiles = {}
     for i = 1, 4 do
         local t = Tile(f)
@@ -392,7 +392,7 @@ local function Build()
         f.tiles[i] = t
     end
 
-    -- Légende
+    -- Legend
     local leg, prevL = {}, nil
     for _, it in ipairs({ { Tr("Lowest listing"), C.gold, "line" }, { Tr("Market price"), BLUE, "line" },
         { Tr("Units gone"), C.pos, "bar" }, { Tr("Units listed"), PINK, "bar" } }) do
@@ -405,7 +405,7 @@ local function Build()
         prevL = tx
     end
 
-    -- Zone du graphique : prix en haut, barres en bas.
+    -- Chart area: prices on top, bars at the bottom.
     local plot = CreateFrame("Frame", nil, f)
     plot:SetPoint("TOPLEFT", 18, -134)
     plot:SetPoint("BOTTOMRIGHT", -70, 140)
@@ -419,7 +419,7 @@ local function Build()
     base:SetHeight(1); base:SetPoint("BOTTOMLEFT"); base:SetPoint("BOTTOMRIGHT")
     f.lines, f.dots, f.bars, f.grids, f.ylabels, f.xlabels = {}, {}, {}, {}, {}, {}
     f.refTex, f.refLabels = {}, {}
-    -- Lecture des fluctuations : prix habituel, fourchette, volatilité, ventes, verdict.
+    -- Reading the fluctuations: usual price, range, volatility, sales, verdict.
     f.stats = T.Text(f, 12, { color = C.muted }); f.stats:SetPoint("BOTTOMLEFT", 20, 50)
     f.stats:SetWidth(660); f.stats:SetWordWrap(false)
     f.empty = T.Text(f, 13, { color = C.muted, justify = "CENTER", wrap = true })
@@ -429,7 +429,7 @@ local function Build()
     f.tagTx = T.Text(f.tag, 10, { bold = true, justify = "CENTER", color = { 0.08, 0.07, 0.05, 1 } })
     f.tagTx:SetPoint("CENTER")
 
-    -- Survol : ligne verticale + infobulle du scan le plus proche.
+    -- Hover: vertical line + tooltip of the nearest scan.
     local hover = CreateFrame("Frame", nil, f)
     hover:SetPoint("TOPLEFT", plot, "TOPLEFT"); hover:SetPoint("BOTTOMRIGHT", bars, "BOTTOMRIGHT")
     hover:EnableMouse(true)
@@ -468,7 +468,7 @@ local function Build()
         GameTooltip:Show()
     end)
 
-    -- Périodes
+    -- Periods
     f.rangeBtns = {}
     local prev
     for _, r in ipairs(RANGES) do
@@ -507,7 +507,7 @@ local function Draw(f, pts, refs, band)
         return
     end
     f.empty:Hide()
-    -- Lignes de référence (prix marchand, habituel) : seulement si elles restent proches de la courbe.
+    -- Reference lines (vendor price, usual): only if they stay close to the curve.
     for _, ref in ipairs(refs or {}) do
         if ref.v and ref.v > 0 and ref.v <= vmax * 1.6 then vmin = math.min(vmin, ref.v); vmax = math.max(vmax, ref.v) end
     end
@@ -520,7 +520,7 @@ local function Draw(f, pts, refs, band)
     if t1 == t0 then t0, t1 = t0 - 1800, t1 + 1800 end
     local function X(t) return 6 + (t - t0) / (t1 - t0) * (W - 12) end
 
-    -- Grille + prix à droite
+    -- Grid + prices on the right
     local gi = 0
     for v = lo, hi + step * 0.5, step do
         gi = gi + 1
@@ -533,7 +533,7 @@ local function Draw(f, pts, refs, band)
         l:ClearAllPoints(); l:SetPoint("LEFT", plot, "BOTTOMRIGHT", 8, Y(v)); l:SetText(ns.FormatMoneyAxis(v))
     end
     HideFrom(f.grids, gi + 1); HideFrom(f.ylabels, gi + 1)
-    -- Dates en bas (5)
+    -- Dates at the bottom (5)
     local fmt = (t1 - t0) <= 86400 * 1.5 and "%H:%M" or "%d/%m"
     for i = 1, 5 do
         local t = t0 + (t1 - t0) * (i - 1) / 4
@@ -543,7 +543,7 @@ local function Draw(f, pts, refs, band)
         l:SetText(date(fmt, math.floor(t)))
     end
 
-    -- Bande du prix habituel (bas–haut) et lignes de référence en pointillés (repris de la fiche prix).
+    -- Usual price band (low–high) and dotted reference lines (from the price card).
     local ri = 0
     local function Tex(layer, sub)
         ri = ri + 1
@@ -575,7 +575,7 @@ local function Draw(f, pts, refs, band)
     end
     HideFrom(f.refTex, ri + 1); HideFrom(f.refLabels, rl + 1)
 
-    -- Courbes : un point par scan, reliés au scan suivant quand les deux ont une valeur.
+    -- Curves: one point per scan, joined to the next scan when both have a value.
     local li, di = 0, 0
     local dotSize = #pts > 200 and 3 or #pts > 80 and 4 or 5
     local function Series(key, col)
@@ -608,7 +608,7 @@ local function Draw(f, pts, refs, band)
     Series("low", C.gold)
     HideFrom(f.lines, li + 1); HideFrom(f.dots, di + 1)
 
-    -- Barres : parties (vert) et ajoutées (rose), côte à côte sous chaque scan.
+    -- Bars: gone (green) and added (pink), side by side under each scan.
     local bi = 0
     local minGap = math.huge
     for i = 2, #pts do minGap = math.min(minGap, X(pts[i].t) - X(pts[i - 1].t)) end
@@ -632,7 +632,7 @@ local function Draw(f, pts, refs, band)
     end
     HideFrom(f.bars, bi + 1)
 
-    -- Étiquette du dernier prix le plus bas, sur l'axe.
+    -- Label of the last lowest price, on the axis.
     local lastLow
     for i = #pts, 1, -1 do if pts[i].low then lastLow = pts[i].low; break end end
     if lastLow then
@@ -676,7 +676,7 @@ function H.Refresh()
     local st = P.Stats(id) or {}
     local vs = P.VendorSell(id)
     local all = H.Series(id, nil)
-    -- Chiffres clés.
+    -- Key numbers.
     local tl = f.tiles
     if vs and cur then
         tl[1].label:SetText(Tr("VS VENDOR PRICE"))
@@ -717,7 +717,7 @@ function H.Refresh()
     Draw(f, H.Series(id, span), refs, st.low and st.high and { st.low, st.high })
 end
 
--- Ouvre la fenêtre sur un objet (ou change d'objet si elle est déjà ouverte).
+-- Opens the window on an item (or switches item if it is already open).
 function H.Show(id)
     if not id then return end
     H.frame = H.frame or Build()
@@ -728,7 +728,7 @@ function H.Show(id)
     H.Refresh()
 end
 
--- /ipg item <lien | id | nom>
+-- /ipg item <link | id | name>
 function H.Command(arg)
     arg = arg or ""
     local id = tonumber(arg) or tonumber(arg:match("item:(%d+)"))
@@ -747,10 +747,10 @@ function H.Command(arg)
 end
 
 ns.On("PRICES_CHANGED", function() if H.frame and H.frame:IsShown() then H.dirty = true end end)
--- Suivi automatique des objets ouverts (essayé puis retiré) : on efface ce qu'il a pu laisser.
+-- Automatic tracking of opened items (tried then removed): erase what it may have left.
 ns.On("DB_READY", function() if ns.db then ns.db.histTrack = nil end end)
 
--- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+-- Profiling (/ipg perf): heavy functions called outside timed events.
 if ns.Profile then
     H.Note = ns.Profile.Wrap("History:Note", H.Note)
 end

@@ -1,5 +1,5 @@
--- ImpotPointGouv : raccourci "Next action" — crafte le prochain objet de la file, sinon désenchante le suivant.
--- Un bouton sécurisé invisible, réglé hors combat sur la prochaine action ; le raccourci clique dessus.
+-- ImpotPointGouv: "Next action" binding — crafts the next item in the queue, otherwise disenchants the next one.
+-- An invisible secure button, set out of combat to the next action; the binding clicks it.
 local _, ns = ...
 local Tr = ns.L
 local N = {}
@@ -26,7 +26,7 @@ function N.Arm()
             N.label = (Tr("craft %s ×%d")):format(c.name, count)
         end
     end
-    -- Désenchantement seulement quand la fenêtre Disenchant est ouverte.
+    -- Disenchanting only when the Disenchant window is open.
     if not action and ns.Destroy and ns.Destroy.NextTarget and ns.Destroy.IsShown() then
         local it, spell = ns.Destroy.NextTarget()
         if it and spell then
@@ -50,7 +50,7 @@ function N.Key()
     return GetBindingKey and GetBindingKey("CLICK ImpotPointGouvNextButton:LeftButton")
 end
 
--- Réarme après chaque changement pertinent (sacs, file, craft, désenchantement, sortie de combat).
+-- Re-arms after each relevant change (bags, queue, craft, disenchant, leaving combat).
 local queued
 local function Queue()
     if queued then return end

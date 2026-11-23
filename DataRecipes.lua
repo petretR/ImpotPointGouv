@@ -1,9 +1,9 @@
--- ImpotPointGouv : toutes les recettes des métiers (WoW Forever), pour la meilleure route de montée.
--- Généré à partir d'AtlasLoot (édition Forever) : composants, patron.
--- Seuils et nombre produit : ForeverMaster (foreverchanges.pro), via .github/scripts/update_recipes.py.
--- [sort] = { produit, métier, orange, jaune, gris, nb produit, patron, estimé, id1, n1, id2, n2, ... }
--- métier : 1 Secourisme, 2 Forge, 3 Cuir, 4 Alchimie, 6 Cuisine, 8 Couture, 9 Ingénierie, 10 Enchantement.
--- estimé = 1 : seuils jaune / gris déduits des écarts habituels (recette sans seuils publiés).
+-- ImpotPointGouv: every profession recipe (WoW Forever), for the best leveling route.
+-- Generated from AtlasLoot (Forever edition): materials, pattern.
+-- Thresholds and number made: ForeverMaster (foreverchanges.pro), via .github/scripts/update_recipes.py.
+-- [spell] = { product, profession, orange, yellow, grey, number made, pattern, estimated, id1, n1, id2, n2, ... }
+-- profession: 1 First Aid, 2 Blacksmithing, 3 Leatherworking, 4 Alchemy, 6 Cooking, 8 Tailoring, 9 Engineering, 10 Enchanting.
+-- estimated = 1: yellow / grey thresholds inferred from the usual gaps (recipe without published thresholds).
 local _, ns = ...
 ns.Data = ns.Data or {}
 ns.Data.allRecipes = {
@@ -2121,7 +2121,7 @@ ns.Data.allRecipes = {
     [1319165] = { 21720,9,275,275,285,5,286087,0,15992,1,8170,1 },
     [1319313] = { 286152,6,225,245,255,1,286153,0,13890,1,3713,1 },
     [1328948] = { 0,10,280,280,300,1,289560,0 },
-    -- Recettes de ForeverMaster absentes des données d'origine.
+    -- ForeverMaster recipes missing from the original data.
     [16650] = { 12624,3,245,265,285,1,12691,0,8170,40,12810,2,12803,4,8153,4,12364,1,14341,1 },
     [16661] = { 12632,3,270,290,310,1,12703,0,8170,20,12810,4,7080,4,12361,4,14341,1 },
     [16728] = { 12636,3,290,290,310,1,12716,0,8170,40,12810,4,8168,60,12799,6,12364,2,14341,1 },
@@ -2169,5 +2169,5 @@ ns.Data.allRecipes = {
     [1263425] = { 279973,8,20,20,20,1,0,0,2996,1,2320,1 },
     [1293088] = { 274048,9,125,125,145,1,274049,0,249409,1,249391,1,3575,1 },
 }
--- Patrons connus comme vendus chez un marchand (prix ≈ 4 × prix de revente).
+-- Patterns known to be sold by a vendor (price ≈ 4 × resale price).
 ns.Data.vendorPatterns = { [252783]=true, [252811]=true, [252833]=true, [252941]=true, [250979]=true, [13501]=true, [250378]=true, [250376]=true, [250379]=true, [250373]=true, [20011]=true, [20758]=true, [20753]=true, [20756]=true, [250978]=true, [250981]=true, [13477]=true, [250374]=true, [250384]=true, [250377]=true, [250388]=true, [20755]=true, [5642]=true, [20013]=true, [252812]=true, [19218]=true, [19217]=true, [249493]=true, [250367]=true, [250369]=true, [20752]=true, [20757]=true, [252784]=true, [252834]=true, [252942]=true, [5640]=true, [5643]=true, [250984]=true, [250985]=true, [250987]=true, [20754]=true, [14526]=true, [19215]=true, [15734]=true, [249476]=true, [254124]=true, [14481]=true, [249537]=true, [273978]=true, [273977]=true, [273976]=true, [273979]=true, [12703]=true, [249506]=true, [249532]=true, [249478]=true, [14634]=true, [250372]=true, [250371]=true, [250386]=true, [9301]=true, [6068]=true, [250387]=true, [250383]=true, [250381]=true, [251449]=true, [251430]=true, [251447]=true, [251425]=true, [251448]=true, [251415]=true, [251429]=true, [19779]=true, [251414]=true, [251470]=true, [15758]=true, [251471]=true, [12698]=true, [251426]=true, [251416]=true, [19208]=true, [251469]=true, [264234]=true, [19212]=true, [249481]=true, [249502]=true, [249489]=true, [274394]=true, [249525]=true, [249534]=true, [249535]=true, [274401]=true, [249480]=true, [249526]=true, [249503]=true, [249496]=true, [11039]=true, [6349]=true, [249479]=true, [249504]=true, [16217]=true, [16221]=true, [249536]=true, [249538]=true, [289560]=true, [22392]=true, [19445]=true, [274398]=true }

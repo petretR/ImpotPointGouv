@@ -68,6 +68,8 @@ local function Obj()
             return function() return Obj() end
         end
         if k == "IsOwned" then return function() return false end end
+        -- Frame methods are CamelCase; lowercase keys are the addon's own fields: nil until set.
+        if type(k) == "string" and k:match("^%l") then return nil end
         return function() end
     end })
 end
@@ -118,12 +120,55 @@ C_Item = {
 }
 C_Spell = { GetSpellName = function(s) return "Spell " .. s end, GetSpellTexture = function() return "icon" end }
 C_TradeSkillUI = { GetRecipeSchematic = function() return nil end }
+-- Bags: bags[bag][slot] = { itemID, stackCount }. Tests fill bag 0 (16 slots); the others are empty.
+bags = { [0] = {} }
+local cursor
+local function Slot(bag, slot) return bags[bag] and bags[bag][slot] end
 C_Container = {
-    GetContainerNumSlots = function() return 0 end,
-    GetContainerItemInfo = function() return nil end,
-    GetContainerNumFreeSlots = function() return 10, 0 end,
+    GetContainerNumSlots = function(bag) return bag == 0 and 16 or 0 end,
+    GetContainerItemInfo = function(bag, slot)
+        local s = Slot(bag, slot)
+        if s then return { itemID = s.itemID, stackCount = s.stackCount, iconFileID = "icon", quality = 1 } end
+    end,
+    GetContainerNumFreeSlots = function(bag)
+        if bag ~= 0 then return 0, 0 end
+        local n = 0
+        for slot = 1, 16 do if not bags[0][slot] then n = n + 1 end end
+        return n, 0
+    end,
+    SplitContainerItem = function(bag, slot, count)
+        local s = Slot(bag, slot)
+        if s and s.stackCount > count then s.stackCount = s.stackCount - count; cursor = { itemID = s.itemID, stackCount = count } end
+    end,
+    PickupContainerItem = function(bag, slot)
+        local s = Slot(bag, slot)
+        if cursor and not s then bags[bag][slot] = cursor; cursor = nil
+        elseif not cursor and s then cursor = s; cursor.from = { bag, slot } end
+    end,
 }
+CursorHasItem = function() return cursor ~= nil end
+ClearCursor = function() cursor = nil end
+-- Send mail: attachments taken from the cursor; SendMail answers MAIL_SEND_SUCCESS after 0.3 s.
+sentMails, attachments = {}, {}
+ClickSendMailItemButton = function(i)
+    if cursor and cursor.from then
+        attachments[i] = cursor
+        bags[cursor.from[1]][cursor.from[2]] = nil
+        cursor = nil
+    end
+end
+ClearSendMail = function() attachments = {} end
+SetSendMailMoney = function() end
+SendMail = function(to)
+    sentMails[#sentMails + 1] = { to = to, items = attachments }
+    attachments = {}
+    C_Timer.After(0.3, function() Fire("MAIL_SEND_SUCCESS") end)
+end
 Enum = { CraftingReagentType = { Basic = 1 }, AuctionHouseSortOrder = { Price = 0 }, BagIndex = {} }
+
+-- Auction mail subjects (the game's globals), used to tell expired and cancelled auctions apart.
+AUCTION_EXPIRED_MAIL_SUBJECT = "Auction expired: %s"
+AUCTION_REMOVED_MAIL_SUBJECT = "Auction cancelled: %s"
 
 -- Mailbox: a list of mails the tests fill; taking from a mail answers after 0.15 s, like the server.
 inbox = {}
@@ -139,7 +184,8 @@ GetInboxItem = function(i, a)
 end
 GetInboxInvoiceInfo = function(i)
     local m = inbox[i]
-    if m and m.sender == "Auction House" then return "seller", "Linen Cloth", "Buyer", m.money end
+    -- Only sales carry an invoice (expired and cancelled auctions don't).
+    if m and m.sender == "Auction House" and (m.money or 0) > 0 then return "seller", "Linen Cloth", "Buyer", m.money end
 end
 CheckInbox = function() end
 mailTakes = 0

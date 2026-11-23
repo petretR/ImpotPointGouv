@@ -1,5 +1,5 @@
--- ImpotPointGouv : guide de démarrage. Liste ce qui manque pour que tout marche (rôles, métiers,
--- noms complets, prix, raccourci) et l'affiche dans un bandeau tant qu'il reste des étapes.
+-- ImpotPointGouv: setup guide. Lists what is missing for everything to work (roles, professions,
+-- full names, prices, binding) and shows it in a banner while steps remain.
 local _, ns = ...
 local Tr = ns.L
 local T = ns.Theme
@@ -20,7 +20,7 @@ local function HasPrices()
 end
 
 local win
--- Ouvre la page Characters au premier plan (le guide se ferme, sinon il la cache).
+-- Opens the Characters page in front (the guide closes, otherwise it hides it).
 local function OpenChars()
     if win then win:Hide() end
     ns.UI.Toggle("chars")
@@ -28,7 +28,7 @@ end
 
 local NEXT = "CLICK ImpotPointGouvNextButton:LeftButton"
 local DESTROY = "CLICK ImpotPointGouvDestroyButton:LeftButton"
--- Déplace la touche de "Disenchant next item" vers "Next action" (qui crafte puis désenchante).
+-- Moves the "Disenchant next item" key to "Next action" (which crafts then disenchants).
 local function MoveKey()
     if InCombatLockdown and InCombatLockdown() then return end
     local key = GetBindingKey and GetBindingKey(DESTROY)
@@ -40,7 +40,7 @@ local function MoveKey()
     S.Refresh()
 end
 
--- Chaque étape : { done = bool, text = "...", how = "..." , go = fonction optionnelle }
+-- Each step: { done = bool, text = "...", how = "..." , go = optional function }
 function S.Steps()
     local st = ns.db.settings
     local steps = {}
@@ -104,7 +104,7 @@ function S.Remaining()
     return n
 end
 
--- ------------------------------------------------------------ fenêtre
+-- ------------------------------------------------------------ window
 local function Build()
     win = CreateFrame("Frame", "ImpotPointGouvSetup", UIParent)
     win:SetSize(420, 120)
@@ -169,7 +169,7 @@ function S.Refresh()
         for i = #steps + 1, #win.rows do win.rows[i]:Hide() end
         win:SetHeight(48 + #steps * 44 + 50)
         win.sub:SetText(left == 0 and "|cff5cd173all set|r" or (left .. (left > 1 and " steps left" or " step left")))
-        -- Tout est prêt : le bouton ferme simplement le guide.
+        -- Everything is ready: the button simply closes the guide.
         win.chars.text:SetText(left == 0 and "Done" or "Characters")
         win.chars.tooltip = left == 0 and nil or "Roles and professions of all your characters."
     end
@@ -183,7 +183,7 @@ function S.Show()
     S.Refresh()
 end
 
--- ------------------------------------------------------------ bandeaux
+-- ------------------------------------------------------------ banners
 local banners = {}
 function S.AttachBanner(frame)
     if not frame or banners[frame] then return end
@@ -221,7 +221,7 @@ if ns.Profile then ns.Profile.Frame(ev, "Setup") end
 for _, e in ipairs({ "UPDATE_BINDINGS", "TRADE_SKILL_SHOW", "PLAYER_ENTERING_WORLD" }) do pcall(ev.RegisterEvent, ev, e) end
 ev:SetScript("OnEvent", Later)
 
--- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+-- Profiling (/ipg perf): heavy functions called outside timed events.
 if ns.Profile then
     S.Refresh = ns.Profile.Wrap("Setup:Refresh", S.Refresh)
 end

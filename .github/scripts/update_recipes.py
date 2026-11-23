@@ -76,7 +76,7 @@ def main():
         s = src.get(spell)
         t = [int(x) for x in m.group(2).split(",") if x.strip()]
         if not s or s[0] != t[1]:
-            dropped.append(i)  # absente de ForeverMaster, ou d'un autre métier : remplacée plus bas
+            dropped.append(i)  # missing from ForeverMaster, or another profession there: re-added below
             continue
         seen.add(spell)
         code, learn, yellow, grey, item, count, pattern, _ = s
@@ -96,17 +96,13 @@ def main():
         if i < end:
             end -= 1
     if added:
-        new_lines = ["    -- Recettes de ForeverMaster absentes des données d'origine."]
+        new_lines = ["    -- ForeverMaster recipes missing from the original data."]
         for spell in added:
             code, learn, yellow, grey, item, count, pattern, mats = src[spell]
             vals = [item, code, learn, yellow, grey, count, pattern, 0] + mats
             new_lines.append(f"    [{spell}] = {{ {','.join(map(str, vals))} }},")
         lines[end:end] = new_lines
     text = "\n".join(lines)
-    text = text.replace(
-        "-- Généré à partir d'AtlasLoot (édition Forever) : seuils orange / jaune / gris, composants, patron.",
-        "-- Généré à partir d'AtlasLoot (édition Forever) : composants, patron.\n"
-        "-- Seuils et nombre produit : ForeverMaster (foreverchanges.pro), via .github/scripts/update_recipes.py.")
     DATA.write_text(text, encoding="utf-8")
     print(f"{len(src)} ForeverMaster recipes: {changed} updated, {len(added)} added, "
           f"{len(dropped)} removed (not in ForeverMaster, or another profession there: re-added as that one)")

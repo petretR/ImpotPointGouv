@@ -1,6 +1,6 @@
--- ImpotPointGouv : fenêtre de désenchantement (comme "Destroying" de TSM).
--- Liste les verts/bleus des sacs ; un bouton sécurisé (et son raccourci) désenchante l'objet suivant.
--- Le jeu exige un appui de touche par sort : impossible de tout désenchanter en un seul clic.
+-- ImpotPointGouv: disenchant window (like TSM's "Destroying").
+-- Lists the greens/blues in the bags; a secure button (and its key binding) disenchants the next item.
+-- The game requires one key press per spell: disenchanting everything in a single click is impossible.
 local _, ns = ...
 local Tr = ns.L
 local T, P = ns.Theme, ns.Prices
@@ -27,7 +27,7 @@ local function KnowsDisenchant()
 end
 
 local function Ignored(id) return ns.db.settings.deIgnore and ns.db.settings.deIgnore[id] end
--- Choix manuel par emplacement (boutons DE / Sell) : true = désenchanter quand même, false = garder pour vendre.
+-- Manual choice per slot (DE / Sell buttons): true = disenchant anyway, false = keep to sell.
 local forced = {}
 local function SlotKey(bag, slot) return bag .. ":" .. slot end
 
@@ -38,13 +38,13 @@ local function Container(bag, slot)
     end
 end
 
--- ------------------------------------------------------------ inventaire
--- Emplacements des objets de vos ensembles d'équipement (gestionnaire d'équipement) : jamais proposés.
--- Renvoie { ["sac:case"] = { { name, icon }, ... } } pour les objets rangés dans les sacs.
+-- ------------------------------------------------------------ inventory
+-- Slots of items in your equipment sets (equipment manager): never offered.
+-- Returns { ["bag:slot"] = { { name, icon }, ... } } for items stored in the bags.
 local function SetSlots()
     local used = {}
     if not (C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs) then return used end
-    -- Par objet : les ID d'objets de chaque ensemble (fonctionne quelle que soit la version du client).
+    -- Per item: the item IDs of each set (works whatever the client version).
     local byItem = {}
     for _, setID in ipairs(C_EquipmentSet.GetEquipmentSetIDs() or {}) do
         local name, icon = C_EquipmentSet.GetEquipmentSetInfo(setID)
@@ -90,7 +90,7 @@ function D.Scan()
                         bag = bag, slot = slot, id = id, link = link, name = name, quality = quality,
                         ilvl = ilvl, icon = icon, bound = bound, de = de, ah = ahNet,
                     }
-                    -- À désenchanter : pas ignoré, et le désenchantement rapporte au moins autant que l'HV.
+                    -- To disenchant: not ignored, and disenchanting yields at least as much as the AH.
                     it.best = (not ahNet or not de or de >= ahNet) and "de" or "sell"
                     local f = forced[SlotKey(bag, slot)]
                     if f ~= nil then it.go = f
@@ -112,15 +112,15 @@ local function NextItem()
     for _, it in ipairs(items) do if it.go then return it end end
 end
 
--- Pour le raccourci "Next action" : prochain objet à désenchanter (scan des sacs à la volée).
+-- For the "Next action" binding: next item to disenchant (bags scanned on the fly).
 function D.NextTarget()
     if not KnowsDisenchant() then return nil end
     D.Scan()
     return NextItem(), SpellName()
 end
 
--- Met le bouton sécurisé sur l'objet suivant (impossible en combat).
-local armed -- objet sur lequel le bouton est réglé
+-- Sets the secure button on the next item (impossible in combat).
+local armed -- item the button is set to
 function D.Arm()
     if not button or InCombatLockdown() then return end
     local it = NextItem()
@@ -176,7 +176,7 @@ local function Build()
         local it = r.item
         if not it then return end
         local k = SlotKey(it.bag, it.slot)
-        -- Recliquer sur le choix déjà forcé revient à la recommandation.
+        -- Clicking the already forced choice again goes back to the recommendation.
         if it.forced == go then forced[k] = nil else forced[k] = go end
         D.Refresh()
     end
@@ -188,7 +188,7 @@ local function Build()
         r.name = T.Text(r, 12); r.name:SetPoint("LEFT", 32, 0); r.name:SetWidth(128)
         r.de = T.Text(r, 11, { justify = "RIGHT" }); r.de:SetPoint("RIGHT", -170, 0)
         r.ah = T.Text(r, 11, { justify = "RIGHT" }); r.ah:SetPoint("RIGHT", -110, 0)
-        -- Choix visible : [DE | Sell], et une croix pour ne plus jamais proposer cet objet.
+        -- Visible choice: [DE | Sell], and a cross to never offer this item again.
         r.skip = T.Button(r, "×", 20, 18, function()
             local it = r.item
             if not it then return end
@@ -223,11 +223,11 @@ local function Build()
     frame.total = T.Text(frame, 12, { color = C.muted })
     frame.total:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 4, -10)
 
-    -- Bouton sécurisé : c'est lui qui lance le sort (clic ou raccourci).
+    -- Secure button: it casts the spell (click or binding).
     button = CreateFrame("Button", "ImpotPointGouvDestroyButton", frame, "SecureActionButtonTemplate")
     button:RegisterForClicks("AnyUp", "AnyDown")
     button:SetPoint("BOTTOMLEFT", 12, 12); button:SetPoint("BOTTOMRIGHT", -12, 12); button:SetHeight(38)
-    -- Habillage visuel (non sécurisé) posé sur le bouton.
+    -- Visual skin (not secure) laid over the button.
     frame.go = T.Button(frame, Tr("Disenchant"), 10, 38, nil, "primary")
     frame.go:SetAllPoints(button)
     frame.go:EnableMouse(false)
@@ -309,8 +309,8 @@ function D.Toggle()
     if frame:IsShown() then frame:Raise() end
 end
 
--- ------------------------------------------------------------ événements
--- Journal des désenchantements réels : objet d'origine -> composants obtenus.
+-- ------------------------------------------------------------ events
+-- Log of actual disenchants: original item -> materials obtained.
 local lastDE
 local function RecordLoot()
     if not lastDE or GetTime() - lastDE.t > 6 or not GetNumLootItems then return end

@@ -1,4 +1,4 @@
--- ImpotPointGouv : thème visuel (panneaux arrondis sombres, accent or, police Inter).
+-- ImpotPointGouv: visual theme (dark rounded panels, gold accent, Inter font).
 local _, ns = ...
 local Tr = ns.L
 local T = {}
@@ -26,7 +26,7 @@ local FONT_REG = ns.MEDIA .. Tr("fonts\\Inter-Regular.ttf")
 local FONT_SEMI = ns.MEDIA .. Tr("fonts\\Inter-SemiBold.ttf")
 T.WHITE, T.CIRCLE = WHITE, CIRCLE
 
--- ------------------------------------------------------------ texte
+-- ------------------------------------------------------------ text
 function T.SetFont(fs, size, bold)
     local ok = fs:SetFont(bold and FONT_SEMI or FONT_REG, size, "")
     if ok == false then fs:SetFont(STANDARD_TEXT_FONT, size, "") end
@@ -45,8 +45,8 @@ function T.Text(parent, size, opts)
     return fs
 end
 
--- ------------------------------------------------------------ surfaces arrondies
--- Un rectangle arrondi = 4 quarts de cercle + 3 bandes. Aucune texture externe.
+-- ------------------------------------------------------------ rounded surfaces
+-- A rounded rectangle = 4 quarter circles + 3 bands. No external texture.
 local function RoundedLayer(frame, radius, layer, sub, inset)
     inset = inset or 0
     local parts = {}
@@ -86,7 +86,7 @@ local function RoundedLayer(frame, radius, layer, sub, inset)
     return obj
 end
 
--- Fond arrondi avec liseré 1 px. Retourne l'objet "fill" (pour changer la couleur au survol).
+-- Rounded background with a 1 px border. Returns the "fill" object (to change the color on hover).
 function T.Surface(frame, color, radius, borderColor)
     radius = radius or 8
     local border = RoundedLayer(frame, radius, "BACKGROUND", -8, 0)
@@ -103,8 +103,8 @@ function T.Rounded(frame, color, radius, layer, sub)
     return o
 end
 
--- ------------------------------------------------------------ boutons
--- style : "ghost" (fond discret) | "pill" (segment de sélection) | "primary" (or)
+-- ------------------------------------------------------------ buttons
+-- style: "ghost" (subtle background) | "pill" (selection segment) | "primary" (gold)
 function T.Button(parent, label, width, height, onClick, style)
     style = style or "ghost"
     local b = CreateFrame("Button", nil, parent)
@@ -114,7 +114,7 @@ function T.Button(parent, label, width, height, onClick, style)
     b.text = T.Text(b, 12, { bold = style ~= "ghost", justify = "CENTER",
         color = style == "primary" and { 0.08, 0.07, 0.05, 1 } or T.C.text })
     b.text:SetPoint("CENTER", 0, 0)
-    -- Le texte traduit peut être plus long : le bouton s'élargit au besoin (jamais ne rétrécit).
+    -- The translated text may be longer: the button widens if needed (never shrinks).
     local setText = b.text.SetText
     b.text.SetText = function(self, t)
         setText(self, t)
@@ -130,7 +130,7 @@ function T.Button(parent, label, width, height, onClick, style)
         if style == "primary" then
             fill:SetColor(self.hover and { 0.95, 0.74, 0.32, 1 } or T.C.gold)
         elseif self.selected then
-            -- Fond opaque (sinon le liseré or, dessiné dessous, transparaît et masque le texte or).
+            -- Opaque background (otherwise the gold border, drawn below, shows through and hides the gold text).
             fill:SetColor({ 0.235, 0.200, 0.125, 1 }); self.ipgBorder:SetColor({ T.C.gold[1], T.C.gold[2], T.C.gold[3], 0.55 })
             self.text:SetTextColor(unpack(T.C.gold)); return
         else
@@ -144,7 +144,7 @@ function T.Button(parent, label, width, height, onClick, style)
     b:SetScript("OnEnter", function(self)
         self.hover = true; self:Refresh()
         if self.tooltip then
-            -- Infobulle du côté libre : sous le bouton s'il est en haut de l'écran, au-dessus sinon (jamais sur la barre).
+            -- Tooltip on the free side: below the button if it is at the top of the screen, above otherwise (never over the bar).
             local _, y = self:GetCenter()
             local top = y and UIParent:GetHeight() and y > UIParent:GetHeight() * 0.5
             GameTooltip:SetOwner(self, top and "ANCHOR_BOTTOM" or "ANCHOR_TOP")
@@ -162,7 +162,7 @@ function T.Button(parent, label, width, height, onClick, style)
     return b
 end
 
--- Onglet façon "titre + soulignement or".
+-- Tab in a "title + gold underline" style.
 function T.Tab(parent, label, onClick)
     local b = CreateFrame("Button", nil, parent)
     b.text = T.Text(b, 13, { bold = true, color = T.C.muted })
@@ -204,7 +204,7 @@ function T.Divider(parent, alpha)
     return t
 end
 
--- Bouton fermer (croix dessinée).
+-- Close button (drawn cross).
 function T.CloseButton(parent, onClick)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(28, 28)
@@ -232,7 +232,7 @@ function T.CloseButton(parent, onClick)
     return b
 end
 
--- Petite pastille de couleur (catégorie).
+-- Small color dot (category).
 function T.Dot(parent, size, color)
     local t = parent:CreateTexture(nil, "ARTWORK")
     t:SetTexture(CIRCLE)
@@ -241,7 +241,7 @@ function T.Dot(parent, size, color)
     return t
 end
 
--- Infobulle d'objet (comme dans les sacs) au survol.
+-- Item tooltip (like in the bags) on hover.
 function T.ItemTooltip(owner, id, anchor)
     if not id then return false end
     GameTooltip:SetOwner(owner, anchor or "ANCHOR_RIGHT")
@@ -253,7 +253,7 @@ function T.ItemTooltip(owner, id, anchor)
     return true
 end
 
--- Même règle pour les infobulles faites à la main.
+-- Same rule for hand-made tooltips.
 function T.TooltipAnchor(owner)
     local _, y = owner:GetCenter()
     local top = y and UIParent:GetHeight() and y > UIParent:GetHeight() * 0.5
