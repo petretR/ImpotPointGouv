@@ -84,6 +84,41 @@ Check("best route view draws", function()
     ns.UI.Refresh()
 end)
 
+Check("clicking an alternative pins that recipe to the step", function()
+    local r = ns.Route.Compute("lw", { from = 1 })
+    local sg
+    for _, x in ipairs(r.segs) do if #(x.alts or {}) > 0 then sg = x; break end end
+    Assert(sg, "no step with alternatives")
+    local alt = sg.alts[1].r.spell
+    ns.Route.Pin("lw", alt, sg.from, sg.to)
+    Assert(ns.Route.HasBans("lw"), "pin not remembered")
+    local used = false
+    for _, x in ipairs(ns.Route.Compute("lw", { from = 1 }).segs) do
+        if x.r.spell == alt and x.from <= sg.from and x.to >= sg.to then used = true end
+    end
+    Assert(used, "the picked alternative is not used on its range")
+    ns.Route.ResetBans("lw")
+    Assert(not ns.Route.HasBans("lw"), "reset left choices behind")
+end)
+
+Check("recipes from someone else's profession window are not yours", function()
+    IsTradeSkillLinked = function() return true end
+    Assert(ns.Craft.ForeignWindow("Leatherworking"), "linked window treated as your own")
+    IsTradeSkillLinked = nil
+    local me = UnitGUID("player")
+    local c = ns.db.chars[me]
+    local saved = c.profs
+    c.profs = { { name = "Leatherworking", rank = 225 } }
+    Assert(ns.Craft.ForeignWindow("Blacksmithing"), "a profession you don't have is treated as yours")
+    Assert(not ns.Craft.ForeignWindow("First Aid"), "First Aid is never foreign")
+    ns.db.recipes.Blacksmithing = { ["Rough Sharpening Stone"] = { p = 2862, m = 1, r = {} } }
+    ns.db.profChars = ns.db.profChars or {}
+    ns.db.profChars.Blacksmithing = { [me] = true }
+    ns.Craft.PruneForeign()
+    Assert(ns.db.recipes.Blacksmithing == nil, "foreign profession kept after login cleanup")
+    c.profs = saved
+end)
+
 Check("price window opens from the slash command", function()
     SlashCmdList.IMPOTPOINTGOUV("price 2589")
     SlashCmdList.IMPOTPOINTGOUV("item 2589")

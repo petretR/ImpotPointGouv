@@ -112,13 +112,57 @@ local DIFF = {
 -- ------------------------------------------------------------ lecture des recettes
 local api, recipes, profName = nil, {}, nil
 
-local function StoreRecipe(store, rec)
+-- First Aid: not returned by GetProfessions, never treated as foreign.
+local SECONDARY = { ["First Aid"] = true, ["Secourisme"] = true }
+local function HasProf(c, prof)
+    for _, p in ipairs(c.profs) do if p.name == prof then return true end end
+    return false
+end
+local function Yes(f)
+    if type(f) ~= "function" then return false end
+    local ok, v = pcall(f)
+    return ok and v and true or false
+end
+-- Someone else's window (profession link, guild, NPC) or a profession this character doesn't have:
+-- shown, but nothing is saved as known.
+local function ForeignWindow(prof)
+    if Yes(IsTradeSkillLinked) or Yes(IsTradeSkillGuild) then return true end
+    local C = C_TradeSkillUI
+    if C and (Yes(C.IsTradeSkillLinked) or Yes(C.IsTradeSkillGuild) or Yes(C.IsNPCCrafting)
+        or Yes(C.IsTradeSkillGuildMember)) then return true end
+    local c = ns.db.chars[UnitGUID("player") or ""]
+    if c and c.profs and #c.profs > 0 and not SECONDARY[prof] and not HasProf(c, prof) then return true end
+    return false
+end
+CR.ForeignWindow = ForeignWindow
+
+-- Full list? (no collapsed category, no filter): then whatever is missing from it isn't known.
+local function TradeListComplete()
+    if not GetTradeSkillInfo then return false end
+    for i = 1, GetNumTradeSkills() or 0 do
+        local _, kind, _, expanded = GetTradeSkillInfo(i)
+        if (kind == "header" or kind == "subheader") and not expanded then return false end
+    end
+    if GetTradeSkillItemNameFilter and (GetTradeSkillItemNameFilter() or "") ~= "" then return false end
+    local have = TradeSkillFrameAvailableFilterCheckButton
+    if have and have.GetChecked and have:GetChecked() then return false end
+    if GetTradeSkillSubClassFilter and not GetTradeSkillSubClassFilter(0) then return false end
+    if GetTradeSkillInvSlotFilter and not GetTradeSkillInvSlotFilter(0) then return false end
+    for _, box in ipairs({ TradeSearchInputBox, TradeSkillFrameSearchBox }) do
+        if box and box.GetText and (box:GetText() or "") ~= "" and box:GetText() ~= SEARCH then return false end
+    end
+    return true
+end
+
+local function StoreRecipe(store, rec, me)
     if rec.pid then ns.db.items[rec.pid] = ns.db.items[rec.pid] or rec.name end
-    local saved = { p = rec.pid, m = rec.made, r = {} }
+    local old = store[rec.name]
+    local saved = { p = rec.pid, m = rec.made, r = {}, k = (old and old.k) or {} }
+    if me then saved.k[me] = true end
     for _, rg in ipairs(rec.reagents) do
         if rg.id then
             saved.r[#saved.r + 1] = { rg.id, rg.n }
-            if rg.name and rg.name ~= "?" then ns.db.items[rg.id] = rg.name end
+            if rg.name and rg.name ~= "?" and rg.name ~= "" then ns.db.items[rg.id] = rg.name end
         end
     end
     store[rec.name] = saved
@@ -128,16 +172,38 @@ local function ReadRecipes()
     wipe(recipes)
     if not api or not api.Available() then return end
     profName = api.Line() or "Profession"
-    ns.db.profChars = ns.db.profChars or {}
-    ns.db.profChars[profName] = ns.db.profChars[profName] or {}
-    if UnitGUID("player") then ns.db.profChars[profName][UnitGUID("player")] = true end
-    local store = ns.db.recipes[profName] or {}
-    ns.db.recipes[profName] = store
+    local me = UnitGUID("player")
+    local own = me ~= nil and not ForeignWindow(profName)
+    local store, seen = {}, {}
+    if own then
+        ns.db.profChars = ns.db.profChars or {}
+        ns.db.profChars[profName] = ns.db.profChars[profName] or {}
+        ns.db.profChars[profName][me] = true
+        store = ns.db.recipes[profName] or {}
+        ns.db.recipes[profName] = store
+    end
+    -- Saved recipes this character no longer has in a full list: removed.
+    local function Prune()
+        if not own or not next(seen) then return end -- empty list: not loaded yet
+        local others = false
+        for guid in pairs(ns.db.profChars[profName]) do if guid ~= me then others = true end end
+        for name, s in pairs(store) do
+            if not seen[name] then
+                if s.k and next(s.k) then
+                    s.k[me] = nil
+                    if not next(s.k) then store[name] = nil end
+                elseif not others then
+                    store[name] = nil
+                end
+            end
+        end
+    end
     if api.Read then
         for _, rec in ipairs(api.Read()) do
-            StoreRecipe(store, rec)
+            if own then StoreRecipe(store, rec, me); seen[rec.name] = true end
             recipes[#recipes + 1] = rec
         end
+        Prune()
         return
     end
     for i = 1, api.Num() do
@@ -152,19 +218,39 @@ local function ReadRecipes()
                 enchant = (pid == nil),
             }
             if pid then ns.db.items[pid] = (link and link:match("%[(.-)%]")) or name end
-            local saved = { p = pid, m = rec.made, r = {} }
+            local old = store[name]
+            local saved = { p = pid, m = rec.made, r = {}, k = (old and old.k) or {} }
+            if me then saved.k[me] = true end
             for r = 1, api.NumReagents(i) do
                 local rname, rtex, rcount, have = api.Reagent(i, r)
                 local rid = P.ItemID(api.ReagentLink(i, r))
-                if rid and rname then ns.db.items[rid] = rname end
+                if rid and rname and rname ~= "" then ns.db.items[rid] = rname end
                 rec.reagents[#rec.reagents + 1] = { id = rid, name = rname or "?", icon = rtex, n = rcount or 1, have = have or 0 }
                 if rid then saved.r[#saved.r + 1] = { rid, rcount or 1 } end
             end
-            store[name] = saved
+            if own then store[name] = saved; seen[name] = true end
             recipes[#recipes + 1] = rec
         end
     end
+    if api.key == "trade" and TradeListComplete() then Prune() end
 end
+
+-- At login: saved professions none of their characters has (seen in someone else's window).
+function CR.PruneForeign()
+    local db = ns.db
+    for prof in pairs(db.recipes or {}) do
+        local owners = db.profChars and db.profChars[prof]
+        if owners and next(owners) and not SECONDARY[prof] then
+            local foreign = true
+            for guid in pairs(owners) do
+                local c = db.chars[guid]
+                if not (c and c.profs and #c.profs > 0) or HasProf(c, prof) then foreign = false end
+            end
+            if foreign then db.recipes[prof] = nil; db.profChars[prof] = nil end
+        end
+    end
+end
+ns.On("LEDGER_READY", function() CR.PruneForeign(); if ns.Route then ns.Route.Invalidate() end end)
 
 -- Toutes les recettes connues (tous métiers) qui produisent un objet : pour coûter les intermédiaires.
 local function ProducerOf(id)
@@ -325,7 +411,7 @@ function CR.Evaluate(rec)
     if not quality then
         -- Détails de l'objet pas encore chargés par le jeu : on les demande, et on ne conclut rien.
         ev.infoPending = true
-        if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, rec.pid) end
+        ns.RequestItem(rec.pid)
     end
     if CR.Rules().ignoreWhiteGear and quality and quality <= 1 and equipLoc and equipLoc ~= ""
         and equipLoc ~= "INVTYPE_BAG" and equipLoc ~= "INVTYPE_QUIVER" and equipLoc ~= "INVTYPE_NON_EQUIP_IGNORE" then
@@ -1276,8 +1362,9 @@ local function QueueRefresh()
     local wait = math.max(0.2, 1 - (GetTime() - lastCR))
     C_Timer.After(wait, function() queued = false; lastCR = GetTime(); CR.Refresh() end)
 end
-ev:SetScript("OnEvent", function(_, event, _, success)
-    if event == "GET_ITEM_INFO_RECEIVED" and success == false then return end -- objet inexistant
+ev:SetScript("OnEvent", function(_, event, id, success)
+    -- Item doesn't exist, or the addon didn't ask for it: no redraw (otherwise prices redraw in a loop).
+    if event == "GET_ITEM_INFO_RECEIVED" and (success == false or not ns.ItemWanted(id)) then return end
     if event ~= "BAG_UPDATE" and event ~= "GET_ITEM_INFO_RECEIVED" then LogEvent(event) end
     if not ns.db then return end
     if event == "TRADE_SKILL_SHOW" or event == "CRAFT_SHOW" then
