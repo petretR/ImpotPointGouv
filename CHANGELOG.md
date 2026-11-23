@@ -13,6 +13,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
 
 ### Fixed
+- Overview: the Stock value card now matches the Stock tab. It updates when your bags change and when the game loads item prices it did not have yet.
 - Leveling route showed recipes as Known after you looked at someone else's profession (a link, guild or NPC window). Those recipes are no longer saved, and the wrong ones are cleaned up at login or when you next open your own profession window.
 - Item names that never appeared or blinked every few seconds in Lists, Market and Stock; prices next to recipes in the profession window no longer redraw constantly.
 
