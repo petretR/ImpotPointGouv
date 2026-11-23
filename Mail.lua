@@ -104,7 +104,7 @@ local FILTER = {
     buys = { won = true, outbid = true },
     expired = { expired = true, cancelled = true },
     other = { mail = true, pending = true },
-    auctionExpired = { expired = true }, -- "Collect expired" button: unsold auctions only
+    auctionExpired = { expired = true, cancelled = true }, -- "Collect expired" button: expired and cancelled auctions
 }
 
 local function Takeable(m, mode, bagsFull)
@@ -381,7 +381,7 @@ local function Build()
     frame.takeGold.tooltip = Tr("Takes only the gold: items stay in the mailbox.")
     frame.takeExpired = T.Button(frame, Tr("Collect expired"), 150, 34, function() StartRun("auctionExpired") end)
     frame.takeExpired:SetPoint("RIGHT", frame.takeGold, "LEFT", -8, 0)
-    frame.takeExpired.tooltip = Tr("Takes back the items of your expired auctions only (not cancelled ones).")
+    frame.takeExpired.tooltip = Tr("Takes back the items of your expired and cancelled auctions.")
 
     M.BuildSend(frame)
 
@@ -550,9 +550,10 @@ function M.Refresh(quiet)
     end
     frame.takeAll.text:SetText(run and run.mode == "all" and "Stop" or "Collect all")
     frame.takeGold.text:SetText(run and run.mode == "gold" and "Stop" or "Collect gold")
+    local returned = expired + cancelled
     frame.takeExpired.text:SetText(run and run.mode == "auctionExpired" and "Stop"
-        or (expired > 0 and (Tr("Collect expired") .. " (" .. expired .. ")") or Tr("Collect expired")))
-    frame.takeExpired:SetDisabled((run ~= nil and run.mode ~= "auctionExpired") or (not run and expired == 0))
+        or (returned > 0 and (Tr("Collect expired") .. " (" .. returned .. ")") or Tr("Collect expired")))
+    frame.takeExpired:SetDisabled((run ~= nil and run.mode ~= "auctionExpired") or (not run and returned == 0))
     frame.takeAll:SetDisabled(run ~= nil and run.mode ~= "all")
     frame.takeGold:SetDisabled(run ~= nil and run.mode ~= "gold")
     if sessionStart then

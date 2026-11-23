@@ -6,7 +6,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 ## [Unreleased]
 
 ### Added
-- Mail: "Collect expired" button next to Collect gold, to take back the items of expired auctions only (cancelled auctions and other mail stay).
+- Mail: "Collect expired" button next to Collect gold, to take back the items of expired and cancelled auctions (sales and other mail stay).
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
 
 ### Changed

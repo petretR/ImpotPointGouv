@@ -164,18 +164,21 @@ Check("mail collection takes 35 mails quickly, identical sales included", functi
     Fire("MAIL_CLOSED")
 end)
 
-Check("Collect expired takes only expired auctions", function()
+Check("Collect expired takes expired and cancelled auctions only", function()
     for i = #inbox, 1, -1 do inbox[i] = nil end
     for i = 1, 3 do inbox[#inbox + 1] = { sender = "Auction House", subject = "Auction expired: Linen Cloth", money = 0, items = 1 } end
     inbox[#inbox + 1] = { sender = "Auction House", subject = "Auction cancelled: Wool Cloth", money = 0, items = 1 }
+    inbox[#inbox + 1] = { sender = "Auction House", subject = "Auction successful: Wool Cloth", money = 5000, items = 0 }
     inbox[#inbox + 1] = { sender = "Bob", subject = "hey", money = 100, items = 1 }
     ns.db.settings.mailOverlay = false
     Fire("MAIL_SHOW")
     RunTimers(1)
     ns.Mail.Collect("auctionExpired") -- what the Collect expired button starts
     for _ = 1, 60 do RunTimers(1); if #inbox == 2 then break end end
-    Assert(#inbox == 2, "mails left: " .. #inbox .. " (the cancelled auction and Bob's mail should stay)")
-    for _, m in ipairs(inbox) do Assert(not m.subject:find("expired"), "an expired auction is still there") end
+    Assert(#inbox == 2, "mails left: " .. #inbox .. " (the sale and Bob's mail should stay)")
+    for _, m in ipairs(inbox) do
+        Assert(not m.subject:find("expired") and not m.subject:find("cancelled"), "an expired or cancelled auction is still there")
+    end
     -- Bags full: nothing is taken, the run stops instead of retrying.
     inbox[#inbox + 1] = { sender = "Auction House", subject = "Auction expired: Linen Cloth", money = 0, items = 1 }
     local free = C_Container.GetContainerNumFreeSlots
