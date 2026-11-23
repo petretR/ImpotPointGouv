@@ -283,6 +283,8 @@ function ns.InitDB()
         ns.db.version = 3
     end    -- Session passée avec un nom de royaume vide : on remet ses données dans le vrai royaume.
     if not fresh then ns.FixEmptyRealm() end
+    -- Noms vides enregistrés par les scans (annonces lues avant que le jeu ait chargé l'objet) : retirés.
+    for id, n in pairs(ns.db.items or {}) do if n == "" then ns.db.items[id] = nil end end
 end
 
 -- ---------------------------------------------------------------- argent
@@ -360,11 +362,35 @@ end
 -- ---------------------------------------------------------------- compatibilité retail
 -- WoW Forever tourne sur un client retail : plusieurs anciennes fonctions globales n'existent
 -- plus (déplacées dans C_Item / C_MerchantFrame). On passe toujours par ces raccourcis.
+-- Chaque nom renvoyé par le jeu est gardé (ns.db.items) : les listes l'affichent même quand le cache
+-- d'objets du jeu ne l'a plus, au lieu d'un nom vide qui clignote au gré des chargements.
+local function LearnName(id, name, ...)
+    if name and name ~= "" and type(id) == "number" and ns.db and ns.db.items and ns.db.items[id] ~= name then
+        ns.db.items[id] = name
+    end
+    return name, ...
+end
 function ns.GetItemInfo(id)
     if not id then return nil end
     local fn = (C_Item and C_Item.GetItemInfo) or GetItemInfo
     if not fn then return nil end
-    return fn(id)
+    return LearnName(id, fn(id))
+end
+
+-- Demande au jeu les infos d'un objet, au plus une fois toutes les 10 min par objet. Les pages ne se
+-- redessinent que pour les objets demandés ainsi (ns.ItemWanted), pas pour chaque réponse du jeu :
+-- sinon chaque redessin redemande, le jeu répond, on redessine... sans fin.
+local asked = {}
+function ns.RequestItem(id)
+    if type(id) ~= "number" or not (C_Item and C_Item.RequestLoadItemDataByID) then return end
+    local now = GetTime and GetTime() or 0
+    if asked[id] and now - asked[id] < 600 then return end
+    asked[id] = now
+    pcall(C_Item.RequestLoadItemDataByID, id)
+end
+function ns.ItemWanted(id)
+    local t = id and asked[id]
+    return t ~= nil and (GetTime and GetTime() or 0) - t < 60
 end
 function ns.GetItemCount(id)
     local fn = (C_Item and C_Item.GetItemCount) or GetItemCount

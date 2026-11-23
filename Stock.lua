@@ -184,7 +184,7 @@ function S.BuildPage(page)
             local row = data[self.offset + i]
             r.row = row
             if row then
-                if not ns.GetItemInfo(row.id) and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, row.id) end
+                if not ns.GetItemInfo(row.id) then ns.RequestItem(row.id) end
                 r.icon:SetTexture(ns.GetItemIcon(row.id) or "Interface\\Icons\\INV_Misc_QuestionMark")
                 local _, _, quality = ns.GetItemInfo(row.id)
                 local qc = ITEM_QUALITY_COLORS and quality and ITEM_QUALITY_COLORS[quality]
@@ -232,8 +232,9 @@ local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Stock") end
 pcall(ev.RegisterEvent, ev, "GET_ITEM_INFO_RECEIVED")
 local lastDraw = 0
-ev:SetScript("OnEvent", function(_, _, _, success)
-    if success == false or pend then return end -- objet inexistant : rien à redessiner
+ev:SetScript("OnEvent", function(_, _, id, success)
+    -- Objet inexistant, ou pas demandé par l'addon : rien à redessiner.
+    if success == false or pend or not ns.ItemWanted(id) then return end
     pend = true
     C_Timer.After(math.max(0.6, 2 - (GetTime() - lastDraw)), function()
         pend = false

@@ -24,7 +24,7 @@ local function IdFromName(name, rev)
     if rev[name] then return rev[name] end
     local _, link = ns.GetItemInfo(name)
     local id = P.ItemID(link)
-    if id then ns.db.items[id] = name end
+    if id and name and name ~= "" then ns.db.items[id] = name end
     return id
 end
 
@@ -312,7 +312,7 @@ if ns.Profile then ns.Profile.Frame(ev, "Trainer") end
 for _, e in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE", "TRAINER_CLOSED", "GET_ITEM_INFO_RECEIVED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
-ev:SetScript("OnEvent", function(_, event, _, success)
+ev:SetScript("OnEvent", function(_, event, id, success)
     if event == "GET_ITEM_INFO_RECEIVED" and success == false then return end
     if event == "TRAINER_CLOSED" then
         if tip then tip:Hide() end

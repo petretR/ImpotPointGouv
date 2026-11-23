@@ -45,8 +45,17 @@ end
 
 function P.Name(id)
     if not id then return "?" end
+    return P.HasName(id) or ""
+end
+-- Nom connu (jeu ou nom gardé), sinon nil : l'objet est demandé au jeu (les lignes restent vides le temps du chargement).
+function P.HasName(id)
+    if not id then return nil end
     local n = ns.GetItemInfo(id)
-    return n or ns.db.items[id] or ("item " .. id)
+    if n and n ~= "" then return n end
+    local saved = ns.db.items[id]
+    if saved and saved ~= "" then return saved end
+    ns.RequestItem(id)
+    return nil
 end
 
 -- ------------------------------------------------------------ enregistrement
@@ -312,7 +321,7 @@ local function LearnMerchant()
             local unit = price / quantity
             if ns.db.vendor[id] ~= unit then learned = learned + 1 end
             ns.db.vendor[id] = unit
-            if name then ns.db.items[id] = name end
+            if name and name ~= "" then ns.db.items[id] = name end
         end
     end
     if learned > 0 then ns.Fire("PRICES_CHANGED") end
@@ -335,7 +344,7 @@ local function Accumulate(acc, name, count, buyout, id)
     -- Détail par prix (en mémoire seulement) : sert à repérer ce qui est listé sous le prix marchand.
     a.b = a.b or {}
     a.b[unit] = (a.b[unit] or 0) + count
-    if name then ns.db.items[id] = name end
+    if name and name ~= "" then ns.db.items[id] = name end
 end
 
 -- ------------------------------------------------------------ scan
