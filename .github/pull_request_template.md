@@ -12,5 +12,5 @@
 ## Checklist
 - [ ] Line(s) in `CHANGELOG.md` under Unreleased (player-facing changes)
 - [ ] No version change (only release pull requests change it)
-- [ ] New strings go through `Tr()`, have a French line, and `python3 .github/scripts/locale.py` was run
+- [ ] New strings go through `Tr()` and have a French line in `Locale_frFR.lua`
 - [ ] Comments, commits and this description in English
