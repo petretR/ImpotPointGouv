@@ -1,7 +1,7 @@
--- ImpotPointGouv : fenêtre "Routine" pour la boucle quotidienne crafteur <-> banque.
---   Crafteur : Queue all -> liste de courses
---   Banque   : liste de courses (cochée au fil des achats) -> export Auctionator -> envoi au crafteur
---   Crafteur : craft / désenchantement -> envoi de tout à la banque
+-- ImpotPointGouv: "Routine" window for the daily crafter <-> bank loop.
+--   Crafter: Queue all -> shopping list
+--   Bank   : shopping list (ticked as you buy) -> Auctionator export -> send to the crafter
+--   Crafter: craft / disenchant -> send everything to the bank
 local _, ns = ...
 local Tr = ns.L
 local T, P, Q, I = ns.Theme, ns.Prices, ns.Queue, ns.Inventory
@@ -13,14 +13,14 @@ local W, H, ROWS, QROWS = 460, 640, 7, 4
 local frame
 local mailOpen, ahOpen, merchantOpen = false, false, false
 
--- ------------------------------------------------------------ rôles
+-- ------------------------------------------------------------ roles
 local function Me() return UnitGUID("player") end
 function RT.Bank() return ns.db.settings.bankChar end
 local function CharName(key)
     if not key then return nil end
     local c = ns.db.chars[key]
     local over = ns.db.settings.mailNames and ns.db.settings.mailNames[key]
-    -- Un nom complet (prénom + nom) l'emporte toujours sur un prénom seul.
+    -- A full name (first + last name) always wins over a first name alone.
     if over and over ~= "" and (over:find(" ") or not (c and c.full)) then return over end
     return c and (c.full or c.name)
 end
@@ -55,7 +55,7 @@ function RT.ExportAuctionator()
     end
 end
 
--- ------------------------------------------------------------ envoi par courrier
+-- ------------------------------------------------------------ sending by mail
 local sending
 
 local function BagStacks(want)
@@ -66,7 +66,7 @@ local function BagStacks(want)
         local n = C_Container.GetContainerNumSlots(bag) or 0
         for slot = 1, n do
             local info = C_Container.GetContainerItemInfo(bag, slot)
-            -- Seulement des piles entières qui tiennent dans ce qu'on veut envoyer (le reste est gardé).
+            -- Only whole stacks that fit in what we want to send (the rest is kept).
             local cnt = info and (info.stackCount or 1)
             if info and info.itemID and left[info.itemID] and left[info.itemID] >= cnt and not info.isBound then
                 stacks[#stacks + 1] = { bag = bag, slot = slot, id = info.itemID, count = cnt }
@@ -165,7 +165,7 @@ function SendBatch()
     if not sending then return end
     if not mailOpen then RT.Status(Tr("Mailbox closed: sending stopped.")); sending = nil; return end
     if #sending.stacks == 0 and not (sending.money and sending.money > 0) then
-        -- Récapitulatif : ce qui est parti, objet par objet.
+        -- Summary: what was sent, item by item.
         local parts = {}
         for _, id in ipairs(sending.order) do
             parts[#parts + 1] = ("%d× %s"):format(sending.sent[id], P.Name(id))
@@ -174,7 +174,7 @@ function SendBatch()
         local msg = (Tr("Sent to %s (%d mail%s): %s")):format(sending.name, sending.mails, sending.mails == 1 and "" or "s",
             #parts > 0 and table.concat(parts, ", ") or "nothing")
         if ns.Mail and ns.Mail.OnSent then ns.Mail.OnSent(msg, sending.name) end
-        if MailFrameTab_OnClick then pcall(MailFrameTab_OnClick, nil, 1) end -- retour à la réception
+        if MailFrameTab_OnClick then pcall(MailFrameTab_OnClick, nil, 1) end -- back to the inbox
         ns.Print(msg)
         RT.Status(msg)
         sending = nil
@@ -209,7 +209,7 @@ function SendBatch()
     local batch = cur.batch
     RT.Status((Tr("Sending to %s… (%d stack(s) left)")):format(cur.name, #cur.stacks))
     SendMail(cur.name, "ImpotPointGouv", "")
-    -- Le jeu n'a ni confirmé ni refusé : on débloque au lieu de rester sur "Sending…".
+    -- The game neither confirmed nor refused: unlock instead of staying on "Sending…".
     C_Timer.After(8, function()
         if sending == cur and cur.waiting and cur.batch == batch then
             sending = nil
@@ -220,7 +220,7 @@ function SendBatch()
     end)
 end
 
--- Envoi générique (aussi utilisé par l'onglet "Send" de la boîte aux lettres) : want = { [id] = quantité }, money en cuivre.
+-- Generic send (also used by the mailbox "Send" tab): want = { [id] = quantity }, money in copper.
 function RT.SendTo(name, want, what, money)
     if sending then RT.Status(Tr("Already sending…")); return false end
     if not mailOpen then RT.Status(Tr("Open a mailbox first.")); return false end
@@ -241,7 +241,7 @@ RT.BagStacks = function(want) return BagStacks(want) end
 RT.PlanStacks = function(want) return PlanStacks(want) end
 RT.CharName = function(key) return CharName(key) end
 
--- Regroupe des piles par objet pour l'aperçu.
+-- Groups stacks per item for the preview.
 local function RowsFrom(stacks, valueFn)
     local by, rows = {}, {}
     for _, st in ipairs(stacks) do
@@ -260,7 +260,7 @@ local function StartSend(targetKey, want, what)
     if not name then RT.Status(Tr("|cffed5c52Unknown recipient: set the character name below.|r")); return end
     local stacks = BagStacks(want)
     if #stacks == 0 then RT.Status(Tr("Nothing to send: ") .. what .. Tr(" not found in your bags.")); return end
-    -- Aperçu : vous voyez et cochez ce qui part.
+    -- Preview: you see and check what goes out.
     local rows = RowsFrom(stacks)
     if not ns.Preview or not ns.Preview.Show(rows, { title = Tr("Send to ") .. name, sub = what, confirm = Tr("Send") }, function(chosen)
         local w = {}
@@ -271,7 +271,7 @@ local function StartSend(targetKey, want, what)
     end
 end
 
--- Banque -> crafteur : les compos qui manquent au crafteur pour la file.
+-- Bank -> crafter: the materials the crafter is missing for the queue.
 local function ReagentsWant(crafter)
     local want = {}
     if not crafter then return want end
@@ -289,9 +289,9 @@ function RT.SendReagents(crafter)
     StartSend(crafter, ReagentsWant(crafter), "reagents")
 end
 
--- Ce que CE personnage peut envoyer à la banque : créations de SES métiers,
--- et compos de désenchantement seulement s'il sait désenchanter.
--- Matériau d'artisanat (tissu, rouleaux, cuir traité, barres…) : classe "Trade Goods".
+-- What THIS character can send to the bank: crafts of THEIR professions,
+-- and disenchanting materials only if they can disenchant.
+-- Crafting material (cloth, bolts, cured leather, bars…): "Trade Goods" class.
 local function IsMaterial(id)
     local f = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
     if not f then return false end
@@ -305,11 +305,11 @@ local function MySendables()
     for prof, recipes in pairs(ns.db.recipes) do
         local mine = ns.db.profChars and ns.db.profChars[prof] and ns.db.profChars[prof][me]
         if mine then
-            -- Seulement les objets finis : les matériaux fabriqués (rouleaux…) restent pour vos prochains crafts.
+            -- Only finished items: crafted materials (bolts…) stay for your next crafts.
             for _, r in pairs(recipes) do if r.p and not IsMaterial(r.p) then want[r.p] = math.huge end end
         end
     end
-    -- Produits intermédiaires (rouleaux de tissu, cuir traité…) : ils servent à vos propres recettes, on les garde.
+    -- Intermediate products (bolts of cloth, cured leather…): used by your own recipes, kept.
     for prof, recipes in pairs(ns.db.recipes) do
         local mine = ns.db.profChars and ns.db.profChars[prof] and ns.db.profChars[prof][me]
         if mine then
@@ -326,9 +326,9 @@ local function MySendables()
 end
 RT.MySendables = MySendables
 
--- Crafteur -> banque : tout ce qui se vend (créations de recettes + compos de désenchantement),
--- sauf ce qui sert encore à la file.
--- Meilleur débouché d'une création : "ah" | "vendor" | "de" (nil si ce n'est pas une création connue).
+-- Crafter -> bank: everything that sells (recipe crafts + disenchanting materials),
+-- except what the queue still needs.
+-- Best outlet for a craft: "ah" | "vendor" | "de" (nil if it is not a known craft).
 local function ChannelOf(id)
     local saved, prof, name = ns.Craft.ProducerOf(id)
     if not saved then return nil end
@@ -341,12 +341,12 @@ local function CraftsWant()
     local keep = {}
     for _, row in ipairs(Q.Plan().shop) do keep[row.id] = row.need end
     local want = MySendables()
-    -- Garde ce que la file demande encore + votre réserve "keep" ; envoie le reste.
+    -- Keeps what the queue still needs + your "keep" reserve; sends the rest.
     for id in pairs(want) do
         local hold = (keep[id] or 0) + (ns.Keep and ns.Keep.Get(id) or 0)
         if hold > 0 then want[id] = math.max(0, ns.GetItemCount(id) - hold) end
     end
-    -- Ce qui rapporte plus au marchand ou désenchanté reste ici : seule la vente HV passe par la banque.
+    -- What pays more at the vendor or disenchanted stays here: only AH sales go through the bank.
     for id in pairs(want) do
         local ch = ChannelOf(id)
         if ch == "vendor" or ch == "de" then want[id] = nil end
@@ -354,9 +354,9 @@ local function CraftsWant()
     return want
 end
 
--- ------------------------------------------------------------ vente au marchand
--- Créations dont le meilleur débouché est le marchand (moins la réserve "keep").
--- Composants de vos recettes (tous métiers connus) : jamais vendus au marchand par l'addon.
+-- ------------------------------------------------------------ selling to the vendor
+-- Crafts whose best outlet is the vendor (minus the "keep" reserve).
+-- Materials of your recipes (all known professions): never sold to the vendor by the addon.
 local function ReagentSet()
     local set = {}
     for _, recipes in pairs(ns.db.recipes or {}) do
@@ -377,10 +377,10 @@ local function VendorWant()
             if info and info.itemID and want[info.itemID] == nil then
                 want[info.itemID] = (ChannelOf(info.itemID) == "vendor" and not reagents[info.itemID] and not IsMaterial(info.itemID))
                     and math.max(0, ns.GetItemCount(info.itemID) - (ns.Keep and ns.Keep.Get(info.itemID) or 0)) or 0
-                -- Achetés à l'HV pour revendre au marchand (vendor flip).
+                -- Bought at the AH to resell to the vendor (vendor flip).
                 local fb = ns.db.flipBought and ns.db.flipBought[info.itemID]
                 if fb and fb > 0 then want[info.itemID] = math.max(want[info.itemID], fb) end
-                -- Expiré 3 fois de suite à l'HV (ou dépôts perdus > gain) : mieux vaut le marchand.
+                -- Expired 3 times in a row at the AH (or lost deposits > gain): the vendor is better.
                 if not info.isBound and not reagents[info.itemID] and ns.Track then
                     local adv = ns.Track.PostAdvice((info.hyperlink and info.hyperlink:match("%[(.-)%]")) or ns.GetItemInfo(info.itemID), info.itemID)
                     if adv and adv.vendor then
@@ -453,7 +453,7 @@ function RT.SendCrafts()
     StartSend(bank, CraftsWant(), "crafted items / enchanting mats")
 end
 
--- Nombre d'objets que chaque bouton d'envoi enverrait maintenant.
+-- Number of items each send button would send now.
 local function Pending(want)
     local n = 0
     for _, st in ipairs(BagStacks(want)) do n = n + st.count end
@@ -500,7 +500,7 @@ local function Build()
     frame.clear = T.Button(frame, Tr("Clear queue"), 100, 26, function() Q.Clear(); RT.Refresh() end)
     frame.clear:SetPoint("LEFT", frame.setBank, "RIGHT", 6, 0)
 
-    -- À crafter
+    -- To craft
     local qc = CreateFrame("Frame", nil, frame)
     T.Surface(qc, C.surface, 10)
     qc:SetPoint("TOPLEFT", 12, -86); qc:SetPoint("TOPRIGHT", -12, -86)
@@ -542,7 +542,7 @@ local function Build()
         frame.qoff = math.max(0, math.min(math.max(0, (frame.nq or 0) - QROWS), frame.qoff - d)); RT.Refresh()
     end)
 
-    -- Liste de courses
+    -- Shopping list
     local list = CreateFrame("Frame", nil, frame)
     T.Surface(list, C.surface, 10)
     list:SetPoint("TOPLEFT", qc, "BOTTOMLEFT", 0, -10); list:SetPoint("TOPRIGHT", qc, "BOTTOMRIGHT", 0, -10)
@@ -596,7 +596,7 @@ local function Build()
         frame.off = math.max(0, math.min(math.max(0, (frame.n or 0) - ROWS), frame.off - d)); RT.Refresh()
     end)
 
-    -- Destinataire (nom modifiable si le nom court ne suffit pas pour le courrier)
+    -- Recipient (name editable if the short name is not enough for mail)
     local nameLbl = T.Text(frame, 11, { color = C.muted, text = Tr("Send to:") })
     frame.nameLbl = nameLbl
     nameLbl:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 4, -12)
@@ -609,7 +609,7 @@ local function Build()
         local text = (self:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
         local key = frame.targetKey
         local me = Me()
-        -- Banque pas encore définie (sur le crafteur) : le nom tapé désigne un de vos personnages.
+        -- Bank not set yet (on the crafter): the typed name designates one of your characters.
         if not key and Q.IsCrafter(me) and text ~= "" then
             local low = text:lower()
             for k, c in pairs(ns.db.chars) do
@@ -623,10 +623,10 @@ local function Build()
         end
         if key and text ~= "" then
             ns.db.settings.mailNames = ns.db.settings.mailNames or {}
-            -- Garde le nom complet s'il est plus long que le prénom connu (ex. "Raptout Dupont").
+            -- Keeps the full name if it is longer than the known first name (e.g. "Raptout Dupont").
             local ch = ns.db.chars[key]
             local known = ch and (ch.full or ch.name) or ""
-            -- Garde ce qui est le plus complet : le texte tapé s'il contient un nom de famille.
+            -- Keeps the most complete: the typed text if it contains a last name.
             ns.db.settings.mailNames[key] = (text:find(" ") or #text >= #known) and text or known
         end
         self:ClearFocus(); RT.Refresh()
@@ -634,7 +634,7 @@ local function Build()
     eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     frame.nameBox = eb
 
-    -- Suggestions : vos personnages (filtrés par ce qui est tapé).
+    -- Suggestions: your characters (filtered by what is typed).
     local sug = CreateFrame("Frame", nil, frame)
     sug:SetPoint("TOPLEFT", eb, "BOTTOMLEFT", 0, -2)
     sug:SetWidth(220)
@@ -645,7 +645,7 @@ local function Build()
     local function Pick(key)
         local me = Me()
         local isCrafter = Q.IsCrafter(me)
-        -- Sur le crafteur sans banque définie : choisir un personnage le désigne comme banque.
+        -- On the crafter without a bank set: picking a character makes it the bank.
         if isCrafter and not RT.Bank() and key ~= me then ns.db.settings.bankChar = key end
         frame.targetKey = isCrafter and RT.Bank() or Q.Crafter()
         eb:SetText(CharName(key) or "")
@@ -741,7 +741,7 @@ function RT.Refresh()
     frame.setBank:SetShown(not isBank)
 
     local plan = Q.Plan()
-    -- À crafter (vos recettes ; les intermédiaires sont dans les courses, colonne "Craft")
+    -- To craft (your recipes; intermediates are in the shopping list, "Craft" column)
     local list = plan.visible or plan.crafts
     frame.nq = #list
     frame.qoff = math.min(frame.qoff, math.max(0, #list - QROWS))
@@ -805,7 +805,7 @@ function RT.Refresh()
     frame.sum:SetText(#plan.shop > 0 and (missing == 0 and "|cff5cd173all bought|r" or
         (Tr("%d to buy  ·  ≈ %s")):format(missing, ns.FormatMoney(cost, { short = true, iconSize = 10 }))) or "")
 
-    -- Destinataire selon le contexte
+    -- Recipient depending on the context
     frame.targetKey = isCrafter and bank or crafter
     frame.nameLbl:SetText(isCrafter and "Send to (your bank):" or "Send to (your crafter):")
     if not frame.nameBox:HasFocus() then frame.nameBox:SetText(CharName(frame.targetKey) or "") end
@@ -816,7 +816,7 @@ function RT.Refresh()
             function() Q.BuyVendorNeeds(false); C_Timer.After(0.6, RT.Refresh) end,
             "Buys from this vendor the reagents your craft queue still needs.")
         frame.a1:SetDisabled(n == 0)
-        -- Créations qui valent plus chez le marchand qu'à l'HV.
+        -- Crafts worth more at the vendor than at the AH.
         local sellN = 0
         for _, st in ipairs(BagStacks(VendorWant())) do sellN = sellN + st.count end
         if sellN > 0 and not selling then
@@ -829,9 +829,9 @@ function RT.Refresh()
         frame.a1:SetDisabled(false)
         SetAction(frame.a1, "Send list to Auctionator", RT.ExportAuctionator,
             "Creates an Auctionator shopping list with the exact quantities. Then: Auctionator > Shopping > search it.")
-        SetAction(frame.a2, nil) -- l'achat se fait avec "Buy …" dans la barre de l'HV
+        SetAction(frame.a2, nil) -- buying is done with "Buy …" in the AH bar
     elseif mailOpen then
-        -- Bouton grisé quand il n'y a rien à envoyer ; sinon le nombre d'objets est affiché.
+        -- Button greyed out when there is nothing to send; otherwise the number of items is shown.
         local function SendBtn(btn, label, who, fn, tip, want)
             local n = (not sending and who and who ~= Me()) and Pending(want) or 0
             SetAction(btn, n > 0 and ("%s (%d)"):format(label, n) or (sending and "Sending…" or ("Nothing to send to " .. (CharName(who) or "?"))), fn, tip)
@@ -843,7 +843,7 @@ function RT.Refresh()
                 CraftsWant())
             SetAction(frame.a2, nil)
         else
-            -- Banque : un bouton par crafteur qui attend des composants (les 2 premiers ; les autres via l'onglet Send).
+            -- Bank: one button per crafter waiting for materials (the first 2; the others through the Send tab).
             local targets = {}
             for _, k in ipairs(Q.Crafters()) do
                 if k ~= me and Pending(ReagentsWant(k)) > 0 then targets[#targets + 1] = k end
@@ -877,8 +877,8 @@ function RT.Toggle()
     if frame:IsShown() then frame:Raise() end
 end
 
--- ------------------------------------------------------------ barre du marchand
--- Collée au marchand : acheter les compos de la file, vendre ce qui vaut plus ici. Chaque bouton ouvre l'aperçu.
+-- ------------------------------------------------------------ vendor bar
+-- Docked to the vendor: buy the queue's materials, sell what is worth more here. Each button opens the preview.
 local mbar
 function RT.UpdateMerchantBar()
     if not MerchantFrame or not MerchantFrame:IsShown() or not ns.db then if mbar then mbar:Hide() end; return end
@@ -909,7 +909,7 @@ function RT.UpdateMerchantBar()
     mbar:SetShown(nb > 0 or ns2 > 0)
 end
 
--- Y a-t-il quelque chose à envoyer depuis ce personnage ?
+-- Is there anything to send from this character?
 function RT.HasSomethingToSend()
     local me, bank, crafter = Me(), RT.Bank(), Q.Crafter()
     if bank and me ~= bank then
@@ -921,13 +921,13 @@ end
 
 local function AutoShow(anchor, forMail, force)
     if ns.db.settings.routineAuto == false then return end
-    -- Seulement sur le crafteur et la banque : jamais en montant de niveau sur un autre perso.
+    -- Only on the crafter and the bank: never while leveling another character.
     local me = Me()
     local hasFlips = ns.db.flipBought and next(ns.db.flipBought) ~= nil
-    -- Crafteur : seulement s'il a une file en cours (pas en simple leveling).
+    -- Crafter: only if they have a queue running (not just leveling).
     local crafting = Q.IsCrafter(me) and #Q.Plan(me).crafts > 0
     if me ~= RT.Bank() and not crafting and not (force and hasFlips) then return end
-    -- La boîte aux lettres a ses propres boutons d'envoi (onglet Send) : pas d'ouverture automatique.
+    -- The mailbox has its own send buttons (Send tab): no automatic opening.
     if forMail then return end
     local hasQueue = next(ns.db.queue or {}) ~= nil
     if not force and not hasQueue and not (forMail and RT.HasSomethingToSend()) then return end
@@ -940,7 +940,7 @@ local function AutoShow(anchor, forMail, force)
     RT.Refresh()
 end
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Routine") end
 for _, e in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "MAIL_SHOW", "MAIL_CLOSED", "MAIL_SEND_SUCCESS",
@@ -980,7 +980,7 @@ ev:SetScript("OnEvent", function(_, event, ...)
             C_Timer.After(0.6, SendBatch)
         end
     elseif event == "UI_ERROR_MESSAGE" then
-        -- Le jeu refuse l'envoi (destinataire inconnu, etc.) : on l'affiche tout de suite au lieu d'attendre.
+        -- The game refuses the send (unknown recipient, etc.): show it right away instead of waiting.
         local a, b = ...
         local text = type(b) == "string" and b or (type(a) == "string" and a) or nil
         if sending and sending.waiting and text then

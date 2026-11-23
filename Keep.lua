@@ -1,5 +1,5 @@
--- ImpotPointGouv : "garder en sac" (équivalent du Keep Quantity de TSM), par objet.
--- Utilisé par l'envoi à la banque (n'envoie que l'excédent) et par Queue profitable (réserve perso hors stock à vendre).
+-- ImpotPointGouv: "keep in bags" (like TSM's Keep Quantity), per item.
+-- Used by sending to the bank (only sends the surplus) and by Queue profitable (personal reserve outside the stock to sell).
 local _, ns = ...
 local Tr = ns.L
 local T = ns.Theme
@@ -58,7 +58,7 @@ function K.Edit(id, anchor)
     pop:Show()
 end
 
--- Bouton visible "garder en sac" pour les lignes de liste : icône sac + quantité gardée.
+-- Visible "keep in bags" button for list rows: bag icon + quantity kept.
 local BAG = "Interface\\Icons\\INV_Misc_Bag_08"
 function K.Button(parent)
     local b = T.Button(parent, "", 44, 18, function(self) if self.id then K.Edit(self.id, self) end end)

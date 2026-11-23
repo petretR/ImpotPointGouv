@@ -1,4 +1,4 @@
--- ImpotPointGouv : traductions. Le texte anglais sert de clé ; sans traduction, il s'affiche tel quel.
+-- ImpotPointGouv: translations. The English text is the key; without a translation it shows as is.
 local _, ns = ...
 local locale = GetLocale and GetLocale() or "enUS"
 local T = {}

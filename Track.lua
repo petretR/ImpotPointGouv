@@ -1,8 +1,8 @@
--- ImpotPointGouv : collecte détaillée pour analyser les revenus du leveling.
--- * Chaque vente au marchand garde l'objet (nom, id, qualité, niveau, lié ou non, valeur HV du moment).
--- * Chaque butin ramassé est noté (objet, quantité, zone, source).
--- * Chaque opération garde la zone et le niveau du perso ; le temps de jeu est compté par zone et par niveau.
--- * Chez le marchand : avertit quand un objet vaut nettement plus à l'HV.
+-- ImpotPointGouv: detailed collection to analyse leveling income.
+-- * Each vendor sale keeps the item (name, id, quality, level, bound or not, AH value at the time).
+-- * Each looted item is noted (item, quantity, zone, source).
+-- * Each operation keeps the character's zone and level; play time is counted per zone and per level.
+-- * At a vendor: warns when an item is clearly worth more at the AH.
 local _, ns = ...
 local Tr = ns.L
 local TR = {}
@@ -11,11 +11,11 @@ ns.Track = TR
 local MAX_LOOT = 30000
 local AH_CUT = 0.95
 local merchantOpen, closedAt = false, 0
-local cache = {}           -- ["sac:case"] = objet lu (état connu des sacs)
-local unknown = {}         -- ventes marchand récentes sans objet identifié
-local visit                -- résumé de la visite chez le marchand
+local cache = {}           -- ["bag:slot"] = item read (known state of the bags)
+local unknown = {}         -- recent vendor sales without an identified item
+local visit                -- summary of the vendor visit
 
--- ------------------------------------------------------------ outils
+-- ------------------------------------------------------------ helpers
 local function Key() return ns.Ledger and ns.Ledger.CharKey() end
 
 function TR.Zone()
@@ -30,7 +30,7 @@ function TR.Zone()
     return id
 end
 
--- Valeur HV unitaire : nos scans, sinon Auctionator (au lien exact pour les verts "of the Bear").
+-- AH unit value: our scans, otherwise Auctionator (by exact link for "of the Bear" greens).
 function TR.AHValue(id, link)
     local v = ns.Prices and ns.Prices.AHValue and ns.Prices.AHValue(id)
     if v and v > 0 then return v end
@@ -47,7 +47,7 @@ function TR.AHValue(id, link)
     end
 end
 
--- Vaut-il nettement plus à l'HV (après la commission) ? Renvoie le gain manqué par unité.
+-- Is it clearly worth more at the AH (after commission)? Returns the missed gain per unit.
 function TR.BetterAtAH(vs, mv)
     if not mv or mv <= 0 then return nil end
     vs = vs or 0
@@ -93,8 +93,8 @@ local function Annotate(tx, r, n)
     tx.i, tx.q, tx.id, tx.qu, tx.il, tx.b, tx.cl, tx.mv = info.i, info.q, info.id, info.qu, info.il, info.b, info.cl, info.mv
 end
 
--- ------------------------------------------------------------ ventes au marchand
--- Clic droit (ou autre addon qui vend via UseContainerItem) : on annonce le montant attendu au registre.
+-- ------------------------------------------------------------ vendor sales
+-- Right-click (or another addon selling through UseContainerItem): announce the expected amount to the ledger.
 local function OnUse(bag, slot)
     if not merchantOpen or not bag or not slot then return end
     local r = ReadSlot(bag, slot) or cache[bag .. ":" .. slot]
@@ -102,9 +102,9 @@ local function OnUse(bag, slot)
     ns.Ledger.Expect({ amount = r.vs * r.n, k = "vendor_sell", ttl = 8, info = InfoOf(r) })
 end
 
--- Repli : la vente n'a pas pu être reliée à un objet (glisser-déposer, ventes groupées...).
--- On compare les sacs avant / après pour retrouver ce qui est parti.
-local recentLost = {}      -- piles disparues des sacs ces dernières secondes { r, n, v, at }
+-- Fallback: the sale could not be linked to an item (drag and drop, grouped sales...).
+-- Compare the bags before / after to find what left.
+local recentLost = {}      -- stacks gone from the bags in the last seconds { r, n, v, at }
 
 local function Match()
     local now = GetTime()
@@ -121,21 +121,21 @@ local function Match()
             local sum = 0
             for _, l in ipairs(recentLost) do sum = sum + l.v end
             if sum == tx.a then
-                -- Une seule variation d'or pour plusieurs objets : on la découpe.
+                -- A single gold change for several items: split it.
                 local lost = recentLost; recentLost = {}
                 tremove(unknown, ui)
                 Annotate(tx, lost[1].r, lost[1].n); tx.a = lost[1].v
                 TR.OnVendorSale(tx)
                 for k = 2, #lost do
                     local extra = ns.Ledger.AddTx("vendor_sell", lost[k].v, InfoOf(lost[k].r, lost[k].n))
-                    extra.t = tx.t -- (TX_ADDED l'a déjà compté dans la visite)
+                    extra.t = tx.t -- (TX_ADDED already counted it in the visit)
                 end
             end
         end
     end
 end
 
--- L'ordre "or reçu" / "sac mis à jour" varie : on garde les deux côtés quelques secondes et on les apparie.
+-- The order "gold received" / "bag updated" varies: keep both sides for a few seconds and match them.
 local function Reconcile()
     local new = Snapshot()
     local now = GetTime()
@@ -171,7 +171,7 @@ local function OnTx(tx)
     if tx.k ~= "vendor_sell" then return end
     if tx.id then
         TR.OnVendorSale(tx)
-        -- Vente déjà identifiée : sa pile disparue ne doit pas servir à une autre.
+        -- Sale already identified: its vanished stack must not serve another one.
         for i, l in ipairs(recentLost) do if l.r.id == tx.id and l.v == tx.a then tremove(recentLost, i); break end end
     else
         unknown[#unknown + 1] = { tx = tx, at = GetTime() }
@@ -190,7 +190,7 @@ local function EndVisit()
     visit = nil
 end
 
--- ------------------------------------------------------------ butin
+-- ------------------------------------------------------------ loot
 local function Pat(fmt)
     if type(fmt) ~= "string" then return nil end
     local p = fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
@@ -198,7 +198,7 @@ local function Pat(fmt)
     return "^" .. p .. "$"
 end
 
-local PATTERNS -- { motif, source, multiple }
+local PATTERNS -- { pattern, source, multiple }
 local function Patterns()
     if PATTERNS then return PATTERNS end
     PATTERNS = {}
@@ -222,8 +222,8 @@ local function OnLoot(text)
             if not id then return end
             local src = pt[2]
             if src == "p" then
-                if merchantOpen or GetTime() - closedAt < 2 then src = "v"         -- acheté au marchand
-                elseif GetTime() < questUntil then src = "q"                       -- récompense de quête
+                if merchantOpen or GetTime() - closedAt < 2 then src = "v"         -- bought from the vendor
+                elseif GetTime() < questUntil then src = "q"                       -- quest reward
                 end
             end
             local _, _, q, il, _, _, _, _, _, _, vs = ns.GetItemInfo(link)
@@ -236,7 +236,7 @@ local function OnLoot(text)
     end
 end
 
--- ------------------------------------------------------------ temps de jeu par zone et par niveau
+-- ------------------------------------------------------------ play time per zone and per level
 local function Tick()
     if not ns.db then return end
     local key = Key()
@@ -251,15 +251,15 @@ local function Tick()
     lt[lvl] = (lt[lvl] or 0) + 60
 end
 
--- ------------------------------------------------------------ objets qui ne se vendent pas
--- Par objet (nom) depuis sa dernière vente : nombre de retours "expiré" et dépôts perdus.
--- Les retours d'une même tournée de courrier (même lot) comptent pour un seul échec.
+-- ------------------------------------------------------------ items that do not sell
+-- Per item (name) since its last sale: number of "expired" returns and lost deposits.
+-- Returns from the same mail round (same batch) count as a single failure.
 local hist, histN
 local function BuildHistory()
     local tx = ns.db.tx
     if hist and histN == #tx and tx[#tx] == hist._last then return hist end
     hist = {}
-    local open = {}  -- dépôts des annonces encore en cours (nom -> liste)
+    local open = {}  -- deposits of listings still running (name -> list)
     for _, t in ipairs(tx) do
         local name = t.i
         if name and (t.k == "ah_deposit" or t.k == "ah_sale" or t.k == "ah_expired" or t.k == "ah_cancelled") then
@@ -286,10 +286,10 @@ local function BuildHistory()
     return hist
 end
 
--- Conseil pour un objet : nil (rien à signaler), ou { streak, lost, pauseUntil?, vendor? }.
--- * 1 échec : on poste 1 seul objet (gear) / la moitié (empilable) pour risquer moins de dépôt.
--- * 2 échecs de suite : pause 1 jour, puis 2, 4… (7 jours max).
--- * 3 échecs, ou dépôts perdus > ce que l'HV rapporte de plus que le marchand : à vendre au marchand.
+-- Advice for an item: nil (nothing to report), or { streak, lost, pauseUntil?, vendor? }.
+-- * 1 failure: post only 1 item (gear) / half (stackable) to risk a smaller deposit.
+-- * 2 failures in a row: pause 1 day, then 2, 4… (7 days max).
+-- * 3 failures, or lost deposits > what the AH earns above the vendor: sell to the vendor.
 function TR.PostAdvice(name, id)
     if not name or not ns.db then return nil end
     local h = BuildHistory()[name]
@@ -319,7 +319,7 @@ function TR.AdviceText(adv)
     return table.concat(parts, " · "), what
 end
 
--- Objets de vos sacs à ne pas reposter (pour le chat à l'ouverture de l'HV et la vente au marchand).
+-- Items in your bags not to repost (for the chat line when the AH opens and for vendor selling).
 function TR.StuckInBags()
     local out, seen = {}, {}
     if not C_Container then return out end
@@ -337,7 +337,7 @@ function TR.StuckInBags()
     return out
 end
 
--- ------------------------------------------------------------ bulles (marchand et HV)
+-- ------------------------------------------------------------ tooltips (vendor and AH)
 local function TooltipHint(tt, data)
     if tt ~= GameTooltip or not data or not data.id or ns.db.settings.vendorHints == false then return end
     local atAH = AuctionHouseFrame and AuctionHouseFrame:IsShown()
@@ -365,7 +365,7 @@ local function TooltipHint(tt, data)
     end
 end
 
--- ------------------------------------------------------------ rapport rapide (/ipg sold)
+-- ------------------------------------------------------------ quick report (/ipg sold)
 function TR.Report(days)
     days = days or 7
     local t0 = time() - days * 86400
@@ -395,7 +395,7 @@ function TR.Report(days)
     if missed > 0 then ns.Print((Tr("|cffe0a83dleft on the table vs the AH: %s|r")):format(ns.FormatMoney(missed, { iconSize = 11 }))) end
 end
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local f = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(f, "Track") end
 for _, ev in ipairs({ "AUCTION_HOUSE_SHOW", "MERCHANT_SHOW", "MERCHANT_CLOSED", "BAG_UPDATE_DELAYED", "CHAT_MSG_LOOT",
@@ -436,7 +436,7 @@ f:SetScript("OnEvent", function(_, event, ...)
     elseif event == "MERCHANT_CLOSED" then
         if merchantOpen then
             merchantOpen, closedAt = false, GetTime()
-            -- Laisse le temps aux dernières ventes d'arriver avant le résumé.
+            -- Lets the last sales arrive before the summary.
             if C_Timer then C_Timer.After(2, function() Reconcile(); EndVisit() end) else EndVisit() end
         end
     elseif event == "BAG_UPDATE_DELAYED" then

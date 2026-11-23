@@ -1,7 +1,7 @@
--- ImpotPointGouv : vendre à l'HV sans autre addon.
--- Bouton "Post" : chaque clic poste l'objet suivant au bon prix (juste sous la concurrence, jamais sous
--- votre coût ni sous le prix marchand). Bouton "Cancel" : annule une de vos annonces coupées.
--- Le jeu exige un clic par mise en vente / annulation : l'addon prépare tout, vous cliquez.
+-- ImpotPointGouv: sell at the AH without another addon.
+-- "Post" button: each click posts the next item at the right price (just under the competition, never under
+-- your cost or the vendor price). "Cancel" button: cancels one of your undercut listings.
+-- The game requires one click per listing / cancel: the addon prepares everything, you click.
 local _, ns = ...
 local Tr = ns.L
 local T, P, CR = ns.Theme, ns.Prices, ns.Craft
@@ -10,17 +10,17 @@ local S = {}
 ns.Sell = S
 
 local AH -- C_AuctionHouse
-local prices = {}   -- [id] = { low = autre vendeur le moins cher, own = votre annonce la moins chère, t = time() }
-local lookup        -- file de recherches en cours
-local posted = {}   -- objets postés pendant cette visite à l'HV
-local owned = {}    -- vos annonces actives
+local prices = {}   -- [id] = { low = cheapest other seller, own = your cheapest listing, t = time() }
+local lookup        -- queue of searches in progress
+local posted = {}   -- items posted during this AH visit
+local owned = {}    -- your active listings
 local cancelled = {}
 local bar, postBtn, cancelBtn
 
 local function Rules()
     local q = CR.Rules()
-    if q.postDuration == nil then q.postDuration = 3 end -- 1 court, 2 moyen, 3 long
-    if q.postCap == nil then q.postCap = 10 end          -- objets non empilables postés d'un coup
+    if q.postDuration == nil then q.postDuration = 3 end -- 1 short, 2 medium, 3 long
+    if q.postCap == nil then q.postCap = 10 end          -- non-stackable items posted at once
     return q
 end
 S.Rules = Rules
@@ -28,7 +28,7 @@ S.Rules = Rules
 local function Status(text) if P.Status then P.Status(text) end end
 local function Money(v) return ns.FormatMoney(v or 0, { iconSize = 10 }) end
 
--- ------------------------------------------------------------ que poster ?
+-- ------------------------------------------------------------ what to post?
 local function IsDEMat(id)
     for _, m in ipairs(P.DE_MATS or {}) do if m == id then return true end end
     return false
@@ -44,7 +44,7 @@ local function Reagents()
     return set
 end
 
--- Meilleur débouché d'une création connue ("ah" | "vendor" | "de").
+-- Best outlet for a known craft ("ah" | "vendor" | "de").
 local function Channel(id)
     local saved, prof, name = CR.ProducerOf(id)
     if not saved then return nil end
@@ -53,7 +53,7 @@ local function Channel(id)
     return ev and ev.channel, ev
 end
 
--- Plancher : jamais sous le prix marchand, jamais sous le coût de fabrication.
+-- Floor: never under the vendor price, never under the crafting cost.
 function S.Floor(id)
     local floor = (P.VendorSell(id) or 0) + 1
     local ch, ev = Channel(id)
@@ -66,7 +66,7 @@ function S.Floor(id)
     return floor
 end
 
--- Objets à poster : créations dont le meilleur débouché est l'HV, et compos de désenchantement.
+-- Items to post: crafts whose best outlet is the AH, and disenchanting materials.
 function S.Candidates()
     local reagents = Reagents()
     local by, list = {}, {}
@@ -101,18 +101,18 @@ function S.Candidates()
     return list
 end
 
--- Prix de mise en vente, ou nil + raison.
+-- Listing price, or nil + reason.
 function S.PriceFor(e)
     local p = prices[e.id]
     local floor = S.Floor(e.id)
     if not p then return nil, "checking price…", floor end
     local target
     if p.own and (not p.low or p.own <= p.low) then
-        target = p.own                       -- vous êtes déjà le moins cher : on s'aligne sur vous
+        target = p.own                       -- you are already the cheapest: match yourself
     elseif p.low then
-        target = p.low - 1                   -- 1c sous la concurrence
+        target = p.low - 1                   -- 1c under the competition
     else
-        target = math.max(P.Market(e.id) or 0, floor * 2) -- personne d'autre en vente
+        target = math.max(P.Market(e.id) or 0, floor * 2) -- nobody else selling
     end
     if target < floor then
         return nil, (Tr("market %s is below your floor %s")):format(Money(target), Money(floor)), floor
@@ -120,7 +120,7 @@ function S.PriceFor(e)
     return target, nil, floor
 end
 
--- ------------------------------------------------------------ recherches de prix
+-- ------------------------------------------------------------ price searches
 local function Ready() return not AH.IsThrottledMessageSystemReady or AH.IsThrottledMessageSystemReady() end
 
 local function NextLookup()
@@ -144,7 +144,7 @@ local function NextLookup()
         local my = lookup.i
         C_Timer.After(5, function()
             if lookup and lookup.i == my and lookup.cur == e.id then
-                prices[e.id] = prices[e.id] or { t = time() } -- rien trouvé : personne d'autre ne vend
+                prices[e.id] = prices[e.id] or { t = time() } -- nothing found: nobody else is selling
                 lookup.cur = nil
                 NextLookup()
             end
@@ -163,7 +163,7 @@ function S.Lookup(force)
         local p = prices[e.id]
         if force or not p or time() - p.t > 120 then list[#list + 1] = e; seen[e.id] = true end
     end
-    -- Vos annonces aussi, pour savoir si elles sont coupées.
+    -- Your listings too, to know whether they are undercut.
     for _, a in ipairs(owned) do
         local id = a.itemID
         if id and not seen[id] then
@@ -213,7 +213,7 @@ local function OnItemResults(itemKey)
     C_Timer.After(0.05, NextLookup)
 end
 
--- ------------------------------------------------------------ vos annonces
+-- ------------------------------------------------------------ your listings
 local function ReadOwned()
     wipe(owned)
     if not AH or not AH.GetNumOwnedAuctions then return end
@@ -226,8 +226,8 @@ local function ReadOwned()
     end
 end
 
--- Annonce coupée qui vaut d'être annulée : la différence dépasse 2 dépôts et le nouveau prix reste au-dessus du plancher.
--- (Une annonce annulée revient par courrier : on la repostera à la prochaine visite.)
+-- Undercut listing worth cancelling: the difference exceeds 2 deposits and the new price stays above the floor.
+-- (A cancelled listing comes back by mail: it will be reposted on the next visit.)
 function S.Undercut()
     local out = {}
     local deposit = Rules().deposit or 100
@@ -245,16 +245,16 @@ function S.Undercut()
     return out
 end
 
--- ------------------------------------------------------------ objets qui ne se vendent pas
+-- ------------------------------------------------------------ items that do not sell
 local function Advice(id) return ns.Track and ns.Track.PostAdvice(P.Name(id), id) end
 
--- En pause (expiré plusieurs fois de suite) : on ne le propose pas.
+-- Paused (expired several times in a row): not offered.
 local function Blocked(id)
     local a = Advice(id)
     return a and (a.pauseUntil or a.vendor) and a or nil
 end
 
--- Quantité à poster : après un échec, 1 objet (gear) ou la moitié de la pile, pour risquer moins de dépôt.
+-- Quantity to post: after a failure, 1 item (gear) or half the stack, to risk a smaller deposit.
 function S.QtyFor(e)
     local a = Advice(e.id)
     if e.commodity then
@@ -263,7 +263,7 @@ function S.QtyFor(e)
     return (a and a.streak >= 1) and 1 or math.min(e.qty, Rules().postCap)
 end
 
--- ------------------------------------------------------------ actions (un clic chacune)
+-- ------------------------------------------------------------ actions (one click each)
 function S.NextPost()
     for _, e in ipairs(S.Candidates()) do
         if not posted[e.id] and not Blocked(e.id) then
@@ -303,7 +303,7 @@ function S.CancelNext()
     S.Update()
 end
 
--- ------------------------------------------------------------ boutons de la barre HV
+-- ------------------------------------------------------------ AH bar buttons
 function S.Update()
     if not postBtn then return end
     local cands = S.Candidates()
@@ -373,7 +373,7 @@ ns.On("AH_BAR_READY", function(b)
     postBtn:SetScript("OnEnter", function(self) self.hover = true; self:Refresh(); PostTooltip(self) end)
     cancelBtn = T.Button(b, Tr("No undercut"), 150, 26, function() S.CancelNext() end)
     cancelBtn:SetScript("OnEnter", function(self) self.hover = true; self:Refresh(); CancelTooltip(self) end)
-    -- Placement : après "Buy …" (ajouté par la file) s'il existe, sinon après Scan.
+    -- Position: after "Buy …" (added by the queue) if it exists, otherwise after Scan.
     C_Timer.After(0, function()
         local anchor = b.buyButton or b.scan
         postBtn:SetPoint("LEFT", anchor, "RIGHT", 6, 0)
@@ -383,7 +383,7 @@ ns.On("AH_BAR_READY", function(b)
     end)
 end)
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Sell") end
 for _, e in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "COMMODITY_SEARCH_RESULTS_UPDATED",

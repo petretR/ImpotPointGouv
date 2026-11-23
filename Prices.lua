@@ -1,11 +1,11 @@
--- ImpotPointGouv : base de prix (HV + marchands) et scan de l'Hôtel des ventes.
+-- ImpotPointGouv: price database (AH + vendors) and auction house scan.
 --
--- Prix HV : pour chaque objet, un relevé par jour (prix unitaire le plus bas, quantité en vente).
---   Valeur marché = médiane des relevés journaliers des 7 derniers relevés (sur 14 jours max),
---   ce qui lisse les sous-cotes ponctuelles.
--- Prix marchand : appris en ouvrant un marchand (prix réellement payé, réputation comprise).
--- Scans : "Scan professions" (recherche exacte de chaque compo/produit de vos métiers, page par page)
---   et "Full scan" (toute l'HV en une requête, 15 min de recharge imposée par le jeu).
+-- AH prices: for each item, one reading per day (lowest unit price, quantity listed).
+--   Market value = median of the daily readings of the last 7 readings (over 14 days at most),
+--   which smooths one-off undercuts.
+-- Vendor price: learned when opening a vendor (price actually paid, reputation included).
+-- Scans: "Scan professions" (exact search of each material/product of your professions, page by page)
+--   and "Full scan" (the whole AH in one request, 15 min cooldown imposed by the game).
 local _, ns = ...
 local Tr = ns.L
 local P = {}
@@ -13,19 +13,19 @@ ns.Prices = P
 local T = ns.Theme
 local C = T.C
 
--- Compos classiques vendues par les marchands (Couture / Enchantement).
--- Tant qu'aucun marchand ne vous les a montrées, leur prix est estimé (≈ 4 × prix de revente).
+-- Classic materials sold by vendors (Tailoring / Enchanting).
+-- Until a vendor has shown them to you, their price is estimated (≈ 4 × resale price).
 P.SEED_VENDOR = {
-    [2320] = true, [2321] = true, [4291] = true, [8343] = true,   -- fils grossier, fin, soie, soie épais
-    [2604] = true, [2324] = true, [4340] = true, [6260] = true,   -- teintures rouge, javel, grise, bleue
-    [4470] = true, [6217] = true, [3371] = true, [3372] = true,   -- bois simple, bâtonnet de cuivre, fioles
-    [14341] = true, [2605] = true, [2325] = true, [4341] = true,  -- fil runique, teintures verte, noire, jaune
-    [6261] = true, [4342] = true, [10290] = true, [8925] = true,  -- teintures orange, violette, rose ; fiole de cristal
-    [18256] = true, [2880] = true, [3466] = true, [4289] = true,  -- fiole imprégnée, flux faible / fort, sel
-    [3857] = true, [6338] = true, [11128] = true, [11144] = true, -- charbon, bâtonnets argent / or / vrai-argent
-    [2678] = true, [2692] = true, [3713] = true, [159] = true,    -- épices douces / piquantes / apaisantes, eau
-    [1179] = true, [2665] = true, [4399] = true, [4400] = true,   -- lait, herbes, souche de bois, tige lourde
-    [10647] = true, [10648] = true, [4471] = true, [17194] = true,-- papier / parchemin d'ingénieur, briquet, épices
+    [2320] = true, [2321] = true, [4291] = true, [8343] = true,   -- coarse, fine, silk, heavy silk thread
+    [2604] = true, [2324] = true, [4340] = true, [6260] = true,   -- red, bleach, grey, blue dyes
+    [4470] = true, [6217] = true, [3371] = true, [3372] = true,   -- simple wood, copper rod, vials
+    [14341] = true, [2605] = true, [2325] = true, [4341] = true,  -- rune thread, green, black, yellow dyes
+    [6261] = true, [4342] = true, [10290] = true, [8925] = true,  -- orange, purple, pink dyes; crystal vial
+    [18256] = true, [2880] = true, [3466] = true, [4289] = true,  -- imbued vial, weak / strong flux, salt
+    [3857] = true, [6338] = true, [11128] = true, [11144] = true, -- coal, silver / golden / truesilver rods
+    [2678] = true, [2692] = true, [3713] = true, [159] = true,    -- mild / hot / soothing spices, water
+    [1179] = true, [2665] = true, [4399] = true, [4400] = true,   -- milk, herbs, wood stump, heavy stock
+    [10647] = true, [10648] = true, [4471] = true, [17194] = true,-- engineer's ink / parchment, flint and tinder, spices
 }
 
 local function Realm() return ns.Realm() end
@@ -58,9 +58,9 @@ function P.HasName(id)
     return nil
 end
 
--- ------------------------------------------------------------ enregistrement
--- full = true : liste complète de l'objet (scan) -> quantité fiable, prix du jour remplacé.
--- ladder (facultatif) : { [prix unitaire] = quantité } vus par ce scan, pour l'historique de marché.
+-- ------------------------------------------------------------ recording
+-- full = true: the item's complete listing (scan) -> reliable quantity, daily price replaced.
+-- ladder (optional): { [unit price] = quantity } seen by this scan, for the market history.
 function P.Record(id, low, qty, full, ladder)
     if not id then return end
     local db = DB()
@@ -79,17 +79,17 @@ function P.Record(id, low, qty, full, ladder)
         end
         e.cur = low
     elseif full then
-        e.cur = nil -- plus aucune annonce
+        e.cur = nil -- no listing any more
     end
-    -- Partage avec Auctionator : son infobulle affiche alors les prix de nos scans.
+    -- Shared with Auctionator: its tooltip then shows the prices from our scans.
     if full and low and ns.db.settings.shareAuctionator ~= false and Auctionator and Auctionator.Database
         and Auctionator.Database.SetPrice then
         pcall(Auctionator.Database.SetPrice, Auctionator.Database, tostring(id), low, qty)
     end
     if full then
         e.qty = qty or 0
-        -- Historique fin (un point par scan, 15 min mini entre deux) : prix habituel, volatilité, ventes.
-        -- Seulement pour les objets suivis (listes), pour garder un fichier de sauvegarde léger.
+        -- Fine history (one point per scan, at least 15 min apart): usual price, volatility, sales.
+        -- Only for tracked items (lists), to keep the saved file small.
         if ns.Lists and ns.Lists.IsWatched and ns.Lists.IsWatched(id) then
         e.h = e.h or {}
         local h, now = e.h, time()
@@ -103,14 +103,14 @@ function P.Record(id, low, qty, full, ladder)
     e.t = time()
 end
 
--- Statistiques sur 7 jours : médiane (prix habituel), bas (20 %), haut (80 %), volatilité, ventes / jour.
+-- 7-day statistics: median (usual price), low (20 %), high (80 %), volatility, sales / day.
 local function Pct(sorted, p)
     local n = #sorted
     if n == 0 then return nil end
     return sorted[math.max(1, math.min(n, math.ceil(n * p)))]
 end
--- Cache : les stats d'un objet ne changent qu'avec un nouveau scan (e.t) ; recalculées au plus tard
--- toutes les 10 min (la fenêtre de 7 jours glisse). Les listes les demandent des milliers de fois par affichage.
+-- Cache: an item's stats only change with a new scan (e.t); recomputed at the latest
+-- every 10 min (the 7-day window slides). Lists ask for them thousands of times per redraw.
 local statsCache = {}
 local StatsRaw
 function P.Stats(id)
@@ -146,7 +146,7 @@ StatsRaw = function(id, e)
         for _, v in ipairs(vals) do var = var + (v - mean) ^ 2 end
         st.cv = mean > 0 and math.sqrt(var / #vals) / mean or 0
     end
-    -- Ventes estimées : baisses de quantité entre deux scans successifs (annulations comprises).
+    -- Estimated sales: quantity drops between two successive scans (cancels included).
     local drop, first, last = 0, nil, nil
     for i, pt in ipairs(h) do
         if now - pt[1] <= 7 * 86400 then
@@ -156,7 +156,7 @@ StatsRaw = function(id, e)
         end
     end
     if first and last and last - first >= 6 * 3600 then st.sales = drop / ((last - first) / 86400) end
-    -- Courbe : plus bas prix par jour, 7 derniers jours.
+    -- Curve: lowest price per day, last 7 days.
     local today, spark = math.floor(now / 86400), {}
     for _, pt in ipairs(h) do
         local d = today - math.floor(pt[1] / 86400)
@@ -185,7 +185,7 @@ function P.Market(id)
     return math.floor((vals[n / 2] + vals[n / 2 + 1]) / 2)
 end
 
--- Valeur HV retenue : la plus basse entre marché et annonce actuelle récente (on vend au prix du marché réel).
+-- AH value used: the lower of market and recent current listing (you sell at the real market price).
 function P.AHValue(id)
     local e = P.Entry(id)
     local m = P.Market(id)
@@ -208,10 +208,10 @@ function P.VendorSell(id)
         if sp > 0 then ns.db.vsell[id] = sp else ns.db.vsell[id] = nil end
         return sp > 0 and sp or nil
     end
-    return ns.db.vsell[id] -- appris plus tôt (prix marchand fixe)
+    return ns.db.vsell[id] -- learned earlier (fixed vendor price)
 end
 
--- Prix d'achat marchand : appris (exact) ou estimé pour les compos connues.
+-- Vendor purchase price: learned (exact) or estimated for known materials.
 function P.VendorBuy(id)
     local v = id and ns.db.vendor[id]
     if v then return v, false end
@@ -222,13 +222,13 @@ function P.VendorBuy(id)
     return nil
 end
 
--- ------------------------------------------------------------ désenchantement
--- Table Classic d'Auctionator (Source_Classic/Enchant/DisenchantingProbabilities.lua), niveaux 5 à 65.
--- WoW Forever peut l'avoir modifiée : valeur indicative.
--- Chaque ligne : { niveau min, niveau max, chance %, quantité, composant, chance %, quantité, composant, ... }
+-- ------------------------------------------------------------ disenchanting
+-- Auctionator's Classic table (Source_Classic/Enchant/DisenchantingProbabilities.lua), levels 5 to 65.
+-- WoW Forever may have changed it: indicative value.
+-- Each row: { min level, max level, chance %, quantity, material, chance %, quantity, material, ... }
 P.DE_MATS = { 10940, 10938, 10939, 10978, 10998, 11082, 11083, 11084, 11134, 11135, 11137, 11138, 11139,
     11174, 11175, 11176, 11177, 11178, 14343, 14344, 16202, 16203, 16204, 20725 }
-local DE_RARE = { -- bleus, armes et armures
+local DE_RARE = { -- blues, weapons and armor
     { 11, 25, 100, 1, 10978 }, { 26, 30, 100, 1, 11084 }, { 31, 35, 100, 1, 11138 }, { 36, 40, 100, 1, 11139 },
     { 41, 45, 100, 1, 11177 }, { 46, 50, 100, 1, 11178 }, { 51, 55, 100, 1, 14343 },
     { 56, 65, 99.5, 1, 14344, 0.5, 1, 20725 },
@@ -243,7 +243,7 @@ local function Epic(nexus6180)
     }
 end
 local DE_TABLE = {
-    [4] = { -- armures
+    [4] = { -- armor
         [2] = {
             { 5, 15, 40, 1, 10940, 40, 2, 10940, 10, 1, 10938, 10, 2, 10938 },
             { 16, 20, 37.5, 2, 10940, 37.5, 3, 10940, 10, 1, 10939, 10, 2, 10939, 5, 1, 10978 },
@@ -260,7 +260,7 @@ local DE_TABLE = {
         [3] = DE_RARE,
         [4] = Epic({ 61, 80, 50, 1, 20725, 50, 2, 20725 }),
     },
-    [2] = { -- armes
+    [2] = { -- weapons
         [2] = {
             { 6, 15, 10, 1, 10940, 10, 2, 10940, 40, 1, 10938, 40, 2, 10938 },
             { 16, 20, 10, 2, 10940, 10, 3, 10940, 37.5, 1, 10939, 37.5, 2, 10939, 5, 1, 10978 },
@@ -280,8 +280,8 @@ local DE_TABLE = {
 }
 P.DE_TABLE = DE_TABLE
 
--- Valeur nette attendue (HV − 5 %) d'un désenchantement, ou nil si non désenchantable / prix inconnus.
--- Composants sans prix connu : comptés à 0 (comme Auctionator) ; nil si aucun n'a de prix.
+-- Expected net value (AH − 5 %) of a disenchant, or nil if not disenchantable / prices unknown.
+-- Materials without a known price: counted as 0 (like Auctionator); nil if none has a price.
 function P.DisenchantValue(id)
     if not id then return nil end
     local _, _, quality, ilvl, _, _, _, _, equipLoc, _, _, classID = ns.GetItemInfo(id)
@@ -310,7 +310,7 @@ function P.Ago(seconds)
     return (Tr("%dd ago")):format(math.floor(seconds / 86400))
 end
 
--- ------------------------------------------------------------ marchands
+-- ------------------------------------------------------------ vendors
 local function LearnMerchant()
     if not GetMerchantNumItems then return end
     local learned = 0
@@ -327,7 +327,7 @@ local function LearnMerchant()
     if learned > 0 then ns.Fire("PRICES_CHANGED") end
 end
 
--- ------------------------------------------------------------ lecture d'une page HV
+-- ------------------------------------------------------------ reading an AH page
 local function ReadListing(i)
     local name, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemId, hasAllInfo = GetAuctionItemInfo("list", i)
     if not itemId or itemId == 0 then itemId = P.ItemID(GetAuctionItemLink and GetAuctionItemLink("list", i)) end
@@ -341,15 +341,15 @@ local function Accumulate(acc, name, count, buyout, id)
     if not a then a = { low = unit, qty = 0 }; acc[id] = a end
     if unit < a.low then a.low = unit end
     a.qty = a.qty + count
-    -- Détail par prix (en mémoire seulement) : sert à repérer ce qui est listé sous le prix marchand.
+    -- Detail per price (in memory only): used to spot what is listed under the vendor price.
     a.b = a.b or {}
     a.b[unit] = (a.b[unit] or 0) + count
     if name and name ~= "" then ns.db.items[id] = name end
 end
 
 -- ------------------------------------------------------------ scan
-local scan -- état courant
-local bar  -- barre d'interface sur l'HV
+local scan -- current state
+local bar  -- interface bar at the AH
 
 local function Status(text)
     if bar then bar.status:SetText(text or "") end
@@ -393,7 +393,7 @@ local StartDepth
 function FinishScan(msg)
     local s = scan
     scan = nil
-    -- Après le scan des métiers : profondeur (quantités par prix) des composants, objet par objet.
+    -- After the professions scan: depth (quantities per price) of the materials, item by item.
     if s and not msg and s.mode == "items" and StartDepth and StartDepth(s) then return end
     if s and s.mode == "list" and not msg then
         msg = (Tr("%s scanned: %d / %d items found.")):format(s.label, s.got or 0, #s.ids)
@@ -427,7 +427,7 @@ local function FinalizeItem()
     scan.idx, scan.page = scan.idx + 1, 0
 end
 
--- Envoie la requête suivante (recherche exacte, page par page).
+-- Sends the next request (exact search, page by page).
 function SendNext(fromClick)
     if not scan or scan.mode ~= "items" then return end
     if scan.manual and not fromClick then return end
@@ -445,7 +445,7 @@ function SendNext(fromClick)
     Status((Tr("Profession scan: %d / %d  ·  %s%s")):format(scan.idx, #scan.queue, q.name,
         scan.page > 0 and (" (page " .. (scan.page + 1) .. ")") or ""))
     QueryAuctionItems(q.name, nil, nil, scan.page, false, nil, false, true, nil)
-    -- Pas de réponse : on réessaie une fois puis on passe à l'objet suivant.
+    -- No answer: retry once, then move to the next item.
     C_Timer.After(5, function()
         if scan and scan.reqId == req and scan.awaiting and not scan.manual then
             scan.awaiting = false
@@ -478,7 +478,7 @@ local function OnItemsPage()
     end
 end
 
--- Scan complet : lecture par lots pour ne pas figer le jeu.
+-- Full scan: read in batches so the game does not freeze.
 local function ProcessFull()
     local n = GetNumAuctionItems("list")
     local i = 1
@@ -504,9 +504,9 @@ local function ProcessFull()
     Chunk()
 end
 
--- ------------------------------------------------------------ HV moderne (C_AuctionHouse)
--- WoW Forever utilise l'HV moderne : recherche "browse" par nom, résultats agrégés par objet
--- (prix minimum + quantité totale), et ReplicateItems pour le scan complet.
+-- ------------------------------------------------------------ modern AH (C_AuctionHouse)
+-- WoW Forever uses the modern AH: "browse" search by name, results aggregated per item
+-- (minimum price + total quantity), and ReplicateItems for the full scan.
 local AHM = C_AuctionHouse
 local function IsModern() AHM = C_AuctionHouse; return AHM ~= nil and AHM.SendBrowseQuery ~= nil end
 P.IsModern = IsModern
@@ -582,7 +582,7 @@ local function ModernOnBrowse()
         ModernFinalize(low ~= nil, low, qty)
         return
     end
-    -- Recherche faite à la main ou par un autre addon : on note les prix minimums vus.
+    -- Search made by hand or by another addon: note the minimum prices seen.
     for _, r in ipairs(results) do
         local id = r.itemKey and r.itemKey.itemID
         if id and r.minPrice and r.minPrice > 0 then P.Record(id, r.minPrice, r.totalQuantity, false) end
@@ -633,9 +633,9 @@ function P.StartItemScan()
     if IsModern() then ModernSend(true) else SendNext(true) end
 end
 
--- ------------------------------------------------------------ profondeur des composants
--- Pour chaque composant empilable de vos recettes : toutes les annonces, prix par prix (recherche de commodité).
--- Marche à tout moment, contrairement au scan complet limité à une fois par 15 min.
+-- ------------------------------------------------------------ material depth
+-- For each stackable material of your recipes: every listing, price by price (commodity search).
+-- Works at any time, unlike the full scan limited to once per 15 min.
 local function DepthIds()
     local ids, list = {}, {}
     for _, recipes in pairs(ns.db.recipes) do
@@ -660,7 +660,7 @@ local function DepthNext()
         Status((Tr("Market depth: %s (%d / %d)…")):format(P.Name(id), scan.i, #scan.ids))
         scan.cur, scan.sent = id, GetTime()
         AHM.SendSearchQuery(AHM.MakeItemKey(id), { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }, false)
-        -- Pas de réponse : on passe au suivant.
+        -- No answer: move to the next one.
         local my = scan.i
         C_Timer.After(5, function() if scan and scan.mode == "depth" and scan.i == my and scan.cur == id then scan.cur = nil; DepthNext() end end)
     end
@@ -677,7 +677,7 @@ StartDepth = function(prev)
     return true
 end
 
--- ------------------------------------------------------------ scan d'une liste (onglet Lists)
+-- ------------------------------------------------------------ list scan (Lists tab)
 local ListNext
 function P.ScanIds(ids, label)
     if not IsModern() or not AHM.SendSearchQuery or not AHM.MakeItemKey then Status(Tr("List scan needs the auction house.")); return false end
@@ -770,7 +770,7 @@ local function OnCommodityResults(itemID)
     C_Timer.After(0.05, DepthNext)
 end
 
--- Scan complet possible maintenant ? (le jeu l'autorise toutes les 15 min)
+-- Full scan possible now? (the game allows it every 15 min)
 local function FullReady()
     local st = ns.db.scan[Realm()] or {}
     local since = math.min(st.lastFull and (time() - st.lastFull) or math.huge, st.fullFail and (time() - st.fullFail) or math.huge)
@@ -780,8 +780,8 @@ local function FullReady()
     return canAll and true or false
 end
 
--- Un seul bouton : scan complet quand le jeu le permet (prix de tout + onglet Market),
--- sinon scan de vos métiers seulement (composants et créations).
+-- A single button: full scan when the game allows it (prices of everything + Market tab),
+-- otherwise a scan of your professions only (materials and crafts).
 function P.Scan()
     if scan then
         if scan.mode == "items" then P.StartItemScan() else FinishScan(Tr("Scan stopped.")) end
@@ -803,7 +803,7 @@ function P.StartFullScan()
         UpdateBar()
         local started, my = GetTime(), scan
         AHM.ReplicateItems()
-        -- Si le serveur refuse (recharge en cours), aucun résultat n'arrive : abandon après 60 s.
+        -- If the server refuses (cooldown running), no result arrives: give up after 60 s.
         local function Tick()
             if not scan or scan ~= my or scan.got then return end
             local el = math.floor(GetTime() - started)
@@ -835,7 +835,7 @@ function P.StartFullScan()
 end
 
 
--- ------------------------------------------------------------ barre HV
+-- ------------------------------------------------------------ AH bar
 local function BuildBar()
     local host = AuctionHouseFrame or AuctionFrame
     if bar or not host then return end
@@ -849,7 +849,7 @@ local function BuildBar()
     bar.scan = T.Button(bar, Tr("Scan"), 96, 26, function() P.Scan() end)
     bar.scan:SetPoint("LEFT", icon, "RIGHT", 8, 0)
     bar.scan.tooltip = Tr("Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes: in between, it scans only your professions' reagents and crafts.")
-    -- Ligne d'état sous les boutons : ce qui vient de se passer, ou ce que l'addon prépare.
+    -- Status line under the buttons: what just happened, or what the addon is preparing.
     bar.status = T.Text(bar, 11, { color = C.muted })
     bar.status:SetPoint("BOTTOMLEFT", 40, 8)
     bar.status:SetPoint("RIGHT", -10, 0)
@@ -858,14 +858,14 @@ local function BuildBar()
     for _ in pairs(DB()) do n = n + 1 end
     local last = ns.db.scan[Realm()] and ns.db.scan[Realm()].lastFull
     local txt = (Tr("%d prices known%s")):format(n, last and ("  ·  full scan " .. P.Ago(time() - last)) or "")
-    -- Le marché a besoin d'un scan complet à chaque session : on le rappelle.
+    -- The market needs a full scan every session: remind it.
     if not last or time() - last > 2 * 3600 then txt = txt .. Tr("  ·  |cffe0a83dclick Scan (Market tab needs one per session)|r") end
     bar.status:SetText(txt)
     UpdateBar()
     ns.Fire("AH_BAR_READY", bar)
 end
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Prices") end
 for _, e in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
@@ -916,7 +916,7 @@ ev:SetScript("OnEvent", function(_, event, ...)
                 if my == debounce and scan and scan.mode == "items" and scan.awaiting then OnItemsPage() end
             end)
         else
-            -- Recherche faite à la main (ou par un autre addon) : on note les prix vus.
+            -- Search made by hand (or by another addon): note the prices seen.
             local batch = GetNumAuctionItems("list")
             if batch and batch > 0 and batch <= 50 then
                 local acc = {}
@@ -930,7 +930,7 @@ ev:SetScript("OnEvent", function(_, event, ...)
     end
 end)
 
--- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+-- Profiling (/ipg perf): heavy functions called outside timed events.
 if ns.Profile then
     P.Record = ns.Profile.Wrap("Prices:Record", P.Record)
 end

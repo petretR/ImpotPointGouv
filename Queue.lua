@@ -1,9 +1,9 @@
--- ImpotPointGouv : file de craft, liste de courses, achats (marchand / HV) et "Craft next".
+-- ImpotPointGouv: craft queue, shopping list, purchases (vendor / AH) and "Craft next".
 --
--- File : ns.db.queue[clé] = { prof, name, n, auto }  (clé = métier .. "\001" .. recette)
---   auto = ajouté par "Queue profitable" (remplacé à chaque nouveau calcul), sinon ajout manuel.
--- Plan : la file + les crafts intermédiaires nécessaires (ex. Cured Light Hide) quand les fabriquer
---   coûte moins cher que les acheter, puis la liste de courses (besoin − sacs/banque − alts).
+-- Queue: ns.db.queue[key] = { prof, name, n, auto }  (key = profession .. "\001" .. recipe)
+--   auto = added by "Queue profitable" (replaced on each new calculation), otherwise added by hand.
+-- Plan: the queue + the intermediate crafts needed (e.g. Cured Light Hide) when crafting them
+--   costs less than buying them, then the shopping list (need − bags/bank − alts).
 local _, ns = ...
 local Tr = ns.L
 local T, P, CR, I = ns.Theme, ns.Prices, ns.Craft, ns.Inventory
@@ -13,13 +13,13 @@ ns.Queue = Q
 
 local SEP = "\001"
 local function Me() return UnitGUID("player") end
--- Une file par personnage : la clé contient le propriétaire.
+-- One queue per character: the key contains the owner.
 local function Key(prof, name, owner) return (prof or "?") .. SEP .. name .. SEP .. (owner or Me() or "?") end
 local function DB()
     ns.db.queue = ns.db.queue or {}
     local db = ns.db.queue
     if not ns.db.queueV2 then
-        -- Ancien format (une file commune) : on rattache chaque entrée à son propriétaire.
+        -- Old format (one shared queue): attach each entry to its owner.
         local moved = {}
         for k, e in pairs(db) do
             local _, n = k:gsub(SEP, "")
@@ -34,7 +34,7 @@ local function DB()
     return db
 end
 
--- Matériau d'artisanat (rouleaux, cuir traité…) : sert à d'autres recettes, jamais mis en file pour être vendu.
+-- Crafting material (bolts, cured leather…): used by other recipes, never queued to be sold.
 function Q.IsMaterial(id)
     local f = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
     if not id or not f then return false end
@@ -42,7 +42,7 @@ function Q.IsMaterial(id)
     return ok and classID == 7
 end
 
--- ------------------------------------------------------------ crafteurs (plusieurs possibles)
+-- ------------------------------------------------------------ crafters (several possible)
 local function CrafterSet()
     local st = ns.db.settings
     if not st.crafters then
@@ -60,7 +60,7 @@ function Q.Crafters()
     table.sort(list, function(a, b) return (ns.db.chars[a].name or "") < (ns.db.chars[b].name or "") end)
     return list
 end
--- Le personnage dont c'est la file : soi-même si on a une file, sinon "*" sur la banque (tous les crafteurs).
+-- The character whose queue it is: yourself if you have a queue, otherwise "*" on the bank (all crafters).
 function Q.Owner()
     local me = Me()
     for _, e in pairs(DB()) do if e.owner == me then return me end end
@@ -69,7 +69,7 @@ function Q.Owner()
     return me
 end
 
--- ------------------------------------------------------------ recettes
+-- ------------------------------------------------------------ recipes
 local function LiveRec(prof, name)
     if prof ~= CR.ProfName() then return nil end
     for _, r in ipairs(CR.GetRecipes()) do if r.name == name then return r end end
@@ -89,7 +89,7 @@ local function RecFrom(prof, name)
     return rec
 end
 
--- ------------------------------------------------------------ gestion de la file
+-- ------------------------------------------------------------ queue management
 function Q.Add(prof, name, n)
     if not prof or not name then return end
     local db = DB()
@@ -112,7 +112,7 @@ end
 
 local function Clamp(v, a, b) return math.max(a, math.min(b, v)) end
 
--- Métiers connus par le personnage connecté (enregistrés à l'ouverture de chaque métier).
+-- Professions known by the logged-in character (saved when each profession is opened).
 function Q.MyProfessions()
     local me, list = UnitGUID("player"), {}
     for prof, chars in pairs(ns.db.profChars or {}) do
@@ -137,19 +137,19 @@ function RecipesOf(prof)
     return list
 end
 
--- Remplit la file avec les recettes rentables, en visant un stock cible.
--- allProfs = true : tous les métiers du personnage (sinon seulement le métier ouvert).
--- ------------------------------------------------------------ cible adaptative (demande)
--- Chaque objet a sa propre cible de stock, ajustée d'une session à l'autre selon la façon dont
--- partent les mises en vente postées depuis le dernier ajustement :
---   tout vendu et vite (≤ 1 h)  → ×2      tout vendu      → ×1.5
---   ≥ 70 % vendu                → ×1.25   plus d'invendus que de ventes → ×0.6
--- On n'ajuste que quand le cycle est résolu (plus rien en vente) ou épuisé.
+-- Fills the queue with profitable recipes, aiming at a target stock.
+-- allProfs = true: all the character's professions (otherwise only the open profession).
+-- ------------------------------------------------------------ adaptive target (demand)
+-- Each item has its own stock target, adjusted from one session to the next according to how
+-- the listings posted since the last adjustment went:
+--   all sold and fast (≤ 1 h)  → ×2      all sold      → ×1.5
+--   ≥ 70 % sold                → ×1.25   more unsold than sold → ×0.6
+-- Only adjusted when the cycle is resolved (nothing listed any more) or exhausted.
 local FAST = 3600
 
 local function AdaptDB() ns.db.settings.adapt = ns.db.settings.adapt or {}; return ns.db.settings.adapt end
 
--- Rejoue l'historique (FIFO) : pour chaque unité postée après `since`, vendue (et en combien de temps), expirée, ou encore en vente.
+-- Replays the history (FIFO): for each unit posted after `since`, sold (and how fast), expired, or still listed.
 local function Cycle(name, since)
     local units, open = {}, {}
     local from = math.min(since, time() - 14 * 86400)
@@ -185,10 +185,10 @@ local function Ago(sec)
     return math.floor(sec / 3600 + 0.5) .. " h"
 end
 
--- Cible de stock à vendre pour une recette ; `commit` enregistre l'ajustement (Queue profitable).
--- ------------------------------------------------------------ profondeur : combien crafter tant que c'est rentable
--- Décompose une recette en achats bruts (intermédiaires crafter si c'est moins cher), puis "achète" les composants
--- palier par palier dans l'HV scannée, craft après craft, jusqu'à ce que le craft suivant ne soit plus rentable.
+-- Stock target to sell for a recipe; `commit` saves the adjustment (Queue profitable).
+-- ------------------------------------------------------------ depth: how many to craft while it pays
+-- Breaks a recipe down into raw purchases (intermediates crafted if cheaper), then "buys" the materials
+-- level by level in the scanned AH, craft after craft, until the next craft is no longer profitable.
 local function Expand(id, qty, depth, raw, acc)
     if P.IsVendorItem(id) then
         local vb = P.VendorBuy(id)
@@ -211,7 +211,7 @@ function Q.Depth(rec, value, rules, cap)
     for _, rg in ipairs(rec.reagents or {}) do
         if rg.id then Expand(rg.id, rg.n or 1, 0, raw, acc) end
     end
-    -- Échelle de prix de chaque composant brut, avec votre stock en tête (au prix le plus bas).
+    -- Price ladder of each raw material, with your stock first (at the lowest price).
     local ladders, age = {}, 0
     for id, q in pairs(raw) do
         local book, a = ns.Market.Book(id)
@@ -254,8 +254,8 @@ function Q.Depth(rec, value, rules, cap)
         out.max[id] = ld.max
         out.buy[id] = math.max(0, math.ceil(n * ld.q - ld.stock))
     end
-    -- Seuil de rentabilité de chaque composant : prix au-delà duquel le craft perd de l'argent
-    -- (les autres composants à leur prix actuel le plus bas).
+    -- Break-even of each material: the price above which the craft loses money
+    -- (the other materials at their current lowest price).
     for id, ld in pairs(ladders) do
         local others = acc.fixed
         for oid, old in pairs(ladders) do
@@ -269,7 +269,7 @@ function Q.Depth(rec, value, rules, cap)
     return out
 end
 
--- Équipement (non empilable, BoE…) : on teste à l'unité et on monte de 1 en 1.
+-- Gear (not stackable, BoE…): test one at a time and go up 1 by 1.
 local function IsSingle(id)
     local _, _, _, _, _, _, _, stack, equipLoc = ns.GetItemInfo(id)
     if stack == 1 then return true end
@@ -277,8 +277,8 @@ local function IsSingle(id)
 end
 Q.IsSingle = IsSingle
 
--- Cible de stock à vendre pour une recette ; `commit` enregistre l'ajustement (Queue profitable).
--- Progression : départ 2 (1 pour l'équipement), +2 (+1) quand ça part bien, ×2 quand tout part en moins d'1 h.
+-- Stock target to sell for a recipe; `commit` saves the adjustment (Queue profitable).
+-- Progression: start at 2 (1 for gear), +2 (+1) when it sells well, ×2 when everything sells within 1 h.
 function Q.Target(rec, ev, rules, commit)
     local single = IsSingle(rec.pid)
     local step = single and 1 or 2
@@ -293,7 +293,7 @@ function Q.Target(rec, ev, rules, commit)
     end
     local name = ns.db.items[rec.pid] or rec.name
     local c = Cycle(name, st.at)
-    -- Pour le marchand, la demande est illimitée : on vise le plafond "vendor" (le budget tranche ensuite).
+    -- For the vendor, demand is unlimited: aim at the "vendor" cap (the budget then decides).
     if ev.channel == "vendor" then
         local cap = rules.vendorCap or 40
         local made = math.max(1, rec.made or 1)
@@ -306,7 +306,7 @@ function Q.Target(rec, ev, rules, commit)
         ns.db.depth[rec.pid] = nil
         return cap, nil
     end
-    -- Désenchanté et jamais posté : pas de demande HV à suivre.
+    -- Disenchanted and never posted: no AH demand to follow.
     if ev.channel == "de" and c.posted == 0 and (ev.posts14 or 0) == 0 then
         return start, nil
     end
@@ -332,7 +332,7 @@ function Q.Target(rec, ev, rules, commit)
     return t, st.why
 end
 
--- Or total : tous vos persos (dernier montant connu) + banque de bataillon.
+-- Total gold: all your characters (last known amount) + warband bank.
 function Q.TotalGold()
     local total = ns.Ledger and ns.Ledger.TotalMoney and ns.Ledger.TotalMoney() or (GetMoney and GetMoney() or 0)
     if C_Bank and C_Bank.FetchDepositedMoney and Enum and Enum.BankType and Enum.BankType.Account then
@@ -366,7 +366,7 @@ function Q.AutoQueue(allProfs)
             local profitable = not rec.enchant and ev.profit and not ev.unsold and not ev.whiteGear and not ev.infoPending
                 and ev.profit >= rules.minProfit and (ev.margin or 0) * 100 >= rules.minMargin
             if keepN > 0 and not profitable and not rec.enchant then
-                -- Usage perso (ex. cuisine) : on crafte jusqu'à la réserve, rentable ou pas.
+                -- Personal use (e.g. cooking): craft up to the reserve, profitable or not.
                 local runs = math.ceil(math.max(0, keepN - ns.GetItemCount(rec.pid)) / math.max(1, rec.made or 1))
                 local k = Key(prof, rec.name)
                 if runs > 0 and not (db[k] and not db[k].auto) then
@@ -380,7 +380,7 @@ function Q.AutoQueue(allProfs)
                     skipped = skipped + 1
                 else
                     local target = Q.Target(rec, ev, rules, true)
-                    -- La réserve perso ("keep") s'ajoute à la cible : elle ne compte pas comme stock à vendre.
+                    -- The personal reserve ("keep") adds to the target: it does not count as stock to sell.
                     target = target + (ns.Keep and ns.Keep.Get(rec.pid) or 0)
                     local stock = I.Stock(rec.pid)
                     local runs = math.ceil(math.max(0, target - stock) / math.max(1, rec.made or 1))
@@ -393,10 +393,10 @@ function Q.AutoQueue(allProfs)
             end
         end
     end
-    -- Budget : on ne met en file que ce que vous pouvez payer (part de l'or du perso), les recettes
-    -- les plus rentables par pièce investie d'abord. Les réserves perso (keep) passent en premier.
+    -- Budget: only queue what you can pay for (share of the character's gold), the recipes
+    -- with the best return per gold invested first. Personal reserves (keep) go first.
     local budget = math.floor(Q.TotalGold() * (rules.budgetPct or 50) / 100)
-    -- Ce que la file manuelle consomme déjà.
+    -- What the manual queue already uses.
     for _, e in pairs(db) do
         if not e.auto then
             local rec = Q.FindRecipe and Q.FindRecipe(e.prof, e.name)
@@ -416,12 +416,12 @@ function Q.AutoQueue(allProfs)
             added = added + 1
         end
     end
-    if added > 0 and not Q.IsCrafter(me) then CrafterSet()[me] = true end -- remplir une file fait de vous un crafteur
+    if added > 0 and not Q.IsCrafter(me) then CrafterSet()[me] = true end -- filling a queue makes you a crafter
     local msg = (Tr("%d craft%s queued%s%s%s.")):format(added, added == 1 and "" or "s",
         cut and (Tr(" · capped by budget (%s)")):format(ns.FormatMoney(math.max(0, budget), { iconSize = 10 })) or "",
         skipped > 0 and (Tr(" · %d skipped (flooded market)")):format(skipped) or "",
         pending > 0 and (Tr(" · %d still loading, click again in a second")):format(pending) or "")
-    -- Crafts pour le marchand : "×30 tant que Linen Cloth ≤ 24c".
+    -- Crafts for the vendor: "×30 while Linen Cloth ≤ 24c".
     local vendorLines = {}
     for _, c in ipairs(cands) do
         local rec = Q.FindRecipe(c.prof, c.name)
@@ -437,10 +437,10 @@ function Q.AutoQueue(allProfs)
             end
         end
     end
-    -- Achats directs à revendre au marchand repérés au dernier scan.
+    -- Direct purchases to resell to the vendor spotted in the last scan.
     local flips = ns.Market and ns.Market.FlipCount and ns.Market.FlipCount() or 0
     if flips > 0 then msg = msg .. (Tr(" · %d vendor flip%s on the AH (Market tab)")):format(flips, flips > 1 and "s" or "") end
-    -- L'or est réparti sur vos persos : signale s'il faut en envoyer à celui qui achète.
+    -- Gold is spread over your characters: flag when some must be sent to the buyer.
     local need = (Q.Plan().buyCost or 0) - (GetMoney and GetMoney() or 0)
     if need > 0 then
         local rich = Q.RichestAlt()
@@ -454,7 +454,7 @@ function Q.AutoQueue(allProfs)
     return msg
 end
 
--- Crafteur "de référence" : soi-même si on l'est, sinon le premier crafteur qui a une file (puis le premier tout court).
+-- "Reference" crafter: yourself if you are one, otherwise the first crafter with a queue (then simply the first).
 function Q.Crafter()
     local me = Me()
     if Q.IsCrafter(me) then return me end
@@ -465,7 +465,7 @@ function Q.Crafter()
     return list[1]
 end
 
--- Seuil de perte d'un composant (le plus haut parmi les recettes en file).
+-- Loss threshold of a material (the highest among the queued recipes).
 function Q.BreakEven(id)
     local best
     for pid, d in pairs(ns.db.depth or {}) do
@@ -479,7 +479,7 @@ function Q.BreakEven(id)
     return best
 end
 
--- Prix maximum à payer pour un composant (le plus haut que tolère une recette en file).
+-- Maximum price to pay for a material (the highest a queued recipe tolerates).
 function Q.MaxPrice(id)
     local best
     for pid, d in pairs(ns.db.depth or {}) do
@@ -513,7 +513,7 @@ function Q.Plan(owner)
         end
     end
     table.sort(plan.crafts, function(a, b) return a.name < b.name end)
-    -- Intermédiaires : compo moins chère fabriquée qu'achetée, et qu'on peut fabriquer.
+    -- Intermediates: a material cheaper crafted than bought, and that you can craft.
     local crafted = {}
     for _, id in ipairs({ unpack(order) }) do
         local _, src = CR.UnitCost(id)
@@ -521,7 +521,7 @@ function Q.Plan(owner)
             local prod, prof, name = CR.ProducerOf(id)
             if prod then
                 crafted[id] = true
-                local missing = need[id] - I.Mine(id) - (I.Alts(id)) -- tous vos personnages
+                local missing = need[id] - I.Mine(id) - (I.Alts(id)) -- all your characters
                 local runs = math.ceil(math.max(0, missing) / math.max(1, prod.m or 1))
                 if runs > 0 then
                     local rec = RecFrom(prof, name)
@@ -542,9 +542,9 @@ function Q.Plan(owner)
             icon = ns.GetItemIcon(id) }
         if crafted[id] then
             row.src, row.buy = "craft", 0
-            row.toCraft = math.max(0, qty - mine - alts) -- à fabriquer avant les recettes qui l'utilisent
+            row.toCraft = math.max(0, qty - mine - alts) -- to craft before the recipes that use it
         else
-            -- Marchand ou HV : le moins cher. Un objet de marchand n'est pris à l'HV que s'il y est vraiment moins cher.
+            -- Vendor or AH: the cheaper. A vendor item is only bought at the AH if it is really cheaper there.
             row.src = P.IsVendorItem(id) and "vendor" or "ah"
             if row.src == "vendor" then
                 local vb = P.VendorBuy(id)
@@ -565,7 +565,7 @@ function Q.Plan(owner)
         return a.name < b.name
     end)
     plan.profit = plan.revenue - plan.cost
-    -- Liste affichée : seulement vos recettes en file ; les intermédiaires apparaissent dans les courses ("Craft").
+    -- List shown: only your queued recipes; intermediates appear in the shopping list ("Craft").
     plan.visible = {}
     for _, c in ipairs(plan.crafts) do if not c.inter then plan.visible[#plan.visible + 1] = c end end
     return plan
@@ -574,7 +574,7 @@ end
 -- ------------------------------------------------------------ craft
 local pendingCraft
 
--- Combien de fois on peut crafter avec ce qui est DANS LES SACS (le jeu ne crafte pas depuis la banque).
+-- How many times you can craft with what is IN THE BAGS (the game does not craft from the bank).
 local function BagCount(id)
     if C_Item and C_Item.GetItemCount then return C_Item.GetItemCount(id, false) or 0 end
     return ns.GetItemCount(id) or 0
@@ -612,7 +612,7 @@ local function Available(rec)
         local _, _, avail = GetTradeSkillInfo(rec.index)
         fromGame = avail
     end
-    -- Si le jeu ne renseigne pas (ou pas encore) ce nombre, on le calcule depuis les sacs.
+    -- If the game does not provide this number (or not yet), it is computed from the bags.
     local mine = FromBags(rec)
     if not fromGame or (fromGame == 0 and mine > 0) then return mine end
     return fromGame
@@ -637,15 +637,15 @@ local function NextCraft(plan)
     return nil, nil, 0, blocked, inBank
 end
 
--- Prochain craft faisable maintenant (métier ouvert, compos dans les sacs).
+-- Next craft doable now (profession open, materials in the bags).
 function Q.NextCraftable()
     if not CR.GetAPI() then return nil end
     local c, _, count = NextCraft(Q.Plan())
     return c, count
 end
 
--- Achats HV de ce personnage pas encore récupérés (achetés depuis sa dernière visite à la boîte aux lettres).
--- L'HV livre par courrier, et l'icône de la minicarte ne s'affiche pas toujours.
+-- AH purchases of this character not collected yet (bought since their last mailbox visit).
+-- The AH delivers by mail, and the minimap icon does not always show.
 function Q.PendingMail()
     local key = ns.Ledger and ns.Ledger.CharKey and ns.Ledger.CharKey()
     local c = key and ns.db.chars[key]
@@ -691,7 +691,7 @@ function Q.CraftNext()
     Q.SetStatus((Tr("Crafting %s ×%d…")):format(c.name, count))
 end
 
--- ------------------------------------------------------------ achats HV (marchandises empilables)
+-- ------------------------------------------------------------ AH purchases (stackable goods)
 local buy
 
 local function ExpectedUnit(id) return P.AHValue(id) end
@@ -723,7 +723,7 @@ function Q.BuyNext()
             end
             local mx = Q.MaxPrice(row.id)
             if mx and AH.SendSearchQuery and AH.MakeItemKey and AH.GetCommoditySearchResultInfo then
-                -- Prix maximum connu : on regarde d'abord combien il en reste à ce prix, et on n'achète que ceux-là.
+                -- Maximum price known: first check how many are left at that price, and only buy those.
                 buy = { id = row.id, qty = row.buy, name = row.name, stage = "depth", max = mx }
                 P.Status((Tr("Checking how many %s are listed at %s or less…")):format(row.name, ns.FormatMoney(mx, { iconSize = 10 })))
                 Q.UpdateBuyButton()
@@ -742,7 +742,7 @@ function Q.BuyNext()
     P.Status(Tr("Nothing left to buy at the AH for this queue."))
 end
 
--- Résultat de la recherche : quantité disponible à votre prix maximum ou moins.
+-- Search result: quantity available at your maximum price or less.
 function Q.OnDepth(itemID)
     if not buy or buy.stage ~= "depth" or itemID ~= buy.id then return end
     local AH = C_AuctionHouse
@@ -771,7 +771,7 @@ end
 function Q.OnPrice(unit, total)
     if not buy or buy.stage ~= "price" then return end
     local bid = buy.id
-    -- Garde-fous anti-arnaque : jamais plus cher qu'un marchand, jamais très au-dessus du prix habituel.
+    -- Anti-scam safeguards: never more than a vendor, never far above the usual price.
     local vb, est = P.VendorBuy(buy.id)
     if vb and unit and unit > vb then
         Q.CancelBuy((Tr("%s is sold by vendors for %s%s: not bought at the AH (%s each).")):format(buy.name,
@@ -832,7 +832,7 @@ function Q.UpdateBuyButton()
     elseif buy then
         buyButton.text:SetText(buy.stage == "depth" and "Checking…" or "…")
     else
-        -- Ce que le prochain clic achète, en clair.
+        -- What the next click buys, in plain words.
         buyButton.text:SetText(first and (Tr("Buy %d× %s")):format(first.buy, first.name) or "No reagent to buy here")
     end
     buyButton.tooltip = (Tr("%d reagent%s to buy. You confirm the total price; never above the vendor price or your profitable max.")):format(n, n == 1 and "" or "s")
@@ -848,7 +848,7 @@ ns.On("AH_BAR_READY", function(bar)
     Q.UpdateBuyButton()
 end)
 
--- ------------------------------------------------------------ achats marchand
+-- ------------------------------------------------------------ vendor purchases
 local vendorButton
 local UpdateVendorButton
 local function VendorNeeds()
@@ -869,8 +869,8 @@ function Q.VendorNeedCount()
     return n
 end
 
--- Achète chez le marchand tout ce que la file demande encore (prix unitaire du marchand).
--- Manuel : aperçu à cocher d'abord ; "only" = { [id] = true } limite l'achat aux lignes cochées.
+-- Buys from the vendor everything the queue still needs (vendor unit price).
+-- Manual: checklist preview first; "only" = { [id] = true } limits the purchase to the checked rows.
 function Q.BuyVendorNeeds(auto, only)
     local list = VendorNeeds()
     if #list == 0 then return end
@@ -940,7 +940,7 @@ function UpdateVendorButton()
     end
 end
 
--- ------------------------------------------------------------ interface (onglet "Queue")
+-- ------------------------------------------------------------ interface ("Queue" tab)
 local view
 local QROWS, SROWS = 6, 6
 
@@ -994,7 +994,7 @@ local function BuildRules(parent)
         g, s = Num(d[1], d[2], d[3])
         Stepper(f, -44 - (i - 1) * 28, d[4], g, s, d[5], d[6])
     end
-    -- Interrupteur : équipement blanc au prix marchand
+    -- Switch: white gear at vendor price
     local wy = -44 - #rows * 28
     local wl = T.Text(f, 12, { color = C.text, text = Tr("White gear: vendor price only") }); wl:SetPoint("TOPLEFT", 16, wy)
     local wb
@@ -1203,7 +1203,7 @@ function Q.Refresh()
             r.entry = c
             r.icon:SetTexture(c.rec.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
             r.name:SetText(c.inter and ("|cff9ad98c" .. c.name .. Tr("|r  |cff615f5c· reagent|r")) or c.name)
-            r.name:SetWidth(c.inter and 186 or 124) -- pas de bouton keep ni de +/- sur un intermédiaire
+            r.name:SetWidth(c.inter and 186 or 124) -- no keep button or +/- on an intermediate
             r.keep:SetItem(not c.inter and c.rec.pid or nil)
             r.count:SetText("×" .. c.n)
             r.minus:SetShown(not c.inter); r.plus:SetShown(not c.inter)
@@ -1269,7 +1269,7 @@ function Q.Refresh()
             or ("Missing reagents for " .. blocked.name)) or "Craft next")
         view.craft:SetDisabled(true)
     end
-    -- Onglet : compteur
+    -- Tab: counter
     local panel = CR.Panel()
     if panel and panel.tabButtons then
         local n = 0
@@ -1278,7 +1278,7 @@ function Q.Refresh()
     end
 end
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Queue") end
 for _, e in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_FAILED",
@@ -1324,7 +1324,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2)
         if buy then Q.CancelBuy() end
         Q.skipBuy = nil
     elseif event == "MERCHANT_SHOW" then
-        -- Achat automatique des compos marchand de la file (désactivable : /ipg vendor).
+        -- Automatic purchase of the queue's vendor materials (can be turned off: /ipg vendor).
         if ns.db.settings.autoVendorBuy == true then
             C_Timer.After(0.4, function() Q.BuyVendorNeeds(true) end)
         end

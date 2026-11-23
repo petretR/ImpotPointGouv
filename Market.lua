@@ -1,6 +1,6 @@
--- ImpotPointGouv : estimation de ce qui se vend sur toute l'HV, métiers ou pas.
--- L'HV ne montre jamais les ventes des autres : on compare deux scans complets successifs, et les
--- quantités qui ont disparu sont comptées comme vendues (annulations et expirations incluses : estimation).
+-- ImpotPointGouv: estimate of what sells across the whole AH, professions or not.
+-- The AH never shows other people's sales: two successive full scans are compared, and the
+-- quantities that vanished count as sold (cancels and expiries included: an estimate).
 local _, ns = ...
 local Tr = ns.L
 local T, P = ns.Theme, ns.Prices
@@ -8,7 +8,7 @@ local C = T.C
 local M = {}
 ns.Market = M
 
-local MAX_GAP = 48 * 3600   -- au-delà, l'écart entre deux scans ne dit plus rien d'utile
+local MAX_GAP = 48 * 3600   -- beyond that, the gap between two scans says nothing useful
 local KEEP_DAYS = 7
 
 local function Realm() return ns.Realm() end
@@ -20,7 +20,7 @@ local function DB()
     return ns.db.market[r]
 end
 
--- Classe d'objet sans cache (fonctionne pour n'importe quel ID).
+-- Item class without cache (works for any ID).
 local function Instant(id)
     local f = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
     if not f then return nil end
@@ -28,7 +28,7 @@ local function Instant(id)
     if ok then return classID, subID, icon, equipLoc end
 end
 
--- Appelé à la fin de chaque scan complet avec { [id] = { low, qty } }.
+-- Called at the end of each full scan with { [id] = { low, qty } }.
 function M.OnFullScan(acc)
     local db = DB()
     local now, day = time(), Today()
@@ -56,7 +56,7 @@ function M.OnFullScan(acc)
     db.scans = (db.scans or 0) + 1
     M.ScanFlips(acc)
     M.StoreBooks(acc)
-    -- Purge : plus de 7 jours.
+    -- Purge: older than 7 days.
     local minDay = day - KEEP_DAYS
     for d in pairs(db.obs) do if d < minDay then db.obs[d] = nil end end
     for id, it in pairs(db.items) do
@@ -67,9 +67,9 @@ function M.OnFullScan(acc)
     ns.Fire("MARKET_CHANGED")
 end
 
--- ------------------------------------------------------------ profondeur du marché (composants)
--- Pour chaque composant de vos recettes : combien d'unités sont en vente à chaque prix (40 paliers les moins chers).
--- Sert à dire "craft 30 tant que le tissu reste sous 24c".
+-- ------------------------------------------------------------ market depth (materials)
+-- For each material of your recipes: how many units are listed at each price (40 cheapest levels).
+-- Used to say "craft 30 while the cloth stays under 24c".
 function M.StoreBooks(acc)
     local ids = {}
     for _, list in pairs(ns.db.recipes or {}) do
@@ -92,12 +92,12 @@ function M.StoreBooks(acc)
             end
             db.book[id] = { t = now, l = flat }
         elseif not a then
-            db.book[id] = { t = now, l = {} } -- rien en vente
+            db.book[id] = { t = now, l = {} } -- nothing listed
         end
     end
 end
 
--- Enregistre l'échelle de prix d'un composant (recherche de commodité) : { [prix] = quantité }.
+-- Records the price ladder of a material (commodity search): { [price] = quantity }.
 function M.SetBook(id, ladder)
     local db = DB()
     db.book = db.book or {}
@@ -109,7 +109,7 @@ function M.SetBook(id, ladder)
     db.book[id] = { t = time(), l = flat }
 end
 
--- Paliers { prix, quantité } d'un composant, et l'âge du scan.
+-- Levels { price, quantity } of a material, and the age of the scan.
 function M.Book(id)
     local b = DB().book and DB().book[id]
     if not b then return nil end
@@ -119,8 +119,8 @@ function M.Book(id)
 end
 
 -- ------------------------------------------------------------ vendor flip
--- Annonces sous le prix marchand : acheter puis revendre au marchand. Le prix marchand vient du jeu
--- (GetItemInfo) ; pour les objets pas encore en cache, on le demande en arrière-plan, sans survol.
+-- Listings under the vendor price: buy then resell to the vendor. The vendor price comes from the game
+-- (GetItemInfo); for items not cached yet, it is requested in the background, without hovering.
 local lastAcc, waiting = nil, {}
 local MIN_UNIT_GAIN = 1
 
@@ -151,7 +151,7 @@ function M.ScanFlips(acc)
         if P.VendorSell(id) then StoreFlip(FlipOf(id, a), id)
         else waiting[id] = true; ask[#ask + 1] = id end
     end
-    -- Demande les infos manquantes par petits lots (le jeu répond avec GET_ITEM_INFO_RECEIVED).
+    -- Requests missing info in small batches (the game answers with GET_ITEM_INFO_RECEIVED).
     local i = 0
     local function Batch()
         for _ = 1, 40 do
@@ -195,13 +195,13 @@ function M.FlipCount()
     return #(M.Flips())
 end
 
--- Achat d'un flip (objets empilables) : 1er clic = prix, 2e clic = confirmer si c'est toujours rentable.
+-- Buying a flip (stackable items): 1st click = price, 2nd click = confirm if still profitable.
 local mb
 local ahOpen = false
 local function IsAHOpen() return ahOpen or (AuctionHouseFrame and AuctionHouseFrame:IsShown()) or false end
 function M.Buying() return mb end
 
--- Un achat fait : on décompte de la liste et on retient ce qui est à revendre au marchand.
+-- A purchase done: remove it from the list and remember what to resell to the vendor.
 local function Bought(id, qty)
     ns.db.flipBought = ns.db.flipBought or {}
     ns.db.flipBought[id] = (ns.db.flipBought[id] or 0) + qty
@@ -213,7 +213,7 @@ local function Bought(id, qty)
     end
 end
 
--- 1er clic : vérifie le prix réel ; 2e clic : confirme. Empilable = lot entier ; équipement = une annonce par clic.
+-- 1st click: checks the actual price; 2nd click: confirms. Stackable = whole lot; gear = one listing per click.
 function M.Buy(row)
     local AH = C_AuctionHouse
     if not AH or not IsAHOpen() then M.Msg(Tr("Open the auction house to buy.")); return end
@@ -222,7 +222,7 @@ function M.Buy(row)
         M.Msg((Tr("Buying %d× %s…")):format(mb.qty, P.Name(mb.id)))
         if mb.item then
             AH.PlaceBid(mb.auctionID, mb.price)
-            -- Pas d'événement de confirmation fiable pour l'équipement : on considère l'achat fait sans erreur.
+            -- No reliable confirmation event for gear: the purchase is considered done without an error.
             local my = mb
             C_Timer.After(1.5, function()
                 if mb == my and mb.stage == "wait" then
@@ -320,14 +320,14 @@ bev:SetScript("OnEvent", function(_, event, unit, total)
     end
 end)
 
--- Heures d'observation sur 7 jours.
+-- Hours observed over 7 days.
 function M.ObservedHours()
     local s = 0
     for _, v in pairs(DB().obs) do s = s + v end
     return s / 3600
 end
 
--- Ventes estimées par jour pour un objet.
+-- Estimated sales per day for an item.
 function M.Rate(id)
     local db = DB()
     local it = db.items[id]
@@ -340,8 +340,8 @@ function M.Rate(id)
     return units / obs * 86400
 end
 
--- ------------------------------------------------------------ catégories
--- Composants bruts : ce qu'on va chercher en farmant (tissu, cuir, minerai, viande/poisson, plantes, élémentaire, enchantement).
+-- ------------------------------------------------------------ categories
+-- Raw materials: what you farm (cloth, leather, ore, meat/fish, herbs, elemental, enchanting).
 local RAW = { [5] = "Cloth", [6] = "Leather", [7] = "Metal & Stone", [8] = "Cooking", [9] = "Herb", [10] = "Elemental", [12] = "Enchanting" }
 M.FILTERS = {
     { "all", "All" }, { "raw", "Farm" }, { "gear", "Gear" }, { "consum", "Consumables" }, { "flip", "AH flip" },
@@ -357,7 +357,7 @@ local function Category(id)
 end
 M.Category = Category
 
--- Liste triée pour un filtre. Flip : annonce actuelle très sous le prix habituel, objet qui se vend.
+-- Sorted list for a filter. Flip: current listing far below the usual price, item that sells.
 function M.List(filter)
     local db = DB()
     local out = {}
@@ -398,9 +398,9 @@ function M.List(filter)
     return out
 end
 
--- ------------------------------------------------------------ crafts rentables chez le marchand
--- Toutes les recettes de tous les métiers dont le produit se vend au marchand plus cher que ses composants
--- (achetés maintenant à l'HV, ou chez le marchand pour les fournitures). Aucun risque : le marchand achète tout.
+-- ------------------------------------------------------------ crafts that pay at a vendor
+-- Every recipe of every profession whose product sells to a vendor for more than its materials
+-- (bought now at the AH, or at the vendor for supplies). No risk: the vendor buys everything.
 local function BuyNow(id)
     if P.IsVendorItem(id) then
         local v = P.VendorBuy(id)
@@ -446,7 +446,7 @@ function M.VendorCrafts()
             end
         end
     end
-    -- Les recettes que vous pouvez faire tout de suite d'abord, puis le gain par craft.
+    -- Recipes you can craft right now first, then gain per craft.
     table.sort(out, function(a, b)
         local ra = a.label == "known" and a.mySkill >= a.skill
         local rb = b.label == "known" and b.mySkill >= b.skill
@@ -456,7 +456,7 @@ function M.VendorCrafts()
     return out, waiting
 end
 
--- Le personnage connaît-il une recette qui produit / utilise cet objet ?
+-- Does the character know a recipe that makes / uses this item?
 local function Relation(id)
     if ns.Craft and ns.Craft.ProducerOf and ns.Craft.ProducerOf(id) then return "you craft it" end
     for prof, list in pairs(ns.db.recipes or {}) do
@@ -566,7 +566,7 @@ function M.BuildPage(page)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        -- Clic : historique des prix ; Maj-clic : lien dans la discussion.
+        -- Click: price history; Shift-click: link in chat.
         r:SetScript("OnMouseUp", function(self, button)
             local row = self.row
             if not row or button ~= "LeftButton" then return end
@@ -694,13 +694,13 @@ function M.BuildPage(page)
     end
 end
 
--- Noms qui arrivent après coup : redessine la page (avec un petit délai).
+-- Names that arrive later: redraw the page (after a short delay).
 local pend
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Market") end
 pcall(ev.RegisterEvent, ev, "GET_ITEM_INFO_RECEIVED")
--- Objets inexistants (success = false) : ignorés, sinon chaque redessin les redemande et relance l'événement.
--- Au plus un redessin toutes les 2 s : les infos arrivent par milliers après un scan complet.
+-- Items that do not exist (success = false): ignored, otherwise each redraw asks again and fires the event again.
+-- At most one redraw every 2 s: info arrives by the thousands after a full scan.
 local lastDraw = 0
 ev:SetScript("OnEvent", function(_, _, id, success)
     if success == false then return end
@@ -717,7 +717,7 @@ ev:SetScript("OnEvent", function(_, _, id, success)
     end)
 end)
 
--- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+-- Profiling (/ipg perf): heavy functions called outside timed events.
 if ns.Profile then
     M.OnFullScan = ns.Profile.Wrap("Market:OnFullScan", M.OnFullScan)
     M.List = ns.Profile.Wrap("Market:List", M.List)
