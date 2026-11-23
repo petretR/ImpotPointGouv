@@ -1,0 +1,23 @@
+name: CI
+
+# Runs on every pull request and on main: syntax check, toc check, smoke tests (English and French).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.1 (the game client's version)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lua5.1
+      - name: Syntax check
+        run: find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
+      - name: Every toc file exists
+        run: bash .github/scripts/check_toc.sh
+      - name: Smoke tests (English)
+        run: lua5.1 tests/run.lua
+      - name: Smoke tests (French)
+        run: IPG_LOCALE=frFR lua5.1 tests/run.lua
