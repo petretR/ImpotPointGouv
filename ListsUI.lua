@@ -342,6 +342,24 @@ function LU.BuildPage(page)
         prev = b
         page.roleBtns[r[1]] = b
     end
+    -- Cooking: filter by food buff (same place as the role buttons, unused on that list).
+    page.food = ns.db.settings.cookStat or "all"
+    page.foodBtns = {}
+    local fprev
+    local foods = { { "all", "All" } }
+    for _, f in ipairs(LS.FOOD_STATS) do foods[#foods + 1] = f end
+    local FW = { all = 40, sta = 66, agi = 60, str = 66, int = 66, spi = 52, ap = 36, sp = 36, hp = 44, misc = 48 }
+    for _, f in ipairs(foods) do
+        local b = T.Button(main, Tr(f[2]), FW[f[1]] or 56, 22, function()
+            page.food = f[1]; ns.db.settings.cookStat = f[1]; page.offset = 0; page:Refresh()
+        end, "pill")
+        if fprev then b:SetPoint("LEFT", fprev, "RIGHT", 4, 0) else b:SetPoint("TOPLEFT", 0, fy) end
+        if f[1] == "ap" then b.tooltip = Tr("Attack power") elseif f[1] == "sp" then b.tooltip = Tr("Spell damage")
+        elseif f[1] == "hp" then b.tooltip = Tr("Healing power")
+        elseif f[1] == "misc" then b.tooltip = Tr("Everything else: mana or health regeneration, crit, no buff, campfire kits…") end
+        fprev = b
+        page.foodBtns[f[1]] = b
+    end
     -- Vue : par recette (produit / enchantement puis ses composants) ou liste à plat.
     page.view = ns.db.settings.listView or "recipe"
     page.viewBtns = {}
@@ -351,7 +369,8 @@ function LU.BuildPage(page)
         local b = T.Button(main, Tr(k[2]), 84, 22, function()
             page.view = k[1]; ns.db.settings.listView = k[1]; page.offset = 0; page:Refresh()
         end, "pill")
-        if kprev then b:SetPoint("RIGHT", kprev, "LEFT", -4, 0) else b:SetPoint("TOPRIGHT", 0, fy) end
+        -- On the title row, left of Auctionator (the filter row ran out of space).
+        if kprev then b:SetPoint("RIGHT", kprev, "LEFT", -4, 0) else b:SetPoint("RIGHT", page.export, "LEFT", -10, 0) end
         kprev = b
         page.viewBtns[k[1]] = b
     end
@@ -844,6 +863,17 @@ function LU.BuildPage(page)
         local kind = "all"
         local byRecipe = showKinds and self.view == "recipe"
         for k, btn in pairs(self.roleBtns) do btn:SetSelected(k == self.role); btn:SetShown(showRoles) end
+        local isCook = l.key == "all_cook"
+        local food = isCook and self.food or "all"
+        for k, btn in pairs(self.foodBtns) do btn:SetSelected(k == self.food); btn:SetShown(isCook) end
+        -- Flat list: the matching foods and their ingredients.
+        local foodMats
+        if food ~= "all" then
+            foodMats = {}
+            for _, rec in ipairs(l.recipes) do
+                if LS.FoodMatch(rec.id, food) then for _, m in ipairs(rec.mats or {}) do foodMats[m[1]] = true end end
+            end
+        end
         for k, btn in pairs(self.viewBtns) do btn:SetSelected(k == self.view); btn:SetShown(showKinds) end
         local isRoute = l.leveling and self.lvView == "route"
         for k, btn in pairs(self.lvBtns) do btn:SetSelected(k == self.lvView); btn:SetShown(l.leveling and true or false) end
@@ -876,13 +906,14 @@ function LU.BuildPage(page)
             else h:SetPoint("TOP" .. pos[1], pos[2], -9); h:SetJustifyH(pos[1]) end
         end
         self.listFrame:ClearAllPoints()
-        self.listFrame:SetPoint("TOPLEFT", 0, (showRoles or showKinds or l.leveling) and -74 or -44)
+        self.listFrame:SetPoint("TOPLEFT", 0, (showRoles or isCook or l.leveling) and -74 or -44)
         self.listFrame:SetPoint("BOTTOMRIGHT", 0, 0)
 
         -- lignes filtrées et triées : affaires, puis produits, puis demande
         local data = {}
         for _, e in ipairs(l.entries) do
-            if (role == "all" or e.roles[role]) and (kind == "all" or e.kind == kind or (kind == "mat" and e.kind == "tool")) then
+            if (role == "all" or e.roles[role]) and (kind == "all" or e.kind == kind or (kind == "mat" and e.kind == "tool"))
+                and (not foodMats or (e.kind == "product" and LS.FoodMatch(e.id, food)) or (e.kind ~= "product" and foodMats[e.id])) then
                 local row = LS.Row(e)
                 data[#data + 1] = row
             end
@@ -902,7 +933,7 @@ function LU.BuildPage(page)
             -- Une ligne par recette, puis ses composants en retrait.
             local recs = {}
             for _, rec in ipairs(l.recipes) do
-                if role == "all" or (rec.roles and rec.roles[role]) then
+                if (role == "all" or (rec.roles and rec.roles[role])) and LS.FoodMatch(rec.id, food) then
                     local cost, missing, value = LS.RecipeCost(rec)
                     local costNow = LS.RecipeCost(rec, true)
                     local gain = (value and missing == 0) and (value - cost) or nil

@@ -5,6 +5,12 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 
 ## [Unreleased]
 
+### Added
+- Lists: the Cooking list filters foods by buff (Stamina, Agility, Strength, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
+
+### Changed
+- Lists: By recipe / Flat list moved next to the Auctionator button.
+
 ## [1.0.0] - 2026-11-23
 
 First stable release: everything up to 0.25.0, now developed by two maintainers through reviewed pull requests.
