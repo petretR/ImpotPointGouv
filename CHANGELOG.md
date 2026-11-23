@@ -5,7 +5,11 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 
 ## [Unreleased]
 
+### Added
+- Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
+
 ### Changed
+- Lists: By recipe / Flat list moved next to the Auctionator button.
 - Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
 
 ### Fixed

@@ -119,6 +119,27 @@ Check("recipes from someone else's profession window are not yours", function()
     c.profs = saved
 end)
 
+Check("cooking filter reads the food's buff from its tooltip", function()
+    local LS = ns.Lists
+    LS.FoodTags(4242) -- creates the hidden tooltip
+    local tip = _G.ImpotPointGouvScanTip
+    Assert(tip, "scan tooltip not created")
+    local lines = { "Spiced Chili Crab", "Use: Restores 874 health. Well fed: gain 12 Stamina and Spirit for 15 min." }
+    tip.NumLines = function() return #lines end
+    for i in ipairs(lines) do _G["ImpotPointGouvScanTipTextLeft" .. i] = { GetText = function() return lines[i] end } end
+    Assert(LS.FoodMatch(4243, "sta") and LS.FoodMatch(4243, "spi"), "Stamina and Spirit not found")
+    Assert(not LS.FoodMatch(4243, "agi") and not LS.FoodMatch(4243, "misc"), "wrong stats found")
+    lines[2] = "Requires Level 5" -- "Use:" line not loaded yet: wait instead of filing it under Misc
+    Assert(LS.FoodTags(4245) == nil, "food filed before its tooltip finished loading")
+    lines[2] = "Use: Restores 61 health over 18 sec."
+    Assert(LS.FoodMatch(4244, "misc"), "food without a buff is not Misc")
+    ns.UI.Toggle("lists")
+    ns.ListsUI.select = "all_cook"
+    ns.db.settings.cookStat = "sta"
+    ns.UI.Refresh()
+    ns.db.settings.cookStat = nil
+end)
+
 Check("price window opens from the slash command", function()
     SlashCmdList.IMPOTPOINTGOUV("price 2589")
     SlashCmdList.IMPOTPOINTGOUV("item 2589")

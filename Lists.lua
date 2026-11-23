@@ -195,6 +195,87 @@ end
 
 -- Nombre d'objets produits par un craft (ex. Cuir robuste traité : 2). Le jeu d'abord (recettes connues,
 -- puis toute recette vue dans une fenêtre de métier, puis le schéma demandé au jeu), sinon les données, sinon 1.
+-- ------------------------------------------------------------ food buffs (Cooking list filter)
+-- Read from the item tooltip ("well fed: +12 Stamina…"), so Forever's own foods work too.
+-- Character sheet order.
+LS.FOOD_STATS = { { "str", "Strength" }, { "agi", "Agility" }, { "sta", "Stamina" }, { "int", "Intellect" },
+    { "spi", "Spirit" }, { "ap", "AP" }, { "sp", "SP" }, { "hp", "HP" }, { "misc", "Misc" } }
+local FOOD_WORDS = {
+    sta = { "stamina", "endurance" },
+    agi = { "agility", "agilité" },
+    str = { "strength", "force" },
+    int = { "intellect", "intelligence" },
+    spi = { "spirit", "esprit" },
+    ap = { "attack power", "puissance d'attaque" },
+    -- "damage and healing done by spells" counts for both SP and HP.
+    sp = { "spell damage", "spell power", "damage and healing", "dégâts des sorts", "puissance des sorts",
+        "dégâts et les soins" },
+    hp = { "healing done", "healing spells", "healing power", "healing by", "damage and healing",
+        "soins prodigués", "puissance de soins", "dégâts et les soins" },
+}
+local foodTags, scanTip, foodTries, redrawSoon = {}, nil, {}, false
+-- The game fills an item's "Use:" line only once its spell is loaded: until then, try again a bit later.
+local function RetryLater()
+    if redrawSoon or not C_Timer then return end
+    redrawSoon = true
+    C_Timer.After(1, function()
+        redrawSoon = false
+        if ns.ListsUI and ns.ListsUI.Soon then ns.ListsUI.Soon() end
+    end)
+end
+local function RequestFood(id)
+    if ns.RequestItem then ns.RequestItem(id)
+    elseif C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+end
+-- A food's buffs ({ sta = true, … }; { misc = true } without a tracked stat), nil while the item loads.
+function LS.FoodTags(id)
+    if not id then return nil end
+    if foodTags[id] then return foodTags[id] end
+    if not scanTip then
+        if not CreateFrame then return nil end
+        scanTip = CreateFrame("GameTooltip", "ImpotPointGouvScanTip", UIParent, "GameTooltipTemplate")
+    end
+    if not scanTip.SetItemByID or not ns.GetItemInfo(id) then RequestFood(id); return nil end
+    scanTip:SetOwner(WorldFrame or UIParent, "ANCHOR_NONE")
+    scanTip:ClearLines()
+    scanTip:SetItemByID(id)
+    local parts = {}
+    for i = 2, scanTip:NumLines() or 0 do
+        local fs = _G["ImpotPointGouvScanTipTextLeft" .. i]
+        local t = fs and fs:GetText()
+        if t then parts[#parts + 1] = t:lower() end
+    end
+    scanTip:Hide()
+    local text = " " .. table.concat(parts, " ") .. " "
+    local use = ((ITEM_SPELL_TRIGGER_ONUSE or "Use:"):lower()):gsub("[:：%s]+$", "")
+    if not text:find(use, 1, true) and not text:find("use:", 1, true) and not text:find("utiliser", 1, true) then
+        -- No "Use:" line yet (spell text not loaded). A few tries, then keep what we have (Misc).
+        foodTries[id] = (foodTries[id] or 0) + 1
+        if foodTries[id] < 10 then RequestFood(id); RetryLater(); return nil end
+    end
+    local tags, any = {}, false
+    for key, words in pairs(FOOD_WORDS) do
+        for _, w in ipairs(words) do
+            if text:find("%f[%a]" .. w:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1") .. "%f[%A]") then
+                tags[key], any = true, true
+                break
+            end
+        end
+    end
+    if not any then tags.misc = true end
+    foodTags[id] = tags
+    return tags
+end
+-- Data saved by a temporary debug command during development: no longer used.
+ns.On("DB_READY", function() if ns.db then ns.db.foodDump = nil end end)
+
+-- Does the food have this buff? ("all": everything passes; not loaded yet: only under "all")
+function LS.FoodMatch(id, stat)
+    if not stat or stat == "all" then return true end
+    local t = LS.FoodTags(id)
+    return t ~= nil and t[stat] == true
+end
+
 function LS.YieldOf(id)
     if not id then return 1 end
     ProductIndex()
