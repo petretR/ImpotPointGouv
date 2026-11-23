@@ -31,7 +31,7 @@ jobs:
       - name: Build zip
         if: steps.check.outputs.exists != 'true'
         run: |
-          rm -rf ImpotPointGouv/.git ImpotPointGouv/.github ImpotPointGouv/.gitignore
+          rm -rf ImpotPointGouv/.git ImpotPointGouv/.github ImpotPointGouv/.gitignore ImpotPointGouv/tests
           zip -r ImpotPointGouv.zip ImpotPointGouv
       - uses: softprops/action-gh-release@v2
         if: steps.check.outputs.exists != 'true'
