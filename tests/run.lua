@@ -191,5 +191,62 @@ Check("overview stock value follows inventory changes and late item info", funct
     ns.UI.Refresh = orig
 end)
 
+Check("mail sends part of a stack by splitting it into a free slot", function()
+    bags[0] = { { itemID = 500, stackCount = 20 }, { itemID = 500, stackCount = 20 }, { itemID = 500, stackCount = 20 } }
+    sentMails = {}
+    Fire("MAIL_SHOW")
+    RunTimers(1)
+    local stacks, splits = ns.Routine.PlanStacks({ [500] = 50 })
+    Assert(#stacks == 2 and #splits == 1 and splits[1].count == 10, "plan: 2 stacks + a split of 10")
+    Assert(ns.Routine.SendTo("Alt", { [500] = 50 }), "send refused")
+    RunTimers(5)
+    local sent = 0
+    for _, m in ipairs(sentMails) do for _, it in pairs(m.items) do if it.itemID == 500 then sent = sent + it.stackCount end end end
+    Assert(sent == 50, "sent " .. sent .. " instead of 50")
+    local left = 0
+    for slot = 1, 16 do local it = bags[0][slot]; if it then left = left + it.stackCount end end
+    Assert(left == 10, "left in bags: " .. left)
+    -- No free slot: refused, nothing moves.
+    bags[0] = {}
+    for slot = 1, 16 do bags[0][slot] = { itemID = 500, stackCount = 20 } end
+    sentMails = {}
+    Assert(not ns.Routine.SendTo("Alt", { [500] = 5 }), "should refuse without a free slot")
+    RunTimers(2)
+    Assert(#sentMails == 0, "something was sent")
+    Fire("MAIL_CLOSED")
+    bags[0] = {}
+end)
+
+Check("mail Send tab: quantity by stacks, by one with Shift, or typed", function()
+    bags[0] = { { itemID = 500, stackCount = 20 }, { itemID = 500, stackCount = 20 } }
+    ns.db.settings.mailOverlay = true
+    Fire("MAIL_SHOW")
+    RunTimers(1)
+    ns.Mail.ShowOverlay()
+    ns.Mail.SetTab("send")
+    ns.Mail.DrawSend()
+    RunTimers(1)
+    local p = rawget(_G.ImpotPointGouvMailFrame, "send")
+    local r = p.rows[1]
+    local function Click(b) b:GetScript("OnClick")(b); RunTimers(1) end
+    Click(r)
+    Assert(p.attachments == 2, "checked: 2 stacks, got " .. tostring(p.attachments))
+    Click(r.minus)
+    Assert(p.attachments == 1, "one stack less: got " .. tostring(p.attachments))
+    local shift = IsShiftKeyDown
+    IsShiftKeyDown = function() return true end
+    Click(r.plus)
+    IsShiftKeyDown = shift
+    Assert(p.attachments == 2, "21 items = 1 stack + 1 split, got " .. tostring(p.attachments))
+    ns.Mail.EditQuantity(r)
+    p.qtyEdit.GetText = function() return "7" end
+    p.qtyEdit:GetScript("OnEnterPressed")(p.qtyEdit)
+    RunTimers(1)
+    Assert(p.attachments == 1, "7 typed = 1 split, got " .. tostring(p.attachments))
+    Fire("MAIL_CLOSED")
+    ns.db.settings.mailOverlay = false
+    bags[0] = {}
+end)
+
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end
