@@ -2,3 +2,6 @@
 .DS_Store
 Thumbs.db
 *.zip
+
+# Local notes and reference addon sources (not shipped)
+docs/

@@ -72,11 +72,17 @@ local Modern = {
         local basic = (Enum and Enum.CraftingReagentType and Enum.CraftingReagentType.Basic) or 1
         for _, rid in ipairs(C_TradeSkillUI.GetAllRecipeIDs() or {}) do
             local info = C_TradeSkillUI.GetRecipeInfo(rid)
+            -- Recettes pas encore apprises : on garde au moins le nombre produit par craft.
+            if info and info.learned == false and ns.Lists and ns.Lists.NoteMade and C_TradeSkillUI.GetRecipeSchematic then
+                local ok, sch = pcall(C_TradeSkillUI.GetRecipeSchematic, rid, false)
+                if ok then ns.Lists.NoteMade(sch) end
+            end
             if info and info.name and info.learned ~= false then
                 local rec = { index = rid, name = info.name, icon = info.icon, made = 1, reagents = {},
                     kind = DIFF_ENUM[info.relativeDifficulty] }
                 local sch = C_TradeSkillUI.GetRecipeSchematic and C_TradeSkillUI.GetRecipeSchematic(rid, false)
                 if sch then
+                    if ns.Lists and ns.Lists.NoteMade then ns.Lists.NoteMade(sch) end
                     rec.pid = sch.outputItemID
                     rec.made = ((sch.quantityMin or 1) + (sch.quantityMax or sch.quantityMin or 1)) / 2
                     for _, slot in ipairs(sch.reagentSlotSchematics or {}) do
@@ -339,9 +345,8 @@ function CR.Evaluate(rec)
     ev.depositRisk = CR.DepositFor(pname) * (1 - chance) / chance -- dépôts perdus en moyenne avant une vente
     ev.ahNet = ahv and (ahv * (1 - AH_CUT) - ev.depositRisk) * rec.made
     ev.vendorNet = vs and vs * rec.made
-    local de, deSrc = P.DisenchantValue(rec.pid)
+    local de = P.DisenchantValue(rec.pid)
     ev.deNet = de and de * rec.made
-    ev.deObserved = deSrc == "observed"
     ev.listed = P.Entry(rec.pid) and P.Entry(rec.pid).qty
     if ev.ahNet and (not ev.vendorNet or ev.ahNet >= ev.vendorNet) then
         ev.value, ev.channel = ev.ahNet, "ah"
@@ -891,6 +896,7 @@ end
 
 -- Les listes se recyclent en défilant : on repasse régulièrement tant que la fenêtre est ouverte.
 local ticker = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ticker, "Craft") end
 local acc = 0
 ticker:SetScript("OnUpdate", function(_, elapsed)
     acc = acc + elapsed
@@ -1256,19 +1262,23 @@ end
 
 -- ------------------------------------------------------------ événements
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Craft") end
 for _, e in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_UPDATE", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
     "TRADE_SKILL_DATA_SOURCE_CHANGED", "CRAFT_SHOW", "CRAFT_UPDATE", "CRAFT_CLOSE", "BAG_UPDATE",
     "GET_ITEM_INFO_RECEIVED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
-local queued
+-- Au plus un rafraîchissement par seconde (les infos d'objets et les sacs arrivent en rafales).
+local queued, lastCR = false, 0
 local function QueueRefresh()
     if queued then return end
     queued = true
-    C_Timer.After(0.2, function() queued = false; CR.Refresh() end)
+    local wait = math.max(0.2, 1 - (GetTime() - lastCR))
+    C_Timer.After(wait, function() queued = false; lastCR = GetTime(); CR.Refresh() end)
 end
-ev:SetScript("OnEvent", function(_, event)
-    if event ~= "BAG_UPDATE" then LogEvent(event) end
+ev:SetScript("OnEvent", function(_, event, _, success)
+    if event == "GET_ITEM_INFO_RECEIVED" and success == false then return end -- objet inexistant
+    if event ~= "BAG_UPDATE" and event ~= "GET_ITEM_INFO_RECEIVED" then LogEvent(event) end
     if not ns.db then return end
     if event == "TRADE_SKILL_SHOW" or event == "CRAFT_SHOW" then
         -- Laisser la fenêtre Blizzard se charger et s'afficher avant de s'y ancrer.
@@ -1286,3 +1296,8 @@ ev:SetScript("OnEvent", function(_, event)
     end
 end)
 ns.On("PRICES_CHANGED", function() if api then QueueRefresh() end end)
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    CR.Refresh = ns.Profile.Wrap("Craft:Refresh", CR.Refresh)
+end

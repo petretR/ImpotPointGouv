@@ -217,5 +217,11 @@ for _, e in ipairs({ "CHARS_CHANGED", "PRICES_CHANGED", "QUEUE_CHANGED", "LEDGER
     ns.On(e, Later)
 end
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Setup") end
 for _, e in ipairs({ "UPDATE_BINDINGS", "TRADE_SKILL_SHOW", "PLAYER_ENTERING_WORLD" }) do pcall(ev.RegisterEvent, ev, e) end
 ev:SetScript("OnEvent", Later)
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    S.Refresh = ns.Profile.Wrap("Setup:Refresh", S.Refresh)
+end

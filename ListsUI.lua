@@ -5,6 +5,9 @@ local _, ns = ...
 local Tr = ns.L
 local T, P, LS = ns.Theme, ns.Prices, ns.Lists
 local C = T.C
+-- Icônes en ligne : prix instable (triangle d'alerte teinté rouge) et fourniture de marchand (sac du marchand).
+local UNSTABLE_ICON = "|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:13:13:0:0:64:64:0:64:0:64:237:92:82|t"
+local MERCHANT_ICON = "|TInterface\\GossipFrame\\VendorGossipIcon:11:11:0:0|t"
 local LU = {}
 ns.ListsUI = LU
 
@@ -20,6 +23,44 @@ local VERDICT = {
 
 local DrawRouteRow
 local function Money(v) return v and ns.FormatMoney(v, { iconSize = 11, short = true }) or "|cff615f5c—|r" end
+
+-- ------------------------------------------------------------ tri par colonne
+-- Trie arr selon val(élément) ; les valeurs inconnues (nil) toujours en dernier, égalités départagées par tie.
+function LU.SortBy(arr, val, desc, tie)
+    local v, t = {}, {}
+    for _, a in ipairs(arr) do v[a] = val(a); t[a] = tie(a) or "" end
+    table.sort(arr, function(a, b)
+        local va, vb = v[a], v[b]
+        if va == nil or vb == nil then
+            if va ~= vb then return va ~= nil end
+        elseif va ~= vb then
+            if desc then return va > vb end
+            return va < vb
+        end
+        return t[a] < t[b]
+    end)
+end
+-- Durée de recharge lisible : "1 d", "3 d", "20 h".
+function LU.FmtCooldown(secs)
+    if not secs or secs <= 0 then return "|cff615f5c—|r" end
+    if secs >= 86400 then
+        local d = secs / 86400
+        return (d == math.floor(d) and ("%d"):format(d) or ("%.1f"):format(d)) .. " " .. Tr("d")
+    end
+    return ("%d"):format(math.floor(secs / 3600 + 0.5)) .. " " .. Tr("h")
+end
+
+-- Valeur d'une colonne pour un objet (vue liste) : nom, prix, volatilité, ventes, en vente, possédés, verdict.
+local VERDICT_RANK = { buy = 3, sell = 2, farm = 1 }
+function LU.ListValue(key, id, st, verdict)
+    if key == "name" then return P.Name(id):lower() end
+    if key == "have" then return LS.Have(id) end
+    if key == "tag" then return VERDICT_RANK[verdict] end
+    if not st then return nil end
+    if key == "now" then return st.cur elseif key == "usual" then return st.med
+    elseif key == "vol" then return st.cv elseif key == "sales" then return st.sales
+    elseif key == "listed" then return st.qty end
+end
 
 -- ------------------------------------------------------------ route de montée : lignes dédiées
 -- Montant arrondi : à l'argent près dès 1 pa, à l'or près dès 100 po.
@@ -88,7 +129,7 @@ DrawRouteRow = function(r, row, absIndex, page)
         local n = #(x.alts or {})
         if n > 0 then
             local open = page.routeOpen and page.routeOpen[x.from]
-            label = label .. "   |cff6b675f" .. (open and "▾" or ((Tr("+%d options")):format(n))) .. "|r"
+            label = label .. "   |cff6b675f" .. (open and "▼" or ((Tr("+%d options")):format(n))) .. "|r"
         end
         rt.name:SetTextColor(0.93, 0.90, 0.84)
     else
@@ -105,7 +146,7 @@ DrawRouteRow = function(r, row, absIndex, page)
     rt.pillTx:SetText(txt); rt.pillTx:SetTextColor(col[1], col[2], col[3], 1)
     rt.pillBg:SetColor({ col[1], col[2], col[3], 0.14 })
     rt.pill:SetWidth((rt.pillTx:GetStringWidth() or 40) + 16)
-    if rc.F and rc.F > 0 then
+    if rc.F and rc.F > 0 and not x.reuse then
         rt.learn:SetText(RMoney(rc.F, { icon = 10 }) .. (rc.estF and " ~" or ""))
     else
         rt.learn:SetText("")
@@ -118,8 +159,8 @@ DrawRouteRow = function(r, row, absIndex, page)
         T.SetFont(rt.cost, 13, true)
         if v > 0 then rt.cost:SetTextColor(0.36, 0.82, 0.45) else rt.cost:SetTextColor(0.93, 0.90, 0.84) end
     else
-        local d = (row.seg.cost or 0) - x.cost -- ce que tu perds en prenant cette alternative
-        rt.cost:SetText(RMoney(d, { icon = 10, sign = true }))
+        -- Alternative : son propre coût, même signe que les étapes (l'écart avec l'étape choisie est dans l'infobulle).
+        rt.cost:SetText(RMoney(-(x.cost or 0), { icon = 10, sign = true }))
         T.SetFont(rt.cost, 11, false); rt.cost:SetTextColor(unpack(C.muted))
     end
     for k = 1, 7 do r.bars[k]:Hide() end
@@ -335,7 +376,29 @@ function LU.BuildPage(page)
     page.resetRoute = T.Button(main, Tr("Reset my choices"), 120, 22, function()
         if page.routeProf then ns.Route.ResetBans(page.routeProf) end; page:Refresh()
     end)
-    page.resetRoute:SetPoint("LEFT", page.noAH, "RIGHT", 6, 0)
+    page.resetRoute:SetPoint("RIGHT", page.export, "LEFT", -6, 0)
+    -- Revente de ce qu'on crafte en montant : HV, marchand, désenchantement (à cocher) ; le meilleur des cochés.
+    page.sellBtns = {}
+    local SELL = {
+        { "ah", "AH", "Value what you craft at its AH price minus the 5% cut (liquid markets only)." },
+        { "vendor", "Merchant", "Value what you craft at its merchant price: guaranteed, no limit." },
+        { "de", "Disenchant", "Value what you craft at what disenchanting it gives (green, blue and purple gear only)." },
+    }
+    local sprev = page.noAH
+    for _, k in ipairs(SELL) do
+        local b = T.Button(main, Tr(k[2]), k[1] == "ah" and 40 or 74, 22, function()
+            -- Bascule ; au moins un débouché reste coché.
+            local set = {}
+            for key, on in pairs(ns.Route.SellSet(ns.db.settings.routeSell)) do set[key] = on end
+            set[k[1]] = not set[k[1]] or nil
+            if next(set) then ns.db.settings.routeSell = set end
+            page:Refresh()
+        end, "pill")
+        b:SetPoint("LEFT", sprev, "RIGHT", sprev == page.noAH and 12 or 4, 0)
+        b.tooltip = Tr(k[3]) .. "\n" .. Tr("Toggle. With several on, each recipe uses the best of them.")
+        sprev = b
+        page.sellBtns[k[1]] = b
+    end
 
     -- Tableau
     local list = CreateFrame("Frame", nil, main)
@@ -346,11 +409,55 @@ function LU.BuildPage(page)
         { "Item", "LEFT", 38 }, { "Now", "RIGHT", -402 }, { "Usual", "RIGHT", -330 }, { "7 days", "LEFT", -316, true },
         { "Sold/day", "RIGHT", -176 }, { "Listed", "RIGHT", -120 }, { "Have", "RIGHT", -82 }, { "", "RIGHT", -8 },
     }
-    page.heads = {}
-    for _, h in ipairs(cols) do
+    page.heads, page.headLabels = {}, {}
+    for k, h in ipairs(cols) do
         local t = T.Text(list, 10, { bold = true, color = C.faint, text = h[1], justify = h[4] and "LEFT" or h[2] })
         if h[4] then t:SetPoint("TOPLEFT", list, "TOPRIGHT", h[3], -9) else t:SetPoint("TOP" .. h[2], h[3], -9) end
-        page.heads[#page.heads + 1] = t
+        page.heads[k] = t
+        -- Zone cliquable sur le titre : trie la colonne.
+        local b = CreateFrame("Button", nil, list)
+        b:SetPoint("TOPLEFT", t, "TOPLEFT", -4, 4); b:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", 4, -4)
+        b:SetScript("OnClick", function() page:SortBy(k) end)
+        b:SetScript("OnEnter", function(self)
+            if not page:SortKey(k) then return end
+            t:SetTextColor(unpack(C.text))
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(Tr("Click to sort, again to reverse, a third time for the default order"), 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        b:SetScript("OnLeave", function() GameTooltip:Hide(); page:Heads() end)
+    end
+
+    -- Tri par colonne : une clé par colonne, selon la vue (listes ou route de montée).
+    local SORT_COLS = {
+        list = { "name", "now", "usual", "vol", "sales", "listed", "have", "tag" },
+        route = { "skill", "recipe", nil, nil, "crafts", "source", "cost" },
+        cd = { "name", "now", "usual", "vol", "cooldown", "perday", "have", "tag" },
+    }
+    local ASC_FIRST = { name = true, skill = true, recipe = true, source = true }
+    local saved = ns.db.settings.listSort or {}
+    page.sortState = { list = saved.list or {}, route = saved.route or {}, cd = saved.cd or {} }
+    page.sortMode = "list"
+    function page:SortKey(k) return SORT_COLS[self.sortMode][k] end
+    function page:SortBy(k)
+        local key = self:SortKey(k)
+        if not key then return end
+        local s = self.sortState[self.sortMode]
+        if s.key ~= key then s.key, s.desc = key, not ASC_FIRST[key]
+        elseif s.desc == not ASC_FIRST[key] then s.desc = not s.desc
+        else s.key, s.desc = nil, nil end
+        ns.db.settings.listSort = self.sortState
+        self.offset = 0
+        self:Refresh()
+    end
+    function page:Heads()
+        local s = self.sortState[self.sortMode]
+        for k, t in ipairs(self.heads) do
+            local key = self:SortKey(k)
+            local on = key and key == s.key
+            t:SetText((self.headLabels[k] or "") .. (on and (s.desc and " ▼" or " ▲") or ""))
+            t:SetTextColor(unpack(on and C.gold or C.faint))
+        end
     end
     page.rows = {}
     for i = 1, ROWS do
@@ -397,11 +504,25 @@ function LU.BuildPage(page)
                     local p = (P.IsVendorItem(m[1]) and P.VendorBuy(m[1])) or (st and (st.med or st.cur))
                     GameTooltip:AddDoubleLine(m[2] .. "× " .. P.Name(m[1]), p and Money(p * m[2]) or "?", 0.8, 0.8, 0.8, 1, 1, 1)
                 end
-                if (rc.resale or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Resale of what you craft"), "+" .. Money(rc.resale), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
-                if (rc.F or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Money(rc.F) .. (rc.estF and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1) end
+                -- Marché du produit : prix moyen HV sur 7 jours et ventes estimées par jour.
+                local ost = rc.out and P.Stats(rc.out)
+                if ost and ost.avg then
+                    GameTooltip:AddDoubleLine(Tr("AH average (7 days)"), Money(ost.avg), 0.7, 0.7, 0.7, 1, 1, 1)
+                    GameTooltip:AddDoubleLine(Tr("Sold/day"), ost.sales and (ost.sales >= 10 and tostring(math.floor(ost.sales + 0.5)) or ("%.1f"):format(ost.sales)) or "—", 0.7, 0.7, 0.7, 1, 1, 1)
+                end
+                if (rc.F or 0) > 0 and (row.route or row.alt).reuse then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Tr("already paid earlier in the route"), 0.7, 0.7, 0.7, 0.6, 0.6, 0.6)
+                elseif (rc.F or 0) > 0 then GameTooltip:AddDoubleLine(Tr("Learn it (once)"), Money(rc.F) .. (rc.estF and " ~" or ""), 0.7, 0.7, 0.7, 1, 1, 1) end
                 GameTooltip:AddDoubleLine(Tr("Per craft (resale − materials)"), ns.FormatMoney(-(rc.c or 0), { iconSize = 11, short = true, sign = true, color = true }), 0.7, 0.7, 0.7, 1, 1, 1)
                 GameTooltip:AddLine(" ")
-                if row.alt then GameTooltip:AddLine(Tr("Click: use this recipe instead"), 0.88, 0.66, 0.24)
+                if row.alt then
+                    local seg = row.seg
+                    if seg and seg.cost and row.alt.cost then
+                        GameTooltip:AddDoubleLine((Tr("Instead of %s")):format(seg.r.name or "?"),
+                            ns.FormatMoney(seg.cost - row.alt.cost, { iconSize = 11, short = true, sign = true, color = true })
+                            .. "  |cff8a877f" .. ("%+d"):format(math.floor((row.alt.crafts or 0) - (seg.crafts or 0) + 0.5)) .. " " .. Tr("crafts") .. "|r",
+                            0.7, 0.7, 0.7, 1, 1, 1)
+                    end
+                    GameTooltip:AddLine(Tr("Click: use this recipe instead"), 0.88, 0.66, 0.24)
                 else
                     if #(row.route.alts or {}) > 0 then GameTooltip:AddLine(Tr("Click: show the alternatives"), 0.88, 0.66, 0.24) end
                     GameTooltip:AddLine(Tr("Right-click: skip this recipe"), 0.88, 0.66, 0.24)
@@ -413,7 +534,7 @@ function LU.BuildPage(page)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:AddLine(Tr(row.rec.name), 1, 1, 1)
                 for _, m in ipairs(row.rec.mats) do
-                    if m[3] == 1 then GameTooltip:AddDoubleLine(P.Name(m[1]), "×" .. m[2], 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
+                    if m[3] == 1 then GameTooltip:AddDoubleLine(P.Name(m[1]), "×" .. LS.FmtQty(m[2]), 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
                 end
                 GameTooltip:AddDoubleLine(Tr("Usual price (7 days)"), Money(row.cost), 0.7, 0.7, 0.7, 1, 1, 1)
                 GameTooltip:Show()
@@ -436,18 +557,26 @@ function LU.BuildPage(page)
             end
             local st = row.st
             GameTooltip:AddLine(" ")
-            if st and st.med then
+            if row.merchant then
+                GameTooltip:AddDoubleLine(Tr("Vendor price"), row.vendorPrice and ns.FormatMoney(row.vendorPrice, { iconSize = 11 }) or "?", 0.7, 0.7, 0.7, 1, 1, 1)
+                if row.qty then
+                    GameTooltip:AddDoubleLine(Tr("In this recipe"), row.vendorPrice and ns.FormatMoney(row.vendorPrice * row.qty, { iconSize = 11 }) or "?", 0.7, 0.7, 0.7, 1, 1, 1)
+                end
+                GameTooltip:AddLine(Tr("Sold by merchants: counted in the recipe cost, left out of the shopping lists."), 0.6, 0.6, 0.6, true)
+            elseif st and st.med then
                 GameTooltip:AddDoubleLine(Tr("Usual price (7 days)"), ns.FormatMoney(st.med, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
                 GameTooltip:AddDoubleLine(Tr("Low / high"), ns.FormatMoney(st.low, { iconSize = 11 }) .. "  /  " .. ns.FormatMoney(st.high, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
                 local mx = LS.BuyMax(st)
                 if mx then GameTooltip:AddDoubleLine(Tr("Buy limit"), ns.FormatMoney(mx, { iconSize = 11 }), 0.7, 0.7, 0.7, 0.36, 0.82, 0.45) end
-                GameTooltip:AddDoubleLine(Tr("Volatility"), ("%d %%"):format(math.floor((st.cv or 0) * 100 + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1)
+                local unstable = (st.n or 0) >= 4 and (st.cv or 0) > 0.35
+                GameTooltip:AddDoubleLine(Tr("Volatility"), ("%d %%"):format(math.floor((st.cv or 0) * 100 + 0.5))
+                    .. (unstable and ("  " .. Tr("(unstable)")) or ""), 0.7, 0.7, 0.7, unstable and 0.93 or 1, unstable and 0.36 or 1, unstable and 0.32 or 1)
                 GameTooltip:AddDoubleLine(Tr("Price points"), tostring(st.n or 0), 0.7, 0.7, 0.7, 1, 1, 1)
             else
                 GameTooltip:AddLine(Tr("No price history yet: scan this list at the AH."), 0.6, 0.6, 0.6, true)
             end
             local e = row.e
-            if e.qty and e.qty > 0 then GameTooltip:AddDoubleLine(e.range and ("Needed (" .. e.range .. ")") or "Needed", tostring(e.qty), 0.7, 0.7, 0.7, 1, 1, 1) end
+            if e.qty and e.qty > 0 then GameTooltip:AddDoubleLine(e.range and ("Needed (" .. e.range .. ")") or "Needed", LS.FmtQty(e.qty), 0.7, 0.7, 0.7, 1, 1, 1) end
             if e.note then GameTooltip:AddLine(e.note, 0.88, 0.66, 0.24) end
             if e.usedIn and not row.head then
                 local names = {}
@@ -457,10 +586,11 @@ function LU.BuildPage(page)
                 end
                 table.sort(names, function(a, b) return a[1] < b[1] end)
                 GameTooltip:AddLine(Tr("Used in:"), 0.88, 0.66, 0.24)
-                for k = 1, math.min(10, #names) do GameTooltip:AddDoubleLine("  " .. names[k][1], "×" .. names[k][2], 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
+                for k = 1, math.min(10, #names) do GameTooltip:AddDoubleLine("  " .. names[k][1], "×" .. LS.FmtQty(names[k][2]), 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
                 if #names > 10 then GameTooltip:AddLine(("  +%d"):format(#names - 10), 0.6, 0.6, 0.6) end
             end
             if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6) end
+            GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
             local rl = {}
             for _, r2 in ipairs(LS.ROLES) do if e.roles[r2[1]] then rl[#rl + 1] = Tr(r2[2]) end end
             if #rl > 0 and #rl < 5 then GameTooltip:AddLine(Tr("Used by: ") .. table.concat(rl, ", "), 0.6, 0.6, 0.6) end
@@ -483,7 +613,7 @@ function LU.BuildPage(page)
                     if listed > 0 then GameTooltip:AddDoubleLine("  " .. Tr("Listed at the AH"), tostring(listed), 0.8, 0.8, 0.8, 0.8, 0.8, 0.8) end
                 end
             end
-            GameTooltip:AddLine(Tr("Click: price curve  ·  Right-click: add to one of your lists"), 0.88, 0.66, 0.24)
+            GameTooltip:AddLine(Tr("Click: price history  ·  Right-click: add to one of your lists"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
@@ -512,8 +642,8 @@ function LU.BuildPage(page)
             elseif IsModifiedClick and IsModifiedClick("CHATLINK") then
                 local _, link = ns.GetItemInfo(self.row.id)
                 if link and ChatEdit_InsertLink then ChatEdit_InsertLink(link) end
-            elseif self.row.id then
-                ns.PriceCard.Show(self.row.id)
+            elseif self.row.id and ns.History then
+                ns.History.Show(self.row.id)
             end
         end)
         page.rows[i] = r
@@ -609,7 +739,7 @@ function LU.BuildPage(page)
                 r.icon:SetTexture(ns.GetItemIcon(id) or icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                 local name = (row.head and row.rec and row.rec.cd) and Tr(row.rec.name) or P.Name(id)
                 if row.head or (not row.depth and e.kind == "product") then name = "|cffe0a83d" .. name .. "|r" end
-                if row.depth and row.qty then name = "|cff8a877f" .. row.qty .. "×|r " .. name end
+                if row.depth and row.qty then name = "|cff8a877f" .. LS.FmtQty(row.qty) .. "×|r " .. name end
                 r.name:SetText(name)
                 r.now:SetText(st and st.cur and Money(st.cur) or (st and st.med and "|cff6fa8f0none|r" or Money(nil)))
                 r.usual:SetText(Money(st and st.med))
@@ -628,9 +758,18 @@ function LU.BuildPage(page)
                         t:SetHeight(2); t:SetVertexColor(1, 1, 1, 0.06); t:Show()
                     end
                 end
-                r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and "unstable" or "")
+                r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and UNSTABLE_ICON or "")
                 r.sales:SetText(st and st.sales and (st.sales >= 10 and ("%d"):format(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) or "|cff615f5c—|r")
                 r.listed:SetText(st and st.qty and (st.qty >= 10000 and (Tr("%dk")):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
+                if self.cdView then
+                    -- Recharge et gain par jour sur la ligne de la recette ; rien sur ses composants.
+                    if row.head then
+                        r.sales:SetText(LU.FmtCooldown(row.cdSecs))
+                        r.listed:SetText(row.perDay and ns.FormatMoney(row.perDay, { iconSize = 10, short = true, sign = true, color = true }) or "|cff615f5c—|r")
+                    else
+                        r.sales:SetText(""); r.listed:SetText("")
+                    end
+                end
                 for k = 1, 7 do r.bars[k]:Show() end
                 local have = LS.Have(id)
                 if e.qty and e.qty > 0 and self.list and self.list.leveling then
@@ -659,6 +798,14 @@ function LU.BuildPage(page)
                     r.tag:SetText(craft and Tr("CRAFT") or Tr("BUY IT"))
                     r.tag:SetTextColor(unpack(craft and VERDICT.buy[2] or C.gold))
                 elseif v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
+                if row.merchant then
+                    -- Fourniture de marchand : prix chez le marchand, pas de courbe ni de verdict HV.
+                    -- Ventes / jour et quantité en vente restent affichées quand l'objet se vend aussi à l'HV.
+                    r.now:SetText(Money(row.vendorPrice)); r.usual:SetText("")
+                    r.vol:SetText("")
+                    for k = 1, 7 do r.bars[k]:Hide() end
+                    r.buy:Hide(); r.tag:Show(); r.tag:SetText(MERCHANT_ICON); r.tag:SetTextColor(1, 1, 1)
+                end
                 r:SetAlpha(row.dim and 0.45 or 1)
                 r:Show()
             else
@@ -691,7 +838,7 @@ function LU.BuildPage(page)
         LU.select = l.key
         self.title:SetText(Tr(l.title))
         -- Rôles : seulement pour ce qui dépend des spés (consommables, enchantements, pré-BiS).
-        local showRoles = not (l.leveling or l.custom or l.cd)
+        local showRoles = not (l.leveling or l.custom or l.cd or l.noRoles)
         local showKinds = not (l.leveling or l.custom) and #l.recipes > 0
         local role = showRoles and self.role or "all"
         local kind = "all"
@@ -701,11 +848,21 @@ function LU.BuildPage(page)
         local isRoute = l.leveling and self.lvView == "route"
         for k, btn in pairs(self.lvBtns) do btn:SetSelected(k == self.lvView); btn:SetShown(l.leveling and true or false) end
         self.noAH:SetShown(isRoute and true or false); self.noAH:SetSelected(ns.db.settings.routeNoAH and true or false)
+        for k, btn in pairs(self.sellBtns) do
+            btn:SetSelected(ns.Route.SellSet(ns.db.settings.routeSell)[k] and true or false); btn:SetShown(isRoute and true or false)
+        end
         self.routeProf = l.leveling and l.key:sub(4) or nil
         self.resetRoute:SetShown(isRoute and ns.Route.HasBans(self.routeProf) or false)
-        local H = isRoute and { Tr("Skill"), Tr("Recipe"), "", "", Tr("Crafts"), Tr("Source"), Tr("Cost") }
-            or { Tr("Item"), Tr("Now"), Tr("Usual"), Tr("7 days"), Tr("Sold/day"), Tr("Listed"), Tr("Have") }
-        for k = 1, 7 do if self.heads[k] then self.heads[k]:SetText(H[k]) end end
+        -- Recharges, vue par recette : la recharge et le gain par jour à la place de ventes / en vente.
+        local cdView = l.cd and byRecipe or false
+        self.cdView = cdView
+        local H = isRoute and { Tr("Skill"), Tr("Recipe"), "", "", Tr("Crafts"), Tr("Source"), Tr("Cost"), "" }
+            or { Tr("Item"), Tr("Now"), Tr("Usual"), Tr("7 days"), cdView and Tr("Cooldown") or Tr("Sold/day"),
+                cdView and Tr("Per day") or Tr("Listed"), Tr("Have"), byRecipe and Tr("Profit") or Tr("Verdict") }
+        self.sortMode = isRoute and "route" or cdView and "cd" or "list"
+        local sortS = self.sortState[self.sortMode]
+        self.headLabels = H
+        self:Heads()
         -- Colonnes : celles de la route ou celles des listes.
         local HP = isRoute and {
             { "LEFT", 14 }, { "LEFT", 112 }, { "RIGHT", -300 }, { "RIGHT", -300 },
@@ -737,6 +894,10 @@ function LU.BuildPage(page)
             if a.e.uses ~= b.e.uses then return a.e.uses > b.e.uses end
             return P.Name(a.id) < P.Name(b.id)
         end)
+        if sortS.key and not byRecipe then
+            LU.SortBy(data, function(row) return LU.ListValue(sortS.key, row.id, row.st, row.verdict) end,
+                sortS.desc, function(row) return P.Name(row.id) end)
+        end
         if byRecipe then
             -- Une ligne par recette, puis ses composants en retrait.
             local recs = {}
@@ -744,8 +905,10 @@ function LU.BuildPage(page)
                 if role == "all" or (rec.roles and rec.roles[role]) then
                     local cost, missing, value = LS.RecipeCost(rec)
                     local costNow = LS.RecipeCost(rec, true)
+                    local gain = (value and missing == 0) and (value - cost) or nil
+                    local cdSecs = rec.cd and rec.cd.cd
                     recs[#recs + 1] = { rec = rec, cost = cost, costNow = costNow, missing = missing, value = value,
-                        gain = (value and missing == 0) and (value - cost) or nil }
+                        gain = gain, cdSecs = cdSecs, perDay = gain and cdSecs and cdSecs > 0 and gain * 86400 / cdSecs or nil }
                 end
             end
             table.sort(recs, function(a, b)
@@ -753,9 +916,19 @@ function LU.BuildPage(page)
                 if a.gain and b.gain and a.gain ~= b.gain then return a.gain > b.gain end
                 return Tr(a.rec.name) < Tr(b.rec.name)
             end)
+            if sortS.key then
+                LU.SortBy(recs, function(x)
+                    if sortS.key == "tag" then return x.gain end
+                    if sortS.key == "cooldown" then return x.cdSecs end
+                    if sortS.key == "perday" then return x.perDay end
+                    if sortS.key == "name" then return Tr(x.rec.name):lower() end
+                    return x.rec.id and LU.ListValue(sortS.key, x.rec.id, P.Stats(x.rec.id)) or nil
+                end, sortS.desc, function(x) return Tr(x.rec.name) end)
+            end
             data = {}
             for _, x in ipairs(recs) do
-                local head = { head = true, rec = x.rec, id = x.rec.id, cost = x.cost, costNow = x.costNow, missing = x.missing, value = x.value }
+                local head = { head = true, rec = x.rec, id = x.rec.id, cost = x.cost, costNow = x.costNow, missing = x.missing, value = x.value,
+                    cdSecs = x.cdSecs, perDay = x.perDay }
                 if x.rec.id then
                     head.e = l.byId[x.rec.id] or { id = x.rec.id, kind = "product", roles = {}, uses = 1 }
                     head.st = P.Stats(x.rec.id)
@@ -767,6 +940,7 @@ function LU.BuildPage(page)
                     local e = l.byId[m[1]] or { id = m[1], kind = "mat", roles = {}, uses = 1 }
                     local row = LS.Row(e)
                     row.depth, row.qty = m[3], m[2]
+                    if m[4] then row.merchant, row.vendorPrice, row.verdict = true, P.VendorBuy(m[1]), nil end
                     if dimBelow and m[3] <= dimBelow then dimBelow = nil end
                     row.dim = dimBelow ~= nil
                     local d = detail[k]
@@ -780,10 +954,19 @@ function LU.BuildPage(page)
         end
         local route
         if isRoute then
-            route = ns.Route.Compute(self.routeProf, { noAH = ns.db.settings.routeNoAH })
+            route = ns.Route.Compute(self.routeProf, { noAH = ns.db.settings.routeNoAH, sell = ns.Route.SellSet(ns.db.settings.routeSell) })
             if self.routeOpenFor ~= self.routeProf then self.routeOpen, self.routeOpenFor = {}, self.routeProf end
             data = {}
-            for _, sg in ipairs(route.segs) do
+            local segs = { unpack(route.segs) }
+            if sortS.key then
+                LU.SortBy(segs, function(sg)
+                    local k = sortS.key
+                    if k == "skill" then return sg.from elseif k == "recipe" then return (sg.r.name or ""):lower()
+                    elseif k == "crafts" then return sg.crafts elseif k == "source" then return sg.r.label
+                    elseif k == "cost" then return sg.cost end
+                end, sortS.desc, function(sg) return ("%03d"):format(sg.from) end)
+            end
+            for _, sg in ipairs(segs) do
                 data[#data + 1] = { route = sg, prof = self.routeProf }
                 if self.routeOpen[sg.from] then
                     for _, a in ipairs(sg.alts) do data[#data + 1] = { alt = a, seg = sg, prof = self.routeProf } end
@@ -800,6 +983,7 @@ function LU.BuildPage(page)
             sub = (Tr("From %d%s to 300: %s in %d steps")):format(route.start, route.who and (" (" .. route.who .. ")") or "",
                 ns.FormatMoney(-route.total, { iconSize = 11, short = true, sign = true, color = route.total < 0 }), #route.segs)
             if not route.reached then sub = sub .. Tr("  ·  |cffed5c52Incomplete: scan the AH so more recipes get a price|r") end
+            if (route.cdSkipped or 0) > 0 then sub = sub .. (Tr("  ·  %d cooldown recipes left out")):format(route.cdSkipped) end
         elseif l.leveling then
             local now, usual, missing = LS.LevelCost(l)
             sub = sub .. (Tr("  ·  Cost now %s, usual %s%s")):format(Money(now), Money(usual), missing > 0 and (Tr("  (%d not priced)")):format(missing) or "")
@@ -848,15 +1032,22 @@ local function RefreshIfShown()
     local f = _G.ImpotPointGouvFrame
     if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "lists" then ns.UI.Refresh() end
 end
-local pend
+-- Au plus un rafraîchissement toutes les 2 s : les infos d'objets arrivent par centaines.
+local pend, lastRefresh = false, 0
 local function Soon()
     if pend then return end
     pend = true
-    C_Timer.After(0.3, function() pend = false; RefreshIfShown() end)
+    local wait = math.max(0.3, 2 - (GetTime() - lastRefresh))
+    C_Timer.After(wait, function() pend = false; lastRefresh = GetTime(); RefreshIfShown() end)
 end
+LU.Soon = Soon
 ns.On("LISTS_CHANGED", Soon)
 ns.On("PRICES_CHANGED", Soon)
 ns.On("LIST_SCAN", Soon)
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "ListsUI") end
 for _, e in ipairs({ "GET_ITEM_INFO_RECEIVED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "BAG_UPDATE_DELAYED" }) do pcall(ev.RegisterEvent, ev, e) end
-ev:SetScript("OnEvent", function() Soon() end)
+ev:SetScript("OnEvent", function(_, event, _, success)
+    if event == "GET_ITEM_INFO_RECEIVED" and success == false then return end -- objet inexistant
+    Soon()
+end)

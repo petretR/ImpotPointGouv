@@ -26,10 +26,31 @@ end
 LS.Instant = Instant
 
 -- ------------------------------------------------------------ composants des recettes
-local function FromSchematic(spellID)
+-- Objets produits par craft, lus dans le schéma de recette du jeu (connue ou non).
+-- ns.db.made : vu dans une fenêtre de métier (fiable, gardé) ; schMade : demandé au jeu cette session.
+local schMade, schTried = {}, {}
+local function MadeOf(sch)
+    if type(sch) ~= "table" or not sch.outputItemID or not sch.quantityMin or sch.quantityMin <= 0 then return nil end
+    return sch.outputItemID, (sch.quantityMin + math.max(sch.quantityMin, sch.quantityMax or 0)) / 2
+end
+-- Appelé par la lecture de la fenêtre de métier pour chaque recette, apprise ou non.
+function LS.NoteMade(sch)
+    local id, m = MadeOf(sch)
+    if id then ns.db.made = ns.db.made or {}; ns.db.made[id] = m end
+end
+local function Schematic(spellID)
     if not spellID or not C_TradeSkillUI or not C_TradeSkillUI.GetRecipeSchematic then return nil end
+    schTried[spellID] = true
     local ok, sch = pcall(C_TradeSkillUI.GetRecipeSchematic, spellID, false)
-    if not ok or type(sch) ~= "table" or not sch.reagentSlotSchematics then return nil end
+    if not ok or type(sch) ~= "table" then return nil end
+    local id, m = MadeOf(sch)
+    if id and not schMade[id] then schMade[id] = m end
+    return sch
+end
+
+local function FromSchematic(spellID)
+    local sch = Schematic(spellID)
+    if not sch or not sch.reagentSlotSchematics then return nil end
     local out = {}
     local basicType = Enum and Enum.CraftingReagentType and Enum.CraftingReagentType.Basic
     for _, slot in ipairs(sch.reagentSlotSchematics) do
@@ -87,49 +108,124 @@ local function FromRecipeTooltip(rec)
 end
 
 -- Demande au jeu les composants de toutes les recettes des listes. Renvoie trouvés, total.
-function LS.ResolveReagents()
+-- Recettes déjà tentées cette session (schéma puis infobulle) : on ne redemande pas au jeu à chaque passage,
+-- chaque demande d'infobulle charge des objets et déclenche des événements en cascade.
+local resolveTried = {}
+local lastResolve, sweepRunning = 0, false
+-- Nombre produit des autres recettes (intermédiaires comme le Cuir robuste traité), une fois par session,
+-- par lots de 60 pour ne pas figer le jeu.
+local function SweepSchematics()
+    if sweepRunning then return end
+    local todo = {}
+    for spell, t in pairs(Data().allRecipes or {}) do
+        if t[1] ~= 0 and not schTried[spell] and not schMade[t[1]] then todo[#todo + 1] = spell end
+    end
+    if #todo == 0 then return end
+    sweepRunning = true
+    local i = 1
+    local function Batch()
+        local t0 = debugprofilestop and debugprofilestop()
+        for k = i, math.min(#todo, i + 59) do Schematic(todo[k]) end
+        if t0 and ns.Profile then ns.Profile.Add("Lists:SchematicBatch", debugprofilestop() - t0) end
+        i = i + 60
+        if i <= #todo then C_Timer.After(0.1, Batch) else sweepRunning = false; LS.dirty = true end
+    end
+    Batch()
+end
+function LS.ResolveReagents(force)
+    if not force and LS.resolved and GetTime and GetTime() - lastResolve < 30 then
+        return LS.resolved.found, LS.resolved.total
+    end
+    lastResolve = GetTime and GetTime() or 0
     local db, D = RDB(), Data()
     local found, total = 0, 0
-    nameIndex = nil
+    local newFound = false
     local function Try(spell, rec)
         if not spell then return end
         total = total + 1
-        if db[spell] or (D.spellReagents and D.spellReagents[spell]) then found = found + 1; return end
+        if db[spell] or (D.spellReagents and D.spellReagents[spell]) then
+            if not schTried[spell] then Schematic(spell) end -- pour le nombre produit
+            found = found + 1; return
+        end
+        if resolveTried[spell] then return end
+        resolveTried[spell] = true
         local r = FromSchematic(spell) or FromRecipeTooltip(rec)
-        if r then db[spell] = r; found = found + 1 end
+        if r then db[spell] = r; found = found + 1; newFound = true end
     end
     for _, it in pairs(D.items or {}) do Try(it.s, it.rec) end
     for spell, e in pairs(D.ench or {}) do Try(spell, e.rec) end
     for _, cd in ipairs(D.cooldowns or {}) do Try(cd.s) end
+    SweepSchematics()
     LS.resolved = { found = found, total = total, t = time() }
-    LS.dirty = true
+    if newFound or not LS.groups then nameIndex = nil; LS.dirty = true end
     return found, total
 end
+-- Nouvelles recettes connues (fenêtre de métier) : on peut retenter celles qui manquaient.
+function LS.RetryReagents() resolveTried = {}; lastResolve = 0 end
 
 -- Produit -> composants, d'après les recettes que vos personnages connaissent (fenêtre de métier ouverte).
-local productIndex
+-- Garde aussi le nombre d'objets produits par craft, tel que le jeu l'affiche.
+local productIndex, madeIndex
 local function ProductIndex()
     if productIndex then return productIndex end
-    productIndex = {}
+    productIndex, madeIndex = {}, {}
     for _, recipes in pairs(ns.db.recipes or {}) do
         for _, r in pairs(recipes) do
-            if r.p and r.r and #r.r > 0 then productIndex[r.p] = r.r end
+            if r.p and r.r and #r.r > 0 then
+                productIndex[r.p] = r.r
+                if r.m and r.m > 0 then madeIndex[r.p] = r.m end
+            end
         end
     end
     return productIndex
 end
 
+-- Objets produits par craft, d'après les données de recettes (le plus petit si plusieurs recettes le font).
+local dataMade
+local function DataMade(id)
+    if not dataMade then
+        dataMade = {}
+        for _, t in pairs(Data().allRecipes or {}) do
+            local out, n = t[1], t[6] or 1
+            if out and out ~= 0 and n > 0 and (not dataMade[out] or n < dataMade[out]) then dataMade[out] = n end
+        end
+    end
+    return dataMade[id]
+end
+
+-- Nombre d'objets produits par un craft (ex. Cuir robuste traité : 2). Le jeu d'abord (recettes connues,
+-- puis toute recette vue dans une fenêtre de métier, puis le schéma demandé au jeu), sinon les données, sinon 1.
+function LS.YieldOf(id)
+    if not id then return 1 end
+    ProductIndex()
+    local y = madeIndex[id] or (ns.db.made and ns.db.made[id]) or schMade[id]
+    if not y then
+        local D = Data()
+        local it = D.items and D.items[id]
+        local t = it and it.s and D.allRecipes and D.allRecipes[it.s]
+        y = (t and t[1] == id and t[6]) or DataMade(id)
+    end
+    return (y and y > 0) and y or 1
+end
+
+-- Quantité lisible : entière telle quelle, sinon deux décimales au plus (0.5, 0.33).
+function LS.FmtQty(n)
+    if not n then return "" end
+    if math.abs(n - math.floor(n + 0.5)) < 1e-6 then return tostring(math.floor(n + 0.5)) end
+    return (("%.2f"):format(n):gsub("0+$", ""))
+end
+
 local function IsVendor(id) return P.IsVendorItem and P.IsVendorItem(id) end
 
--- Composants d'un objet fabriqué (sans les objets vendus par les marchands), ou nil.
-function LS.ReagentsOf(id)
+-- Composants d'un objet fabriqué (sans les objets vendus par les marchands, sauf withVendor), ou nil.
+function LS.ReagentsOf(id, withVendor)
     local D = Data()
     local it = D.items and D.items[id]
     local r = (it and it.s and (RDB()[it.s] or (D.spellReagents and D.spellReagents[it.s]))) or ProductIndex()[id] or (D.reagents and D.reagents[id])
     if not r then return nil end
     local out = {}
     for _, rg in ipairs(r) do
-        if rg[1] and not IsVendor(rg[1]) then out[#out + 1] = rg end
+        if rg[1] and (withVendor or not IsVendor(rg[1])) then out[#out + 1] = rg end
     end
     return out
 end
@@ -166,24 +262,33 @@ local function Add(list, id, kind, roles, qty, note)
     if note and not e.note then e.note = note end
 end
 
--- Composants (et composants des intermédiaires, 2 niveaux) d'un produit.
+-- Composants (et composants des intermédiaires, 2 niveaux) d'un produit. mult = nombre d'objets voulus ;
+-- un craft qui en produit plusieurs (Cuir robuste traité ×2) demande d'autant moins de composants.
 local function AddMats(list, id, roles, depth, mult)
     local rg = LS.ReagentsOf(id)
     if not rg then return false end
+    local crafts = (mult or 1) / LS.YieldOf(id)
     for _, r in ipairs(rg) do
-        Add(list, r[1], "mat", roles, (mult or 1) * (r[2] or 1))
-        if (depth or 0) < 2 then AddMats(list, r[1], roles, (depth or 0) + 1, (mult or 1) * (r[2] or 1)) end
+        local n = crafts * (r[2] or 1)
+        Add(list, r[1], "mat", roles, n)
+        if (depth or 0) < 2 then AddMats(list, r[1], roles, (depth or 0) + 1, n) end
     end
     return true
 end
 
 -- Recette affichée dans la vue "par recette" : produit (ou enchantement) puis ses composants (2 niveaux).
+-- mult = nombre de crafts ; les quantités sont pour un objet produit (divisées par ce que le craft produit).
+-- Les fournitures de marchand restent dans l'arbre (4e champ = true) pour compter dans le coût, sans enfants.
 local function Tree(rg, depth, out, mult, flat)
     for _, r in ipairs(rg or {}) do
-        if r[1] and not IsVendor(r[1]) then
+        if r[1] then
             local n = (mult or 1) * (r[2] or 1)
-            out[#out + 1] = { r[1], n, depth }
-            if depth < 2 and not flat then Tree(LS.ReagentsOf(r[1]), depth + 1, out, n) end
+            if IsVendor(r[1]) then
+                out[#out + 1] = { r[1], n, depth, true }
+            else
+                out[#out + 1] = { r[1], n, depth }
+                if depth < 2 and not flat then Tree(LS.ReagentsOf(r[1], true), depth + 1, out, n / LS.YieldOf(r[1])) end
+            end
         end
     end
     return out
@@ -191,7 +296,7 @@ end
 
 local function AddRecipe(list, rec, rg)
     -- Recharges (transmutations…) : composants directs seulement, sinon les essences se "transmutent" en boucle.
-    rec.mats = Tree(rg or (rec.id and LS.ReagentsOf(rec.id)), 1, {}, nil, rec.cd ~= nil)
+    rec.mats = Tree(rg or (rec.id and LS.ReagentsOf(rec.id, true)), 1, {}, rec.id and 1 / LS.YieldOf(rec.id) or 1, rec.cd ~= nil)
     rec.name = rec.name or (rec.id and P.Name(rec.id)) or "?"
     list.recipes[#list.recipes + 1] = rec
     for _, m in ipairs(rec.mats) do
@@ -268,6 +373,35 @@ function LS.Build()
         ench.info = ench.info .. Tr(" (Showing the usual raid enchanting materials until the game provides the exact recipes.)")
     end
 
+    -- Toutes les recettes d'un métier (cuisine, alchimie) : chaque produit avec ses composants.
+    -- Composants : le jeu d'abord, sinon les données Classic, sinon les données de recettes (DataRecipes).
+    local function ProfList(key, title, info, code)
+        local l = NewList(key, title, info)
+        l.noRoles = true
+        local spells = {}
+        for spell, t in pairs(D.allRecipes or {}) do
+            if t[2] == code and t[1] ~= 0 then spells[#spells + 1] = spell end
+        end
+        table.sort(spells)
+        for _, spell in ipairs(spells) do
+            local t = D.allRecipes[spell]
+            local id = t[1]
+            local rg = RDB()[spell] or (D.spellReagents and D.spellReagents[spell])
+            if not rg then
+                rg = {}
+                for i = 9, #t, 2 do rg[#rg + 1] = { t[i], t[i + 1] or 1 } end
+            end
+            Add(l, id, "product", ALL_ROLES)
+            for _, m in ipairs(Tree(rg, 1, {}, 1 / LS.YieldOf(id))) do
+                if not m[4] then Add(l, m[1], "mat", ALL_ROLES) end -- fournitures de marchand : pas dans la liste d'achat
+            end
+            AddRecipe(l, { id = id, spell = spell, roles = ALL_ROLES }, rg)
+        end
+        return l
+    end
+    local cook = ProfList("all_cook", Tr("Cooking"), Tr("Every cooking recipe and what it's made of."), 6)
+    local alch = ProfList("all_alch", Tr("Alchemy"), Tr("Every alchemy recipe and what it's made of."), 4)
+
     -- Recharges, une liste par métier : chaque recharge avec ses composants.
     local cdLists, cdBy = {}, {}
     local CD_TITLE = { alch = Tr("Alchemy: transmutes"), tail = Tr("Tailoring: Mooncloth"), lw = Tr("Leatherworking: salt") }
@@ -284,7 +418,7 @@ function LS.Build()
         if cd.item then Add(l, cd.item, "tool", ALL_ROLES, nil, "Tool") end
         AddRecipe(l, { id = cd.out, name = cd.n, roles = ALL_ROLES, cd = cd }, cd.r)
     end
-    groups[#groups + 1] = { key = "raid", title = Tr("CONSUMES & ENCHANTS"), lists = { consum, ench } }
+    groups[#groups + 1] = { key = "raid", title = Tr("CONSUMES & ENCHANTS"), lists = { consum, ench, cook, alch } }
     groups[#groups + 1] = { key = "cd", title = Tr("DAILY COOLDOWNS"), lists = cdLists }
 
     -- Pré-BiS craftés par type d'armure
@@ -436,6 +570,9 @@ end
 function LS.RecipeCost(rec, useNow)
     local mats = rec.mats or {}
     local function Price(id)
+        -- Fourniture de marchand : son prix chez le marchand, jamais l'HV.
+        local v = IsVendor(id) and P.VendorBuy(id)
+        if v then return v end
         local st = P.Stats(id)
         return st and ((useNow and st.cur) or st.med or st.cur)
     end
@@ -553,6 +690,7 @@ end
 LS.CancelBuy = function() EndBuy(Tr("Purchase cancelled.")) end
 
 local bev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(bev, "Lists") end
 for _, e in ipairs({ "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE",
     "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED", "AUCTION_HOUSE_CLOSED" }) do pcall(bev.RegisterEvent, bev, e) end
 bev:SetScript("OnEvent", function(_, event, a1, a2)
@@ -692,6 +830,7 @@ local function Remind()
 end
 
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Lists") end
 for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "TRADE_SKILL_SHOW", "SPELL_UPDATE_COOLDOWN", "TRADE_SKILL_LIST_UPDATE" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
@@ -708,6 +847,7 @@ ev:SetScript("OnEvent", function(_, event)
     elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" then
         -- Nouvelles recettes connues : on refait l'index et on retente les composants manquants.
         productIndex = nil
+        if event == "TRADE_SKILL_SHOW" then LS.RetryReagents() end
         C_Timer.After(1, function() LS.ResolveReagents(); LS.UpdateCooldowns() end)
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         if cdPend then return end
@@ -718,7 +858,8 @@ end)
 
 -- Diagnostic (/ipg lists) : combien de recettes le jeu a pu détailler.
 function LS.Diag()
-    local found, total = LS.ResolveReagents()
+    LS.RetryReagents()
+    local found, total = LS.ResolveReagents(true)
     LS.Build()
     local n = 0
     for _, g in ipairs(LS.groups) do for _, l in ipairs(g.lists) do n = n + #l.entries end end
@@ -734,4 +875,11 @@ function LS.Diag()
     local b = it and FromRecipeTooltip(it.rec)
     ns.Print(Tr("test, Living Crown — recipe data: ") .. (a and Fmt(a) or Tr("not available")))
     ns.Print(Tr("test, Living Crown — pattern tooltip: ") .. (b and Fmt(b) or Tr("not available")))
+end
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    LS.Build = ns.Profile.Wrap("Lists:Build", LS.Build)
+    LS.UpdateCooldowns = ns.Profile.Wrap("Lists:UpdateCooldowns", LS.UpdateCooldowns)
+    LS.ResolveReagents = ns.Profile.Wrap("Lists:ResolveReagents", LS.ResolveReagents)
 end

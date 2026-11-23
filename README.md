@@ -23,7 +23,10 @@ Ready-made watchlists, each with its finished items and their materials:
 - **Consumes & enchants**: flasks, elixirs, potions, food, weapon oils and stones, armor kits, enchants used by each spec.
 - **Daily cooldowns**: transmutes, Mooncloth, Refined Deeprock Salt, with the gain of each one and which character has it ready.
 - **Pre-BiS crafts**: cloth, leather, mail, plate, weapons, cloaks/trinkets/relics, from the pre-raid BiS lists of every spec.
-- **Profession leveling**: two views. **Shopping list**: what to buy to reach 300, with quantities and the total cost now vs usual. **Best route**: the cheapest path from your current skill to 300, step by step, using every recipe of the profession (trainer, vendor patterns, BoE patterns at the AH, recipes you already know). For each step: crafts needed, the gold balance (negative when it costs, positive when it earns: resale of what you craft − materials − learning cost), and close alternatives. Click an alternative to use it instead; "No AH patterns" builds a route without buying patterns. Skill-up chance follows orange / yellow / green / grey; trainer costs are read when you open a trainer (estimated until then).
+- **Profession leveling**: two views. **Shopping list**: what to buy to reach 300, with quantities and the total cost now vs usual. **Best route**: the cheapest, fast path from your current skill to 300, step by step, using every recipe of the profession (trainer, vendor patterns, BoE patterns at the AH, recipes you already know). For each step: crafts needed, the gold balance (negative when it costs, positive when it earns: resale of what you craft − materials − learning cost), and close alternatives with their own cost. Click an alternative to use it instead; "No AH patterns" builds a route without buying patterns.
+  - **AH / Merchant / Disenchant** toggles choose how what you craft is resold; with several on, each recipe uses the best. AH is the price minus the 5 % cut (only when 10 or more are listed); disenchanting uses the Classic disenchant table (item levels 5–65).
+  - A craft that pays for itself counts as free when choosing the route, plus 2 s of your time per craft, so the route stays fast instead of grinding for profit; among equal routes it takes the one that earns more.
+  - Skill-up chance follows orange / yellow / green / grey with WoW Forever's skill levels (from ForeverMaster, see `.github/scripts/update_recipes.py`); trainer costs are read when you open a trainer (estimated until then). Cooldown recipes are left out, and a recipe is paid for once.
 - **My lists**: your own, right-click any item to add it.
 
 Two views: **By recipe** (each recipe, then its materials, with the net gain per craft) and **Flat list** (each item once, deals first).
@@ -31,7 +34,7 @@ For every item: price now, usual price (7-day median), 7-day curve, estimated sa
 
 **Scan list** checks the live price of every item in the list and builds the price history. **Buy** only appears on deals: it reads live listings, buys only the units under your limit, caps the spend, and asks you to confirm. **→ Auctionator** creates the same list in Auctionator, to browse prices there.
 
-Recipe materials come from the game itself, so they stay correct for WoW Forever's new recipes.
+Recipe materials come from the game itself, so they stay correct for WoW Forever's new recipes. Materials sold by merchants (bag icon) count in recipe costs at their merchant price but stay out of the shopping lists. Craft yields count (Cured Rugged Hide makes 2). Columns sort by clicking their header.
 
 ### Auction house
 - **Scan**: full AH scan when the game allows it (every 15 min), otherwise a scan of your professions' reagents and crafts.
@@ -42,8 +45,8 @@ Recipe materials come from the game itself, so they stay correct for WoW Forever
 ### Market tab
 What sells across the whole AH (estimated from full scans), what is worth farming, AH flips, vendor flips (listings below what a vendor pays), and **vendor crafts**: every recipe of every profession whose result sells to a vendor for more than its materials cost at the AH, with the profit per craft, how many crafts the current listings allow, the skill needed and where to learn it.
 
-### Price curves
-Click any item in Lists, Market or Stock (or type `/ipg price <item>`) to open its price card: lowest AH price over 30 days, 7 days or 48 h, the usual price range as a band, the vendor price as a dotted line, and four key numbers (price now, vs vendor or usual price, since the first scan, last 4 days). Below the curve: usual price, usual range, volatility, estimated sales per day and the verdict. Items in your lists get one point per scan, every other item one point per day.
+### Price history
+Click any item in Lists, Market or Stock (or type `/ipg item <item>` or `/ipg price <item>`) to open its price history: the lowest listing (bait listings skipped) and the market price (average of the cheapest 15–30 %), from 1 day to All, with the units gone and newly listed at each scan. The usual price range shows as a band and the vendor price as a dotted line. Four key numbers: vs vendor or usual price, last 4 days, since the first scan, AH supply. Below the curve: usual price, usual range, volatility, estimated sales per day, vendor price and the verdict. Items in your lists get one point per scan for 7 days and a daily summary for 2 years; every other item one point per day. Shift-click links the item in chat.
 
 ### Stock tab
 Everything you own, on every character: bags, bank, warband bank, mail, AH listings and items in the mail to your characters. Each item is valued at its AH price after the 5 % cut or its vendor price, whichever is higher (soulbound items: vendor price only). Sort by name, quantity, unit value or total; filter AH-valued, vendor-valued or unpriced items. The Overview "Stock value" card uses the same numbers; click it to open the tab.
@@ -70,7 +73,7 @@ English and French, picked automatically from the game client language. Translat
 | `/ipg lists` | Lists tab, plus a check of the recipe data the game provides |
 | `/ipg list` | Routine window |
 | `/ipg de` | Disenchant window |
-| `/ipg price <item>` | Price card of an item (name or link) |
+| `/ipg item <item>` | Price history of an item (link, id or name); `/ipg price` does the same |
 | `/ipg sold` | Vendor sales of the last 7 days, and what was worth more at the AH |
 | `/ipg report` | 30-day test report per item |
 | `/ipg hints` | Toggle the "worth more at the AH" warnings at vendors |
@@ -96,7 +99,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Prices.lua` | AH scans, price history and stats (usual price, low/high, volatility, sales/day) |
 | `Market.lua` | Market tab (what sells, flips, vendor crafts) |
 | `Stock.lua` | Stock tab: everything you own and its value |
-| `PriceCard.lua` | Price card: price curve and fluctuations of one item |
+| `History.lua` | Price history window: one point per scan, daily summaries, key numbers |
 | `Sell.lua` | AH posting and cancelling |
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
 | `Routine.lua`, `Next.lua`, `Preview.lua` | Routine window, next-action key, checklist before batch actions |

@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 local Tr = ns.L
 ns.name = ADDON
-ns.version = "0.24.0"
+ns.version = "0.25.0"
 _G.ImpotPointGouv = ns
 
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. Tr("\\media\\")
@@ -99,6 +99,170 @@ local function RepairDoubleOffline(db)
 end
 ns.RepairDoubleOffline = RepairDoubleOffline
 
+-- ---------------------------------------------------------------- royaume
+-- Nom du royaume, même quand le jeu renvoie une chaîne vide (vu sur Forever : toute une session sans nom).
+-- Repli : le nom déjà vu pour ce numéro de royaume (dans l'identifiant du perso, "Player-6923-…"),
+-- puis le dernier nom connu, puis le royaume qui a le plus de prix.
+local function RealmId()
+    local guid = UnitGUID and UnitGUID("player")
+    return guid and guid:match("^Player%-(%d+)%-")
+end
+-- Résultat gardé pour la session : ns.Realm() est appelé à chaque lecture de prix (des milliers de fois par
+-- affichage), et sans nom du jeu le repli ne doit être calculé qu'une fois.
+local realmCache
+function ns.Realm()
+    local r = GetRealmName and GetRealmName()
+    local db = ns.db
+    if r and r ~= "" then
+        if realmCache ~= r and db then
+            local rid = RealmId()
+            db.realmById = db.realmById or {}
+            if rid then db.realmById[rid] = r end
+            db.lastRealm, db.realmKey = r, r -- realmKey : nom gardé par la v0.23.1 / 0.24.0
+        end
+        realmCache = r
+        return r
+    end
+    if realmCache then return realmCache end
+    if not db then return "?" end
+    local rid = RealmId()
+    local found = (rid and db.realmById and db.realmById[rid])
+        or (db.realmKey ~= "" and db.realmKey) or db.lastRealm
+    if not found then
+        -- Royaume enregistré pour ce personnage.
+        local guid = UnitGUID and UnitGUID("player")
+        local c = guid and db.chars and db.chars[guid]
+        if c and c.realm and c.realm ~= "" then found = c.realm end
+    end
+    if not found then
+        -- Aucun nom connu : le royaume qui a le plus de prix enregistrés (calculé une seule fois).
+        local most = -1
+        for k, t in pairs(db.prices or {}) do
+            if k ~= "" and k ~= "?" then
+                local n = 0
+                for _ in pairs(t) do n = n + 1 end
+                if n > most then found, most = k, n end
+            end
+        end
+    end
+    if not found then return "?" end
+    realmCache = found
+    db.realmKey = found
+    if rid then db.realmById = db.realmById or {}; db.realmById[rid] = found end
+    return found
+end
+
+-- Données enregistrées sous un royaume vide ("") : fusionnées dans le vrai royaume.
+local function DayOf(s) return tonumber((s or ""):match("^(%-?%d+)")) end
+local function F(s) local o, i = {}, 0; for f in (s .. ","):gmatch("([^,]*),") do i = i + 1; o[i] = tonumber(f) end; return o end
+local function N(v) return v and tostring(math.floor(v + 0.5)) or "" end
+local function MergePrices(dst, src)
+    for id, e in pairs(src) do
+        local d = dst[id]
+        if not d then dst[id] = e
+        else
+            local byDay = {}
+            for _, p in ipairs(d.d or {}) do byDay[p[1]] = p end
+            for _, p in ipairs(e.d or {}) do
+                local q = byDay[p[1]]
+                if q then q[2] = math.min(q[2], p[2]); q[3] = p[3] else byDay[p[1]] = p end
+            end
+            local days = {}
+            for _, p in pairs(byDay) do days[#days + 1] = p end
+            table.sort(days, function(a, b) return a[1] < b[1] end)
+            while #days > 30 do table.remove(days, 1) end
+            d.d = days
+            if e.h then
+                d.h = d.h or {}
+                for _, p in ipairs(e.h) do d.h[#d.h + 1] = p end
+                table.sort(d.h, function(a, b) return a[1] < b[1] end)
+                while #d.h > 120 do table.remove(d.h, 1) end
+            end
+            if (e.t or 0) >= (d.t or 0) then d.cur, d.qty, d.t = e.cur, e.qty, e.t end
+        end
+    end
+end
+local function MergeHist(dst, src)
+    for id, h in pairs(src) do
+        local d = dst[id]
+        if not d then dst[id] = h
+        else
+            for _, s in ipairs(h.s or {}) do d.s[#d.s + 1] = s end
+            table.sort(d.s, function(a, b) return (DayOf(a) or 0) < (DayOf(b) or 0) end)
+            while #d.s > 400 do table.remove(d.s, 1) end
+            local byDay, order = {}, {}
+            for _, s in ipairs(d.d or {}) do local f = F(s); byDay[f[1]] = f; order[#order + 1] = f[1] end
+            for _, s in ipairs(h.d or {}) do
+                local f = F(s)
+                local g = byDay[f[1]]
+                if g then
+                    -- même jour : plus bas, Σ marché, n marché, qté (la plus récente), parties, ajoutées, scans
+                    g[2] = (g[2] and f[2]) and math.min(g[2], f[2]) or g[2] or f[2]
+                    g[3] = ((g[3] or 0) + (f[3] or 0)) > 0 and ((g[3] or 0) + (f[3] or 0)) or nil
+                    g[4] = (g[4] or 0) + (f[4] or 0)
+                    g[5] = f[5] or g[5]
+                    g[6] = (g[6] or f[6]) and ((g[6] or 0) + (f[6] or 0)) or nil
+                    g[7] = (g[7] or f[7]) and ((g[7] or 0) + (f[7] or 0)) or nil
+                    g[8] = (g[8] or 0) + (f[8] or 0)
+                else
+                    byDay[f[1]] = f; order[#order + 1] = f[1]
+                end
+            end
+            table.sort(order)
+            d.d = {}
+            for _, day in ipairs(order) do
+                local f = byDay[day]
+                d.d[#d.d + 1] = table.concat({ N(f[1]), N(f[2]), N(f[3]), N(f[4] or 0), N(f[5]), N(f[6]), N(f[7]), N(f[8] or 1) }, ",")
+            end
+            if (h.lt or 0) >= (d.lt or 0) then d.lad, d.lhi, d.lt = h.lad, h.lhi, h.lt end
+        end
+    end
+end
+local function MergeMarket(dst, src)
+    dst.items, dst.obs = dst.items or {}, dst.obs or {}
+    for id, it in pairs(src.items or {}) do
+        local d = dst.items[id]
+        if not d then dst.items[id] = it
+        else
+            for day, v in pairs(it.d or {}) do d.d[day] = (d.d[day] or 0) + v end
+            d.seen = math.max(d.seen or 0, it.seen or 0)
+        end
+    end
+    for day, v in pairs(src.obs or {}) do dst.obs[day] = (dst.obs[day] or 0) + v end
+    dst.scans = (dst.scans or 0) + (src.scans or 0)
+    local newer = (src.last and src.last.t or 0) >= (dst.last and dst.last.t or 0)
+    if newer then
+        dst.last = src.last
+        if src.flips then dst.flips = src.flips end
+        if src.flipBought then dst.flipBought = src.flipBought end
+    end
+    if src.book then
+        dst.book = dst.book or {}
+        for id, b in pairs(src.book) do dst.book[id] = b end
+    end
+end
+function ns.FixEmptyRealm()
+    local db = ns.db
+    local realm = ns.Realm()
+    if realm == "" or realm == "?" then return 0 end
+    local moved = 0
+    local function Take(root, merge)
+        if type(root) ~= "table" or type(root[""]) ~= "table" then return end
+        if root[realm] == nil then root[realm] = root[""]
+        else merge(root[realm], root[""]) end
+        root[""] = nil
+        moved = moved + 1
+    end
+    Take(db.prices, MergePrices)
+    Take(db.hist, MergeHist)
+    Take(db.market, MergeMarket)
+    Take(db.scan, function(dst, src)
+        for k, v in pairs(src) do if type(v) == "number" then dst[k] = math.max(dst[k] or 0, v) end end
+    end)
+    for _, c in pairs(db.chars or {}) do if c.realm == "" then c.realm = realm end end
+    return moved
+end
+
 function ns.InitDB()
     ImpotPointGouvDB = ImpotPointGouvDB or {}
     local fresh = ImpotPointGouvDB.version == nil
@@ -117,7 +281,8 @@ function ns.InitDB()
         local n = fresh and 0 or RepairDoubleOffline(ns.db)
         if n > 0 then ns.repairMsg = (Tr("data repaired: %d \"Offline change\" counted twice removed.")):format(n) end
         ns.db.version = 3
-    end
+    end    -- Session passée avec un nom de royaume vide : on remet ses données dans le vrai royaume.
+    if not fresh then ns.FixEmptyRealm() end
 end
 
 -- ---------------------------------------------------------------- argent
@@ -177,23 +342,6 @@ function ns.Print(msg)
 end
 
 -- "CAMWOW EU4 Realm 4 PvP" -> "EU4 · Realm 4 · PvP" (nom interne de WoW Forever).
--- Clé de royaume stable. Depuis le correctif Forever 1.60.1, GetRealmName() renvoie "" :
--- on garde le dernier nom connu (l'HV de Forever est globale, une seule clé suffit).
-function ns.Realm()
-    local r = GetRealmName and GetRealmName() or ""
-    if r ~= "" then ns.db.realmKey = r; return r end
-    if ns.db.realmKey and ns.db.realmKey ~= "" then return ns.db.realmKey end
-    -- Première fois sans nom : le royaume qui a le plus de prix enregistrés.
-    local best, most = nil, -1
-    for k, t in pairs(ns.db.prices or {}) do
-        local n = 0
-        for _ in pairs(t) do n = n + 1 end
-        if k ~= "" and n > most then best, most = k, n end
-    end
-    ns.db.realmKey = best or "Forever"
-    return ns.db.realmKey
-end
-
 function ns.PrettyRealm(realm)
     if not realm or realm == "" then return "" end
     local r = realm:gsub("^CAMWOW%s*", "")
@@ -268,7 +416,12 @@ end
 
 -- Petit bus d'événements interne (le Ledger prévient l'UI).
 local listeners = {}
-function ns.On(name, fn) listeners[name] = listeners[name] or {}; table.insert(listeners[name], fn) end
+function ns.On(name, fn)
+    listeners[name] = listeners[name] or {}
+    -- Chronométré par écouteur (/ipg perf) : "Fichier:ÉVÉNEMENT".
+    if ns.Profile then fn = ns.Profile.Wrap(ns.Profile.Caller(3) .. ":" .. name, fn) end
+    table.insert(listeners[name], fn)
+end
 function ns.Fire(name, ...)
     for _, fn in ipairs(listeners[name] or {}) do
         local ok, err = pcall(fn, ...)

@@ -385,6 +385,7 @@ end)
 
 -- ------------------------------------------------------------ événements
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Sell") end
 for _, e in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "COMMODITY_SEARCH_RESULTS_UPDATED",
     "ITEM_SEARCH_RESULTS_UPDATED", "OWNED_AUCTIONS_UPDATED", "BAG_UPDATE_DELAYED", "AUCTION_CANCELED" }) do
     pcall(ev.RegisterEvent, ev, e)

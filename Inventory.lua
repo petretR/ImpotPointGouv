@@ -237,6 +237,7 @@ end
 
 -- ------------------------------------------------------------ événements
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Inventory") end
 for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED",
     "PLAYERBANKSLOTS_CHANGED", "PLAYERREAGENTBANKSLOTS_CHANGED", "AUCTION_HOUSE_SHOW", "OWNED_AUCTIONS_UPDATED",
     "MAIL_INBOX_UPDATE", "MAIL_CLOSED" }) do
@@ -287,3 +288,8 @@ ev:SetScript("OnEvent", function(_, event)
         Changed()
     end
 end)
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    I.ScanBags = ns.Profile.Wrap("Inventory:ScanBags", I.ScanBags)
+end

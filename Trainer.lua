@@ -152,7 +152,7 @@ local function ShowTip(a, anchor)
         Opt("On the AH  " .. M .. Tr("(− 5% cut & lost deposits)|r"), ev.ahNet, "ah",
             ev.bop and "bound, can't sell" or (ev.whiteGear and "white item, won't sell") or nil)
         Opt("To a vendor", ev.vendorNet, "vendor")
-        Opt("Disenchanted  " .. M .. (ev.deObserved and "(your results)" or "(estimate)") .. "|r", ev.deNet, "de",
+        Opt("Disenchanted  " .. M .. "(estimate)" .. "|r", ev.deNet, "de",
             (not ev.deNet and ev.whiteGear) and "can't disenchant" or nil)
 
         -- Résultat
@@ -277,6 +277,7 @@ end
 
 -- Survol : notre infobulle sous celle de Blizzard.
 local ticker = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ticker, "Trainer") end
 local acc, rescan, current = 0, 0, nil
 ticker:SetScript("OnUpdate", function(_, elapsed)
     acc, rescan = acc + elapsed, rescan + elapsed
@@ -307,10 +308,12 @@ ticker:SetScript("OnUpdate", function(_, elapsed)
 end)
 
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Trainer") end
 for _, e in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE", "TRAINER_CLOSED", "GET_ITEM_INFO_RECEIVED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
-ev:SetScript("OnEvent", function(_, event)
+ev:SetScript("OnEvent", function(_, event, _, success)
+    if event == "GET_ITEM_INFO_RECEIVED" and success == false then return end
     if event == "TRAINER_CLOSED" then
         if tip then tip:Hide() end
     elseif event == "GET_ITEM_INFO_RECEIVED" then
@@ -321,3 +324,8 @@ ev:SetScript("OnEvent", function(_, event)
     end
 end)
 ns.On("PRICES_CHANGED", function() dirty = true end)
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    TR.Decorate = ns.Profile.Wrap("Trainer:Decorate", TR.Decorate)
+end

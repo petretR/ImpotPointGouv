@@ -332,6 +332,7 @@ local function RecordLoot()
 end
 
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Destroy") end
 for _, e in ipairs({ "BAG_UPDATE_DELAYED", "PLAYER_REGEN_ENABLED", "UNIT_SPELLCAST_SUCCEEDED", "LOOT_CLOSED",
     "LOOT_READY", "LOOT_OPENED" }) do
     pcall(ev.RegisterEvent, ev, e)

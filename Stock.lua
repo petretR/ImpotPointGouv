@@ -110,7 +110,7 @@ function S.BuildPage(page)
     function page:Heads()
         for _, b in ipairs(self.heads) do
             local on = b.key and b.key == self.sort
-            b.text:SetText(b.label .. (on and " ▾" or ""))
+            b.text:SetText(b.label .. (on and " ▼" or ""))
             b.text:SetTextColor(unpack(on and C.gold or C.faint))
         end
     end
@@ -152,12 +152,20 @@ function S.BuildPage(page)
             if ah then GameTooltip:AddDoubleLine(Tr("AH (after the 5 % cut)"), ns.FormatMoney(math.floor(ah * 0.95), { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1) end
             if vs then GameTooltip:AddDoubleLine(Tr("Vendor"), ns.FormatMoney(vs, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1) end
             if I.IsBound(row.id) then GameTooltip:AddLine(Tr("Soulbound: vendor value only"), 0.6, 0.6, 0.6) end
-            GameTooltip:AddLine(Tr("Click: price curve"), 0.88, 0.66, 0.24)
+            GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
+        -- Clic : historique des prix ; Maj-clic : lien dans la discussion.
         r:SetScript("OnMouseUp", function(self, button)
-            if button == "LeftButton" and self.row then ns.PriceCard.Show(self.row.id) end
+            local row = self.row
+            if not row or button ~= "LeftButton" then return end
+            if IsModifiedClick and IsModifiedClick("CHATLINK") then
+                local _, link = ns.GetItemInfo(row.id)
+                if link and ChatEdit_InsertLink then ChatEdit_InsertLink(link) end
+            elseif ns.History then
+                ns.History.Show(row.id)
+            end
         end)
         page.rows[i] = r
     end
@@ -221,12 +229,15 @@ end
 -- Noms et prix marchands qui arrivent après coup : redessine la page.
 local pend
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Stock") end
 pcall(ev.RegisterEvent, ev, "GET_ITEM_INFO_RECEIVED")
-ev:SetScript("OnEvent", function()
-    if pend then return end
+local lastDraw = 0
+ev:SetScript("OnEvent", function(_, _, _, success)
+    if success == false or pend then return end -- objet inexistant : rien à redessiner
     pend = true
-    C_Timer.After(0.6, function()
+    C_Timer.After(math.max(0.6, 2 - (GetTime() - lastDraw)), function()
         pend = false
+        lastDraw = GetTime()
         local f = _G.ImpotPointGouvFrame
         if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "stock" then ns.UI.Refresh() end
     end)

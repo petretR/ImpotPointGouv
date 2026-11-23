@@ -286,6 +286,7 @@ local function OnItemResults(itemKey)
 end
 
 local bev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(bev, "Market") end
 for _, e in ipairs({ "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE", "COMMODITY_PURCHASE_SUCCEEDED",
     "COMMODITY_PURCHASE_FAILED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "ITEM_SEARCH_RESULTS_UPDATED",
     "UI_ERROR_MESSAGE" }) do pcall(bev.RegisterEvent, bev, e) end
@@ -438,7 +439,7 @@ function M.VendorCrafts()
                         r.name = r.name or RO.SpellName(r.spell)
                         local F, label, qty, est = RO.Access(r, known, {})
                         out[#out + 1] = { id = r.out, rec = r, prof = prof, gain = gain, cost = cost, vs = vs * r.n,
-                            units = maxN, skill = r.o, mySkill = skill, who = who,
+                            units = r.cd and math.min(maxN, 1) or maxN, skill = r.o, mySkill = skill, who = who,
                             access = F, label = label, est = est, rate = 0, listed = 0 }
                     end
                 end
@@ -546,6 +547,7 @@ function M.BuildPage(page)
                 end
                 if row.who then GameTooltip:AddDoubleLine(Tr("Your skill"), ("%s %d"):format(row.who, row.mySkill), 0.7, 0.7, 0.7, 1, 1, 1) end
                 GameTooltip:AddLine(Tr("Materials at today's AH price (vendor price for vendor supplies)."), 0.5, 0.5, 0.5, true)
+                GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
                 GameTooltip:Show()
                 return
             end
@@ -560,12 +562,20 @@ function M.BuildPage(page)
             local rel = Relation(row.id)
             if rel then GameTooltip:AddLine(rel, 0.88, 0.66, 0.24) end
             GameTooltip:AddLine(Tr("Estimated from quantities that vanished between your full scans (cancels and expiries count too)."), 0.5, 0.5, 0.5, true)
-            GameTooltip:AddLine(Tr("Click: price curve"), 0.88, 0.66, 0.24)
+            GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        -- Clic : historique des prix ; Maj-clic : lien dans la discussion.
         r:SetScript("OnMouseUp", function(self, button)
-            if button == "LeftButton" and self.row then ns.PriceCard.Show(self.row.id) end
+            local row = self.row
+            if not row or button ~= "LeftButton" then return end
+            if IsModifiedClick and IsModifiedClick("CHATLINK") then
+                local _, link = ns.GetItemInfo(row.id)
+                if link and ChatEdit_InsertLink then ChatEdit_InsertLink(link) end
+            elseif ns.History then
+                ns.History.Show(row.id)
+            end
         end)
         page.rows[i] = r
     end
@@ -686,15 +696,28 @@ end
 -- Noms qui arrivent après coup : redessine la page (avec un petit délai).
 local pend
 local ev = CreateFrame("Frame")
+if ns.Profile then ns.Profile.Frame(ev, "Market") end
 pcall(ev.RegisterEvent, ev, "GET_ITEM_INFO_RECEIVED")
-ev:SetScript("OnEvent", function(_, _, id)
+-- Objets inexistants (success = false) : ignorés, sinon chaque redessin les redemande et relance l'événement.
+-- Au plus un redessin toutes les 2 s : les infos arrivent par milliers après un scan complet.
+local lastDraw = 0
+ev:SetScript("OnEvent", function(_, _, id, success)
+    if success == false then return end
     M.OnItemInfo(id)
     if pend then return end
     pend = true
-    C_Timer.After(0.5, function()
+    C_Timer.After(math.max(0.5, 2 - (GetTime() - lastDraw)), function()
         pend = false
+        lastDraw = GetTime()
         local f = _G.ImpotPointGouvFrame
         if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "market" then ns.UI.Refresh() end
         if M.dirty then M.dirty = false; ns.Fire("MARKET_CHANGED") end
     end)
 end)
+
+-- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+if ns.Profile then
+    M.OnFullScan = ns.Profile.Wrap("Market:OnFullScan", M.OnFullScan)
+    M.List = ns.Profile.Wrap("Market:List", M.List)
+    M.VendorCrafts = ns.Profile.Wrap("Market:VendorCrafts", M.VendorCrafts)
+end
