@@ -85,7 +85,7 @@ local function FromRecipeTooltip(rec)
     if not rec or not C_TooltipInfo or not C_TooltipInfo.GetItemByID then return nil end
     local ok, data = pcall(C_TooltipInfo.GetItemByID, rec)
     if not ok or type(data) ~= "table" or not data.lines then
-        if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, rec) end
+        ns.RequestItem(rec)
         return nil
     end
     local head = SPELL_REAGENTS and SPELL_REAGENTS:gsub("%%s", ""):gsub("[:：]%s*$", ""):gsub("%s+$", "") or nil

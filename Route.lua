@@ -236,6 +236,21 @@ Compute = function(prof, opts)
             end
         end
     end
+    -- User's choice (clicked alternative): only this recipe on that range.
+    local pinAt = {}
+    local pins = (ns.db.settings.routePin or {})[prof]
+    if pins then
+        local bySpell = {}
+        for _, r in ipairs(cands) do bySpell[r.spell] = r end
+        for _, p in ipairs(pins) do
+            local r = bySpell[p.spell]
+            if r then
+                for x = math.max(start, p.from), math.min(299, p.to - 1) do
+                    if Chance(r, x) > 0 then pinAt[x] = r end
+                end
+            end
+        end
+    end
     local INF = math.huge
     -- Programmation dynamique : best[x] = coût minimal pour atteindre x, en tranches contiguës.
     -- owned : recettes déjà payées (apprentissage gratuit dans cette passe).
@@ -246,8 +261,9 @@ Compute = function(prof, opts)
         for x = start, 299 do
             local bx = best[x] or INF
             local bestNext, br, bs = INF, nil, nil
+            local pin = pinAt[x]
             for _, r in ipairs(cands) do
-                local ch = Chance(r, x)
+                local ch = (pin and r ~= pin) and 0 or Chance(r, x)
                 if ch > 0 then
                     -- démarrer (ou redémarrer) un segment avec r en x
                     local cand = bx + (owned[r] and 0 or r.F) - PS[r]
@@ -336,13 +352,27 @@ function RO.Ban(prof, spell)
     ns.db.settings.routeBan[prof][spell] = true
     RO.Invalidate()
 end
+-- Picked alternative: this recipe from `from` to `to` (replaces overlapping picks).
+function RO.Pin(prof, spell, from, to)
+    local s = ns.db.settings
+    s.routePin = s.routePin or {}
+    local list = s.routePin[prof] or {}
+    for i = #list, 1, -1 do
+        if list[i].from < to and list[i].to > from then table.remove(list, i) end
+    end
+    list[#list + 1] = { spell = spell, from = from, to = to }
+    s.routePin[prof] = list
+    RO.Invalidate()
+end
 function RO.ResetBans(prof)
     if ns.db.settings.routeBan then ns.db.settings.routeBan[prof] = nil end
+    if ns.db.settings.routePin then ns.db.settings.routePin[prof] = nil end
     RO.Invalidate()
 end
 function RO.HasBans(prof)
     local b = ns.db.settings.routeBan and ns.db.settings.routeBan[prof]
-    return b and next(b) ~= nil
+    local p = ns.db.settings.routePin and ns.db.settings.routePin[prof]
+    return (b and next(b) ~= nil) or (p and #p > 0) or false
 end
 
 -- ------------------------------------------------------------ prix des formations (relevés chez le formateur)

@@ -10,6 +10,11 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 
 ### Changed
 - Lists: By recipe / Flat list moved next to the Auctionator button.
+- Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
+
+### Fixed
+- Leveling route showed recipes as Known after you looked at someone else's profession (a link, guild or NPC window). Those recipes are no longer saved, and the wrong ones are cleaned up at login or when you next open your own profession window.
+- Item names that never appeared or blinked every few seconds in Lists, Market and Stock; prices next to recipes in the profession window no longer redraw constantly.
 
 ## [1.0.0] - 2026-11-23
 

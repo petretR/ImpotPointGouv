@@ -639,7 +639,9 @@ function LU.BuildPage(page)
         r:SetScript("OnClick", function(self, button)
             if not self.row then return end
             if self.row.alt then
-                ns.Route.Ban(self.row.prof, self.row.seg.r.spell); page:Refresh(); return
+                ns.Route.Pin(self.row.prof, self.row.alt.r.spell, self.row.seg.from, self.row.seg.to)
+                page.routeOpen[self.row.seg.from] = nil
+                page:Refresh(); return
             elseif self.row.route then
                 if button == "RightButton" then
                     ns.Route.Ban(self.row.prof, self.row.route.r.spell)
@@ -753,13 +755,15 @@ function LU.BuildPage(page)
                 r:Show()
             elseif row then
                 local id, st, e = row.id, row.st, row.e
-                if not ns.GetItemInfo(id) and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+                if not ns.GetItemInfo(id) then ns.RequestItem(id) end
                 local _, _, icon = LS.Instant(id)
                 r.icon:SetTexture(ns.GetItemIcon(id) or icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                local name = (row.head and row.rec and row.rec.cd) and Tr(row.rec.name) or P.Name(id)
-                if row.head or (not row.depth and e.kind == "product") then name = "|cffe0a83d" .. name .. "|r" end
-                if row.depth and row.qty then name = "|cff8a877f" .. LS.FmtQty(row.qty) .. "×|r " .. name end
-                r.name:SetText(name)
+                local function Build(n)
+                    if n ~= "" and (row.head or (not row.depth and e.kind == "product")) then n = "|cffe0a83d" .. n .. "|r" end
+                    if row.depth and row.qty then n = "|cff8a877f" .. LS.FmtQty(row.qty) .. "×|r " .. n end
+                    return n
+                end
+                r.name:SetText(Build((row.head and row.rec and row.rec.cd) and Tr(row.rec.name) or ns.Prices.Name(id)))
                 r.now:SetText(st and st.cur and Money(st.cur) or (st and st.med and "|cff6fa8f0none|r" or Money(nil)))
                 r.usual:SetText(Money(st and st.med))
                 -- barres de la courbe
@@ -1078,7 +1082,8 @@ ns.On("LIST_SCAN", Soon)
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "ListsUI") end
 for _, e in ipairs({ "GET_ITEM_INFO_RECEIVED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "BAG_UPDATE_DELAYED" }) do pcall(ev.RegisterEvent, ev, e) end
-ev:SetScript("OnEvent", function(_, event, _, success)
-    if event == "GET_ITEM_INFO_RECEIVED" and success == false then return end -- objet inexistant
+ev:SetScript("OnEvent", function(_, event, id, success)
+    -- Item doesn't exist, or the addon didn't ask for it: nothing to redraw.
+    if event == "GET_ITEM_INFO_RECEIVED" and (success == false or not ns.ItemWanted(id)) then return end
     Soon()
 end)

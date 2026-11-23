@@ -158,7 +158,7 @@ function M.ScanFlips(acc)
             i = i + 1
             local id = ask[i]
             if not id then return end
-            if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+            ns.RequestItem(id)
         end
         C_Timer.After(0.1, Batch)
     end
@@ -432,7 +432,7 @@ function M.VendorCrafts()
                     local vs = P.VendorSell(r.out)
                     if not vs and not ns.GetItemInfo(r.out) then
                         waiting = waiting + 1
-                        if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, r.out) end
+                        ns.RequestItem(r.out)
                     end
                     local gain = vs and (vs * r.n - cost)
                     if gain and gain > 0 then
@@ -595,14 +595,15 @@ function M.BuildPage(page)
             r.row = row
             if row then
                 local name = ns.GetItemInfo(row.id)
-                if not name and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, row.id) end
+                if not name then ns.RequestItem(row.id) end
                 local _, _, icon = Instant(row.id)
                 r.icon:SetTexture(ns.GetItemIcon(row.id) or icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                 r.name:SetText(P.Name(row.id))
                 r.buy:SetShown(self.filter == "vflip"); r.tag:SetShown(self.filter ~= "vflip")
                 if self.filter == "vcraft" then
                     local rc = row.rec
-                    r.name:SetText(P.Name(row.id) .. (rc.n > 1 and ("  |cff8a877f×" .. rc.n .. "|r") or ""))
+                    local n = P.Name(row.id)
+                    r.name:SetText(n .. (rc.n > 1 and n ~= "" and ("  |cff8a877f×" .. rc.n .. "|r") or ""))
                     r.price:SetText(Money(row.cost) .. Tr("  |cff615f5c/ ") .. Money(row.vs) .. "|r")
                     r.rate:SetText(row.units == math.huge and "∞" or tostring(row.units))
                     r.gold:SetText(ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11, short = true }))
@@ -704,7 +705,8 @@ local lastDraw = 0
 ev:SetScript("OnEvent", function(_, _, id, success)
     if success == false then return end
     M.OnItemInfo(id)
-    if pend then return end
+    -- Redraw only for an item the addon asked for (or a deal waiting for its vendor price).
+    if pend or not (ns.ItemWanted(id) or M.dirty) then return end
     pend = true
     C_Timer.After(math.max(0.5, 2 - (GetTime() - lastDraw)), function()
         pend = false
