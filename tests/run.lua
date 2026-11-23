@@ -94,6 +94,8 @@ Check("cooking filter reads the food's buff from its tooltip", function()
     for i in ipairs(lines) do _G["ImpotPointGouvScanTipTextLeft" .. i] = { GetText = function() return lines[i] end } end
     Assert(LS.FoodMatch(4243, "sta") and LS.FoodMatch(4243, "spi"), "Stamina and Spirit not found")
     Assert(not LS.FoodMatch(4243, "agi") and not LS.FoodMatch(4243, "misc"), "wrong stats found")
+    lines[2] = "Requires Level 5" -- "Use:" line not loaded yet: wait instead of filing it under Misc
+    Assert(LS.FoodTags(4245) == nil, "food filed before its tooltip finished loading")
     lines[2] = "Use: Restores 61 health over 18 sec."
     Assert(LS.FoodMatch(4244, "misc"), "food without a buff is not Misc")
     ns.UI.Toggle("lists")

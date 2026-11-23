@@ -197,8 +197,9 @@ end
 -- puis toute recette vue dans une fenêtre de métier, puis le schéma demandé au jeu), sinon les données, sinon 1.
 -- ------------------------------------------------------------ food buffs (Cooking list filter)
 -- Read from the item tooltip ("well fed: +12 Stamina…"), so Forever's own foods work too.
-LS.FOOD_STATS = { { "sta", "Stamina" }, { "agi", "Agility" }, { "str", "Strength" }, { "int", "Intellect" }, { "spi", "Spirit" }, { "ap", "AP" },
-    { "sp", "SP" }, { "hp", "HP" }, { "misc", "Misc" } }
+-- Character sheet order.
+LS.FOOD_STATS = { { "str", "Strength" }, { "agi", "Agility" }, { "sta", "Stamina" }, { "int", "Intellect" },
+    { "spi", "Spirit" }, { "ap", "AP" }, { "sp", "SP" }, { "hp", "HP" }, { "misc", "Misc" } }
 local FOOD_WORDS = {
     sta = { "stamina", "endurance" },
     agi = { "agility", "agilité" },
@@ -212,7 +213,16 @@ local FOOD_WORDS = {
     hp = { "healing done", "healing spells", "healing power", "healing by", "damage and healing",
         "soins prodigués", "puissance de soins", "dégâts et les soins" },
 }
-local foodTags, scanTip = {}, nil
+local foodTags, scanTip, foodTries, redrawSoon = {}, nil, {}, false
+-- The game fills an item's "Use:" line only once its spell is loaded: until then, try again a bit later.
+local function RetryLater()
+    if redrawSoon or not C_Timer then return end
+    redrawSoon = true
+    C_Timer.After(1, function()
+        redrawSoon = false
+        if ns.ListsUI and ns.ListsUI.Soon then ns.ListsUI.Soon() end
+    end)
+end
 local function RequestFood(id)
     if ns.RequestItem then ns.RequestItem(id)
     elseif C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
@@ -236,8 +246,13 @@ function LS.FoodTags(id)
         if t then parts[#parts + 1] = t:lower() end
     end
     scanTip:Hide()
-    if #parts == 0 then RequestFood(id); return nil end
     local text = " " .. table.concat(parts, " ") .. " "
+    local use = ((ITEM_SPELL_TRIGGER_ONUSE or "Use:"):lower()):gsub("[:：%s]+$", "")
+    if not text:find(use, 1, true) and not text:find("use:", 1, true) and not text:find("utiliser", 1, true) then
+        -- No "Use:" line yet (spell text not loaded). A few tries, then keep what we have (Misc).
+        foodTries[id] = (foodTries[id] or 0) + 1
+        if foodTries[id] < 10 then RequestFood(id); RetryLater(); return nil end
+    end
     local tags, any = {}, false
     for key, words in pairs(FOOD_WORDS) do
         for _, w in ipairs(words) do
@@ -251,6 +266,9 @@ function LS.FoodTags(id)
     foodTags[id] = tags
     return tags
 end
+-- Data saved by a temporary debug command during development: no longer used.
+ns.On("DB_READY", function() if ns.db then ns.db.foodDump = nil end end)
+
 -- Does the food have this buff? ("all": everything passes; not loaded yet: only under "all")
 function LS.FoodMatch(id, stat)
     if not stat or stat == "all" then return true end
