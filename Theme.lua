@@ -21,9 +21,9 @@ T.C = {
 }
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local CIRCLE = ns.MEDIA .. Tr("circle.tga")
-local FONT_REG = ns.MEDIA .. Tr("fonts\\Inter-Regular.ttf")
-local FONT_SEMI = ns.MEDIA .. Tr("fonts\\Inter-SemiBold.ttf")
+local CIRCLE = ns.MEDIA .. "circle.tga"
+local FONT_REG = ns.MEDIA .. "fonts\\Inter-Regular.ttf"
+local FONT_SEMI = ns.MEDIA .. "fonts\\Inter-SemiBold.ttf"
 T.WHITE, T.CIRCLE = WHITE, CIRCLE
 
 -- ------------------------------------------------------------ text

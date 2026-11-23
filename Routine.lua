@@ -488,7 +488,7 @@ local function Build()
     if ns.Setup then ns.Setup.AttachBanner(frame) end
 
     local icon = frame:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. Tr("icon.tga")); icon:SetSize(26, 26); icon:SetPoint("TOPLEFT", 14, -12)
+    icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(26, 26); icon:SetPoint("TOPLEFT", 14, -12)
     local title = T.Text(frame, 15, { bold = true, text = Tr("Routine") }); title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, 1)
     frame.roles = T.Text(frame, 12, { bold = true, color = C.muted }); frame.roles:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 8, -2)
     local close = T.CloseButton(frame, function() frame:Hide() end); close:SetPoint("TOPRIGHT", -8, -10)
@@ -736,7 +736,7 @@ function RT.Refresh()
         if not name then return "|cffed5c52" .. fallback .. "|r" end
         local c = ns.db.chars[key]
         local r, g, b = ns.ClassColor(c and c.class)
-        return (Tr("|cff%02x%02x%02x%s|r")):format(math.floor(r * 255), math.floor(g * 255), math.floor(b * 255), name)
+        return ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255), math.floor(g * 255), math.floor(b * 255), name)
     end
     local names = {}
     for _, k in ipairs(Q.Crafters()) do names[#names + 1] = Colored(k, "?") end
@@ -893,7 +893,7 @@ function RT.UpdateMerchantBar()
         mbar:SetPoint("BOTTOMLEFT", MerchantFrame, "TOPLEFT", 60, 4)
         mbar:SetFrameLevel((MerchantFrame:GetFrameLevel() or 1) + 10)
         T.Surface(mbar, C.window, 10, { 1, 1, 1, 0.09 })
-        local icon = mbar:CreateTexture(nil, "ARTWORK"); icon:SetTexture(ns.MEDIA .. Tr("icon.tga"))
+        local icon = mbar:CreateTexture(nil, "ARTWORK"); icon:SetTexture(ns.MEDIA .. "icon.tga")
         icon:SetSize(20, 20); icon:SetPoint("LEFT", 8, 0)
         mbar.buy = T.Button(mbar, "", 200, 26, function() Q.BuyVendorNeeds(false) end)
         mbar.buy:SetPoint("LEFT", icon, "RIGHT", 8, 0)
@@ -989,7 +989,7 @@ ev:SetScript("OnEvent", function(_, event, ...)
         local a, b = ...
         local text = type(b) == "string" and b or (type(a) == "string" and a) or nil
         if sending and sending.waiting and text then
-            RT.Status((Tr("|cffed5c52%s (%s)|r")):format(text, sending.name))
+            RT.Status(("|cffed5c52%s (%s)|r"):format(text, sending.name))
             sending = nil
             if ClearSendMail then ClearSendMail() end
             RT.Refresh()

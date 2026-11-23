@@ -15,7 +15,7 @@ Two people work on this addon. Everything in the repository is written in Englis
 1. Adds its lines to `CHANGELOG.md` under **Unreleased** (`Added`, `Changed`, `Fixed` or `Removed`), written for players. Changes players cannot see (CI, docs, refactoring) may skip it.
 2. Does **not** change the version (`## Version:` in the toc, `ns.version` in `Core.lua`). Only release pull requests do.
 3. Passes CI: Lua 5.1 syntax check, every toc file exists, smoke tests in English and French.
-4. Sends new player-facing strings through `Tr("...")` and adds their French line to `Locale_frFR.lua`.
+4. Sends new player-facing strings through `Tr("...")` and adds their French line to `Locale_frFR.lua` (anywhere), then runs `python3 .github/scripts/locale.py` to move each line into the section of the file that uses it. CI fails if a `Tr()` string has no French line or the file is out of order. Strings that are not text (colour codes, paths, slash commands) stay out of `Tr()`.
 5. Keeps saved data compatible, or migrates it on load. Mention any change to `ImpotPointGouvDB` in the description.
 
 ## Versions and releases

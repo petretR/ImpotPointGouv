@@ -17,6 +17,8 @@ jobs:
         run: find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
       - name: Every toc file exists
         run: bash .github/scripts/check_toc.sh
+      - name: French strings in order and complete
+        run: python3 .github/scripts/locale.py --check
       - name: Smoke tests (English)
         run: lua5.1 tests/run.lua
       - name: Smoke tests (French)

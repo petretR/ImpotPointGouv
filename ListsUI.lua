@@ -783,7 +783,7 @@ function LU.BuildPage(page)
                 end
                 r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and UNSTABLE_ICON or "")
                 r.sales:SetText(st and st.sales and (st.sales >= 10 and ("%d"):format(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) or "|cff615f5c—|r")
-                r.listed:SetText(st and st.qty and (st.qty >= 10000 and (Tr("%dk")):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
+                r.listed:SetText(st and st.qty and (st.qty >= 10000 and ("%dk"):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
                 if self.cdView then
                     -- Cooldown and gain per day on the recipe row; nothing on its materials.
                     if row.head then

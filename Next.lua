@@ -31,7 +31,7 @@ function N.Arm()
         local it, spell = ns.Destroy.NextTarget()
         if it and spell then
             action = "de"
-            macro = (Tr("/cast %s\n/use %d %d")):format(spell, it.bag, it.slot)
+            macro = ("/cast %s\n/use %d %d"):format(spell, it.bag, it.slot)
             N.label = Tr("disenchant ") .. (it.name or "?")
         end
     end

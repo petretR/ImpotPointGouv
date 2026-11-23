@@ -604,7 +604,7 @@ function M.BuildPage(page)
                     local rc = row.rec
                     local n = P.Name(row.id)
                     r.name:SetText(n .. (rc.n > 1 and n ~= "" and ("  |cff8a877f×" .. rc.n .. "|r") or ""))
-                    r.price:SetText(Money(row.cost) .. Tr("  |cff615f5c/ ") .. Money(row.vs) .. "|r")
+                    r.price:SetText(Money(row.cost) .. "  |cff615f5c/ " .. Money(row.vs) .. "|r")
                     r.rate:SetText(row.units == math.huge and "∞" or tostring(row.units))
                     r.gold:SetText(ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11, short = true }))
                     local mine = row.mySkill >= row.skill
@@ -621,11 +621,11 @@ function M.BuildPage(page)
                     local b = M.Buying()
                     r.buy.text:SetText((b and b.id == row.id) and (b.stage == "confirm" and "Confirm" or "…") or "Buy")
                     r.buy:SetDisabled(not IsAHOpen() or (b ~= nil and b.id ~= row.id))
-                    r.price:SetText(Money(row.cur) .. Tr("  |cff615f5c/ ") .. Money(row.vs) .. "|r")
+                    r.price:SetText(Money(row.cur) .. "  |cff615f5c/ " .. Money(row.vs) .. "|r")
                     r.rate:SetText(tostring(row.units))
                     r.gold:SetText(ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11, short = true }))
                 elseif self.filter == "flip" then
-                    r.price:SetText(Money(row.cur) .. Tr("  |cff615f5c/ ") .. Money(row.market) .. "|r")
+                    r.price:SetText(Money(row.cur) .. "  |cff615f5c/ " .. Money(row.market) .. "|r")
                     r.gold:SetText(ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11, short = true }))
                 else
                     r.price:SetText(Money(row.price))
