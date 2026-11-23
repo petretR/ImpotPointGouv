@@ -1,12 +1,12 @@
--- ImpotPointGouv : bilan de test par objet (/ipg report).
--- Mises en vente, ventes, prix moyens, délai de vente, invendus, et résultats réels de désenchantement.
+-- ImpotPointGouv: test report per item (/ipg report).
+-- Listings, sales, average prices, time to sell, unsold, and actual disenchant results.
 local _, ns = ...
 local Tr = ns.L
 local P = ns.Prices
 local R = {}
 ns.Report = R
 
--- Montants en texte simple (copiable) : 1g 23s 45c
+-- Amounts in plain text (copyable): 1g 23s 45c
 local function Plain(v, sign)
     if not v then return "—" end
     v = math.floor(v + 0.5)
@@ -52,7 +52,7 @@ function R.Build(days)
                 it.soldGross = it.soldGross + (tx.gross or tx.a)
                 it.net = it.net + tx.a
                 for _ = 1, q do
-                    local t0 = table.remove(it.postTimes, 1) -- mise en vente la plus ancienne (FIFO)
+                    local t0 = table.remove(it.postTimes, 1) -- oldest listing (FIFO)
                     if t0 then it.waits[#it.waits + 1] = tx.t - t0 end
                 end
             elseif tx.k == "ah_expired" then

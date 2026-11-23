@@ -1,22 +1,22 @@
--- ImpotPointGouv : profilage léger, enregistré dans les données sauvegardées (ImpotPointGouvDB.perf).
--- Mesure le temps passé dans les gestionnaires d'événements et les OnUpdate de l'addon, le bus interne
--- (ns.On / ns.Fire), les redessins de page et quelques fonctions lourdes. Chaque seconde : FPS, temps de
--- l'addon et ce qui a coûté le plus. Les appels de plus de 30 ms sont gardés à part.
--- Aucune fonction globale du jeu n'est remplacée (pas de contamination du code sécurisé).
--- /ipg perf : résumé  ·  /ipg perf off / on : couper ou remettre la mesure.
+-- ImpotPointGouv: light profiling, saved in the saved data (ImpotPointGouvDB.perf).
+-- Measures the time spent in the addon's event handlers and OnUpdate scripts, the internal bus
+-- (ns.On / ns.Fire), page redraws and a few heavy functions. Every second: FPS, addon
+-- time and what cost the most. Calls over 30 ms are kept apart.
+-- No global game function is replaced (no taint of secure code).
+-- /ipg perf: summary  ·  /ipg perf off / on: stop or restart measuring.
 local _, ns = ...
 local PR = {}
 ns.Profile = PR
 
 local clock = debugprofilestop
 local SPIKE_MS = 30
-local KEEP_SECONDS = 900   -- 15 min de chronologie
+local KEEP_SECONDS = 900   -- 15 min of timeline
 local KEEP_SPIKES = 150
 
 local function NewSession()
     return {
         started = time(), version = nil,
-        totals = {},     -- [libellé] = { n, ms, max }
+        totals = {},     -- [label] = { n, ms, max }
         timeline = {},   -- { t, fps, ms, top, topMs, n }
         spikes = {},     -- { t, label, ms }
     }
@@ -40,7 +40,7 @@ function PR.Add(label, ms)
     end
 end
 
--- Chronomètre une fonction : PR.Time("Lists:ResolveReagents", fn, ...) renvoie ce que fn renvoie.
+-- Times a function: PR.Time("Lists:ResolveReagents", fn, ...) returns what fn returns.
 local function Done(label, t0, ...)
     PR.Add(label, clock() - t0)
     return ...
@@ -49,13 +49,13 @@ function PR.Time(label, fn, ...)
     if not PR.enabled or not clock then return fn(...) end
     return Done(label, clock(), fn(...))
 end
--- Enveloppe une fonction pour qu'elle soit chronométrée à chaque appel.
+-- Wraps a function so it is timed on every call.
 function PR.Wrap(label, fn)
     return function(...) return PR.Time(label, fn, ...) end
 end
 
--- Frame d'événements ou de minuterie de l'addon : ses OnEvent / OnUpdate sont chronométrés.
--- (Remplace la méthode SetScript de CETTE frame seulement, avant que le fichier y pose ses scripts.)
+-- The addon's event or timer frame: its OnEvent / OnUpdate are timed.
+-- (Replaces the SetScript method of THIS frame only, before the file sets its scripts.)
 function PR.Frame(f, file)
     if not f or not clock then return f end
     local orig = f.SetScript
@@ -82,20 +82,20 @@ function PR.Frame(f, file)
     return f
 end
 
--- Fichier qui appelle (pour nommer les écouteurs de ns.On).
+-- Calling file (to name the ns.On listeners).
 function PR.Caller(level)
     local s = debugstack and debugstack(level or 3, 1, 0) or ""
     return s:match("([%w_]+)%.lua") or "?"
 end
 
--- Chronologie : une ligne par seconde, avec les FPS du jeu.
+-- Timeline: one line per second, with the game's FPS.
 local ticker = CreateFrame("Frame")
 local acc, frames = 0, 0
 ticker:SetScript("OnUpdate", function(_, elapsed)
     acc, frames = acc + elapsed, frames + 1
     if acc < 1 then return end
     if ns.db and ns.db.perf ~= nil and ns.db.perf.cur ~= cur then
-        -- Données prêtes : on garde la session précédente et on écrit celle-ci.
+        -- Data ready: keep the previous session and write this one.
         local prev = ns.db.perf.cur
         ns.db.perf = { cur = cur, prev = prev }
         cur.version = ns.version
@@ -117,7 +117,7 @@ ticker:SetScript("OnUpdate", function(_, elapsed)
     second = { ms = 0, n = 0, by = {} }
 end)
 
--- Résumé dans la discussion.
+-- Summary in chat.
 function PR.Report(arg)
     if arg == "off" or arg == "on" then
         PR.enabled = arg == "on"

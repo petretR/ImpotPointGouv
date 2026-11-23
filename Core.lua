@@ -1,4 +1,4 @@
--- ImpotPointGouv : namespace, base de données, utilitaires.
+-- ImpotPointGouv: namespace, database, utilities.
 local ADDON, ns = ...
 local Tr = ns.L
 ns.name = ADDON
@@ -7,7 +7,7 @@ _G.ImpotPointGouv = ns
 
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. Tr("\\media\\")
 
--- Catégories de mouvements d'or. group = "ah" pour tout ce qui touche l'Hôtel des ventes.
+-- Gold movement categories. group = "ah" for everything related to the auction house.
 ns.CATEGORIES = {
     ah_sale     = { label = Tr("AH sales"),            group = "ah",     color = {0.36, 0.82, 0.45} },
     ah_buy      = { label = Tr("AH purchases"),            group = "ah",     color = {0.93, 0.42, 0.36} },
@@ -40,11 +40,11 @@ local DEFAULTS = {
     snaps = {},   -- [key] = { {time, money}, ... }
     tx = {},      -- { {t, c, k, a, i, q, who, gross, cut, dep}, ... }
     settings = { minimap = {}, range = "30d", chartMode = "balance", firstRun = true, craftSort = "profit" },
-    prices = {},  -- [royaume][itemID] = { cur, qty, t, d = { {jour, plusBas, qté}, ... } }
-    vendor = {},  -- [itemID] = prix d'achat unitaire chez le marchand (appris)
-    items = {},   -- [itemID] = nom
-    recipes = {}, -- [métier][recette] = { p = produit, m = quantité produite, r = { {id, n}, ... } }
-    scan = {},    -- [royaume] = { lastFull = time }
+    prices = {},  -- [realm][itemID] = { cur, qty, t, d = { {day, lowest, qty}, ... } }
+    vendor = {},  -- [itemID] = unit purchase price at the vendor (learned)
+    items = {},   -- [itemID] = name
+    recipes = {}, -- [profession][recipe] = { p = product, m = quantity made, r = { {id, n}, ... } }
+    scan = {},    -- [realm] = { lastFull = time }
 }
 
 local function Merge(dst, src)
@@ -58,10 +58,10 @@ local function Merge(dst, src)
     end
 end
 
--- v2 : répare les données faussées par l'ancien relevé de déconnexion (GetMoney() = 0 à la sortie).
+-- v2: repairs data skewed by the old logout reading (GetMoney() = 0 on exit).
 local function RepairLogoutZeros(db)
     local removedTx, removedSnaps = 0, 0
-    -- 1) "Offline change" dont le relevé précédent était ce faux 0 : c'est le solde recompté.
+    -- 1) "Offline change" whose previous reading was that false 0: it is the balance counted again.
     for i = #db.tx, 1, -1 do
         local tx = db.tx[i]
         if tx.k == "offline" then
@@ -72,7 +72,7 @@ local function RepairLogoutZeros(db)
             if prev and prev[2] == 0 then table.remove(db.tx, i); removedTx = removedTx + 1 end
         end
     end
-    -- 2) Relevés à 0 juste après un relevé non nul (déconnexions), puis solde enregistré corrigé.
+    -- 2) Readings of 0 right after a non-zero reading (logouts), then the saved balance is corrected.
     for key, s in pairs(db.snaps) do
         for i = #s, 2, -1 do
             if s[i][2] == 0 and s[i - 1][2] > 0 then table.remove(s, i); removedSnaps = removedSnaps + 1 end
@@ -82,7 +82,7 @@ local function RepairLogoutZeros(db)
     return removedTx, removedSnaps
 end
 
--- v3 : un "Offline change" identique à une opération du même perso juste avant = la même somme comptée deux fois.
+-- v3: an "Offline change" identical to an operation of the same character just before = the same amount counted twice.
 local function RepairDoubleOffline(db)
     local removed = 0
     for i = #db.tx, 1, -1 do
@@ -99,16 +99,16 @@ local function RepairDoubleOffline(db)
 end
 ns.RepairDoubleOffline = RepairDoubleOffline
 
--- ---------------------------------------------------------------- royaume
--- Nom du royaume, même quand le jeu renvoie une chaîne vide (vu sur Forever : toute une session sans nom).
--- Repli : le nom déjà vu pour ce numéro de royaume (dans l'identifiant du perso, "Player-6923-…"),
--- puis le dernier nom connu, puis le royaume qui a le plus de prix.
+-- ---------------------------------------------------------------- realm
+-- Realm name, even when the game returns an empty string (seen on Forever: a whole session without a name).
+-- Fallback: the name already seen for this realm number (in the character ID, "Player-6923-…"),
+-- then the last known name, then the realm with the most prices.
 local function RealmId()
     local guid = UnitGUID and UnitGUID("player")
     return guid and guid:match("^Player%-(%d+)%-")
 end
--- Résultat gardé pour la session : ns.Realm() est appelé à chaque lecture de prix (des milliers de fois par
--- affichage), et sans nom du jeu le repli ne doit être calculé qu'une fois.
+-- Result kept for the session: ns.Realm() is called on every price read (thousands of times per
+-- redraw), and without a name from the game the fallback must be computed only once.
 local realmCache
 function ns.Realm()
     local r = GetRealmName and GetRealmName()
@@ -118,7 +118,7 @@ function ns.Realm()
             local rid = RealmId()
             db.realmById = db.realmById or {}
             if rid then db.realmById[rid] = r end
-            db.lastRealm, db.realmKey = r, r -- realmKey : nom gardé par la v0.23.1 / 0.24.0
+            db.lastRealm, db.realmKey = r, r -- realmKey: name kept by v0.23.1 / 0.24.0
         end
         realmCache = r
         return r
@@ -129,13 +129,13 @@ function ns.Realm()
     local found = (rid and db.realmById and db.realmById[rid])
         or (db.realmKey ~= "" and db.realmKey) or db.lastRealm
     if not found then
-        -- Royaume enregistré pour ce personnage.
+        -- Realm saved for this character.
         local guid = UnitGUID and UnitGUID("player")
         local c = guid and db.chars and db.chars[guid]
         if c and c.realm and c.realm ~= "" then found = c.realm end
     end
     if not found then
-        -- Aucun nom connu : le royaume qui a le plus de prix enregistrés (calculé une seule fois).
+        -- No known name: the realm with the most saved prices (computed only once).
         local most = -1
         for k, t in pairs(db.prices or {}) do
             if k ~= "" and k ~= "?" then
@@ -152,7 +152,7 @@ function ns.Realm()
     return found
 end
 
--- Données enregistrées sous un royaume vide ("") : fusionnées dans le vrai royaume.
+-- Data saved under an empty realm (""): merged into the real realm.
 local function DayOf(s) return tonumber((s or ""):match("^(%-?%d+)")) end
 local function F(s) local o, i = {}, 0; for f in (s .. ","):gmatch("([^,]*),") do i = i + 1; o[i] = tonumber(f) end; return o end
 local function N(v) return v and tostring(math.floor(v + 0.5)) or "" end
@@ -196,7 +196,7 @@ local function MergeHist(dst, src)
                 local f = F(s)
                 local g = byDay[f[1]]
                 if g then
-                    -- même jour : plus bas, Σ marché, n marché, qté (la plus récente), parties, ajoutées, scans
+                    -- same day: lowest, Σ market, n market, qty (most recent), gone, added, scans
                     g[2] = (g[2] and f[2]) and math.min(g[2], f[2]) or g[2] or f[2]
                     g[3] = ((g[3] or 0) + (f[3] or 0)) > 0 and ((g[3] or 0) + (f[3] or 0)) or nil
                     g[4] = (g[4] or 0) + (f[4] or 0)
@@ -281,13 +281,13 @@ function ns.InitDB()
         local n = fresh and 0 or RepairDoubleOffline(ns.db)
         if n > 0 then ns.repairMsg = (Tr("data repaired: %d \"Offline change\" counted twice removed.")):format(n) end
         ns.db.version = 3
-    end    -- Session passée avec un nom de royaume vide : on remet ses données dans le vrai royaume.
+    end    -- Session spent with an empty realm name: its data goes back into the real realm.
     if not fresh then ns.FixEmptyRealm() end
     -- Drop empty names saved by scans (listings read before the game had loaded the item).
     for id, n in pairs(ns.db.items or {}) do if n == "" then ns.db.items[id] = nil end end
 end
 
--- ---------------------------------------------------------------- argent
+-- ---------------------------------------------------------------- money
 local GOLD_ICON   = "|TInterface\\MoneyFrame\\UI-GoldIcon:%d:%d:1:0|t"
 local SILVER_ICON = "|TInterface\\MoneyFrame\\UI-SilverIcon:%d:%d:1:0|t"
 local COPPER_ICON = "|TInterface\\MoneyFrame\\UI-CopperIcon:%d:%d:1:0|t"
@@ -299,7 +299,7 @@ local function Thousands(n)
 end
 ns.Thousands = Thousands
 
--- Format avec icônes : 12[or] 05[argent] 30[cuivre]. opts.sign = true pour forcer +/−.
+-- Format with icons: 12[gold] 05[silver] 30[copper]. opts.sign = true to force +/−.
 function ns.FormatMoney(copper, opts)
     opts = opts or {}
     copper = math.floor((copper or 0) + 0.5)
@@ -326,7 +326,7 @@ function ns.FormatMoney(copper, opts)
     return text
 end
 
--- Texte compact pour les axes : "1,2k po", "35 po", "80 pa", "40 pc".
+-- Compact text for axes: "1.2k g", "35 g", "80 s", "40 c".
 function ns.FormatMoneyAxis(copper)
     local v = math.abs(copper)
     local sign = copper < 0 and "−" or ""
@@ -343,7 +343,7 @@ function ns.Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cffe0a83dImpotPointGouv|r : " .. tostring(msg))
 end
 
--- "CAMWOW EU4 Realm 4 PvP" -> "EU4 · Realm 4 · PvP" (nom interne de WoW Forever).
+-- "CAMWOW EU4 Realm 4 PvP" -> "EU4 · Realm 4 · PvP" (WoW Forever's internal name).
 function ns.PrettyRealm(realm)
     if not realm or realm == "" then return "" end
     local r = realm:gsub("^CAMWOW%s*", "")
@@ -359,9 +359,9 @@ function ns.ClassColor(class)
 end
 
 
--- ---------------------------------------------------------------- compatibilité retail
--- WoW Forever tourne sur un client retail : plusieurs anciennes fonctions globales n'existent
--- plus (déplacées dans C_Item / C_MerchantFrame). On passe toujours par ces raccourcis.
+-- ---------------------------------------------------------------- retail compatibility
+-- WoW Forever runs on a retail client: several old global functions no longer
+-- exist (moved to C_Item / C_MerchantFrame). Always go through these shortcuts.
 -- Every name the game returns is kept (ns.db.items): lists show it even when the game's item cache
 -- no longer has it, instead of an empty name that blinks as items load.
 local function LearnName(id, name, ...)
@@ -400,7 +400,7 @@ function ns.GetItemIcon(id)
     local fn = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
     return fn and fn(id) or nil
 end
--- Renvoie le format historique : name, texture, price, quantity, numAvailable, isPurchasable, isUsable, extendedCost
+-- Returns the historical format: name, texture, price, quantity, numAvailable, isPurchasable, isUsable, extendedCost
 function ns.GetMerchantItemInfo(i)
     if C_MerchantFrame and C_MerchantFrame.GetItemInfo then
         local info = C_MerchantFrame.GetItemInfo(i)
@@ -411,8 +411,8 @@ function ns.GetMerchantItemInfo(i)
     if GetMerchantItemInfo then return GetMerchantItemInfo(i) end
 end
 
--- Reconnaît les courriers de l'HV via les sujets localisés du jeu.
--- Renvoie kind ("sale"|"won"|"expired"|"cancelled"|"outbid") et le nom d'objet capturé.
+-- Recognizes AH mails through the game's localized subjects.
+-- Returns kind ("sale"|"won"|"expired"|"cancelled"|"outbid") and the captured item name.
 local function SubjectPattern(fmt)
     if type(fmt) ~= "string" then return nil end
     local p = fmt:gsub("[%(%)%.%+%-%*%?%[%]%^%$]", "%%%0")
@@ -440,11 +440,11 @@ function ns.AuctionMailKind(subject)
     end
 end
 
--- Petit bus d'événements interne (le Ledger prévient l'UI).
+-- Small internal event bus (the Ledger notifies the UI).
 local listeners = {}
 function ns.On(name, fn)
     listeners[name] = listeners[name] or {}
-    -- Chronométré par écouteur (/ipg perf) : "Fichier:ÉVÉNEMENT".
+    -- Timed per listener (/ipg perf): "File:EVENT".
     if ns.Profile then fn = ns.Profile.Wrap(ns.Profile.Caller(3) .. ":" .. name, fn) end
     table.insert(listeners[name], fn)
 end
@@ -456,14 +456,14 @@ function ns.Fire(name, ...)
 end
 
 
--- Objet "commodité" de l'HV (acheté en quantité, sans choisir l'annonce) : en pratique, ce qui s'empile.
--- (GetItemCommodityStatus attend un emplacement de sac, pas un ID : inutilisable ici.)
+-- AH "commodity" item (bought by quantity, without picking the listing): in practice, what stacks.
+-- (GetItemCommodityStatus expects a bag slot, not an ID: unusable here.)
 function ns.IsCommodity(id)
     local stack = select(8, ns.GetItemInfo(id))
     return stack == nil or stack > 1
 end
 
--- Libellé coloré du meilleur débouché d'une création (affiché sur les lignes de la file).
+-- Colored label of a craft's best outlet (shown on the queue rows).
 function ns.ChannelLabel(ch)
     if ch == "vendor" then return "|cffe0a83dVendor|r" end
     if ch == "de" then return "|cffbf8cffDE|r" end

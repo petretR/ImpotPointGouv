@@ -1,5 +1,5 @@
--- ImpotPointGouv : aperçu avant une action en lot (envoi, vente au marchand, achat chez le marchand).
--- Une liste à cocher, un total, et un bouton de confirmation : rien ne part sans que vous l'ayez vu.
+-- ImpotPointGouv: preview before a batch action (sending, selling to a vendor, buying from a vendor).
+-- A checklist, a total and a confirm button: nothing goes out without you seeing it.
 local _, ns = ...
 local Tr = ns.L
 local T = ns.Theme
@@ -69,7 +69,7 @@ local function Build()
 end
 
 -- rows = { { id, qty, label?, extra?, value? (cuivre), checked? }, ... }
--- opts = { title, sub, confirm (libellé), total = function(chosenRows) -> texte }
+-- opts = { title, sub, confirm (label), total = function(chosenRows) -> text }
 function PV.Show(rows, opts, onConfirm)
     if not rows or #rows == 0 then return false end
     if not win then Build() end

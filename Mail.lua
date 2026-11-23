@@ -1,8 +1,8 @@
--- ImpotPointGouv : boîte aux lettres maison (liste, synthèse, "Collect all").
+-- ImpotPointGouv: custom mailbox (list, summary, "Collect all").
 --
--- La fenêtre Blizzard reste ouverte mais invisible (la fermer couperait la session de
--- courrier) ; la nôtre la remplace : onglets Inbox (liste, récupération filtrée) et
--- Send (destinataire, or, objets des sacs). "Blizzard mailbox" révèle l'originale.
+-- The Blizzard window stays open but invisible (closing it would end the mail
+-- session); ours replaces it: Inbox tab (list, filtered collection) and
+-- Send tab (recipient, gold, bag items). "Blizzard mailbox" shows the original.
 local _, ns = ...
 local Tr = ns.L
 local T = ns.Theme
@@ -27,10 +27,10 @@ local KINDS = {
 
 local frame, mailOpen, lastCheck = nil, false, 0
 local mails = {}
-local run -- état de la récupération en cours
+local run -- state of the collection in progress
 local sessionStart
 
--- ------------------------------------------------------------ lecture boîte
+-- ------------------------------------------------------------ reading the mailbox
 local function FreeSlots()
     local fn = (C_Container and C_Container.GetContainerNumFreeSlots) or GetContainerNumFreeSlots
     if not fn then return 99 end
@@ -62,7 +62,7 @@ local function ReadMail(i)
     m.item = invItem or subjItem
     m.who = invPlayer
     m.bid = invBid
-    -- Première pièce jointe : icône, nom, qualité, quantité.
+    -- First attachment: icon, name, quality, quantity.
     if m.itemCount > 0 and GetInboxItem then
         for a = 1, (ATTACHMENTS_MAX_RECEIVE or 16) do
             local name, _, texture, count, quality = GetInboxItem(i, a)
@@ -98,7 +98,7 @@ local function FindSig(sig)
     end
 end
 
--- ------------------------------------------------------------ récupération
+-- ------------------------------------------------------------ collection
 local FILTER = {
     sales = { sale = true },
     buys = { won = true, outbid = true },
@@ -135,7 +135,7 @@ local Step, Finish
 
 local function SetStatus(text) if frame then frame.status:SetText(text or "") end end
 
--- Infobulle à droite de la fenêtre, alignée sur la ligne survolée (pas au-dessus, loin de la souris).
+-- Tooltip right of the window, aligned with the hovered row (not above, far from the mouse).
 local function RowTip(row)
     GameTooltip:SetOwner(row, "ANCHOR_NONE")
     GameTooltip:ClearAllPoints()
@@ -155,11 +155,11 @@ function Finish(reason)
     M.Refresh()
 end
 
--- Signature d'un courrier pour le sauter : plusieurs ventes identiques ont la même,
--- donc on compte combien de courriers de cette signature sont à sauter.
+-- Signature of a mail to skip it: several identical sales share it,
+-- so we count how many mails with that signature to skip.
 local function SkipAdd(sig) run.skip[sig] = (run.skip[sig] or 0) + 1 end
 
--- Un seul minuteur à la fois ; les événements du courrier relancent l'étape tout de suite.
+-- One timer at a time; mail events restart the step right away.
 local function Poke(delay)
     if not run or run.timer then return end
     run.timer = true
@@ -172,7 +172,7 @@ local function Poke(delay)
 end
 M.Poke = function() if run and run.pend then Poke(0) end end
 
--- Rafraîchit la liste au plus deux fois par seconde pendant la récupération.
+-- Refreshes the list at most twice per second during collection.
 local function LightRefresh()
     if run and run.lastDraw and GetTime() - run.lastDraw < 0.5 then return end
     if run then run.lastDraw = GetTime() end
@@ -182,7 +182,7 @@ end
 function Step()
     if not run then return end
     if not mailOpen then Finish("Mailbox closed, collection interrupted."); return end
-    -- Attendre que le serveur ait traité la dernière action : le courrier a disparu ou s'est vidé.
+    -- Wait until the server has processed the last action: the mail is gone or empty.
     local p = run.pend
     if p then
         local n = GetInboxNumItems()
@@ -192,7 +192,7 @@ function Step()
             done = (money or 0) < p.money or (itemCount or 0) < p.items or subject ~= p.subject
         end
         if not done then
-            if GetTime() - p.t < 4 then Poke(0.05); return end -- le serveur peut être lent
+            if GetTime() - p.t < 4 then Poke(0.05); return end -- the server can be slow
             SkipAdd(p.sig)
         end
         run.pend = nil
@@ -218,7 +218,7 @@ function Step()
         end
     end
     M.Refresh(true)
-    -- Plus rien de visible : d'autres courriers attendent côté serveur ?
+    -- Nothing visible left: more mails waiting on the server?
     if total > n then
         local wait = math.max(0, lastCheck + 61 - GetTime())
         SetStatus((Tr("%d mails waiting on the server, refreshing in %d s…")):format(total - n, math.ceil(wait)))
@@ -234,7 +234,7 @@ function Step()
         end
         return
     end
-    -- Courriers sautés parce que le serveur tardait : on refait un passage avant de conclure.
+    -- Mails skipped because the server was slow: one more pass before finishing.
     if next(run.skip) and (run.passes or 0) < 2 then
         run.passes = (run.passes or 0) + 1
         run.skip = {}
@@ -259,7 +259,7 @@ local function Card(parent)
     return f
 end
 
--- La fenêtre Blizzard reste ouverte (sinon le courrier se ferme) mais invisible, sous la nôtre.
+-- The Blizzard window stays open (otherwise the mailbox closes) but invisible, under ours.
 local function BlizzardVisible(v)
     if not MailFrame then return end
     MailFrame:SetAlpha(v and 1 or 0)
@@ -305,7 +305,7 @@ local function Build()
     local blizz = T.Button(header, Tr("Blizzard mailbox"), 118, 26, function() ShowBlizzard(false) end)
     blizz:SetPoint("RIGHT", close, "LEFT", -10, 0)
     blizz.tooltip = Tr("Show the original mailbox. An ImpotPointGouv button brings you back here.")
-    -- Onglets
+    -- Tabs
     frame.tabs = {}
     local tx = 230
     for _, d in ipairs({ { "inbox", "Inbox" }, { "send", "Send" } }) do
@@ -315,7 +315,7 @@ local function Build()
         frame.tabs[d[1]] = t
     end
 
-    -- Cartes de synthèse
+    -- Summary cards
     frame.cards = {}
     local labels = { "Gold to collect", "AH sales", "Attached items", "Expired / cancelled" }
     local gap, pad = 12, 18
@@ -330,7 +330,7 @@ local function Build()
         frame.cards[i] = card
     end
 
-    -- Récupération ciblée (comme TSM) : seulement un type de courrier.
+    -- Targeted collection (like TSM): one mail type only.
     frame.filters = {}
     local fx = pad
     local lbl = T.Text(frame, 11, { color = C.faint, text = Tr("Collect only:") })
@@ -343,7 +343,7 @@ local function Build()
         frame.filters[d[1]] = b
     end
 
-    -- Liste
+    -- List
     local list = Card(frame)
     list:SetPoint("TOPLEFT", pad, -56 - 16 - 74 - 12 - 34)
     list:SetPoint("BOTTOMRIGHT", -pad, 64)
@@ -367,7 +367,7 @@ local function Build()
         M.Draw()
     end)
 
-    -- Barre du bas
+    -- Bottom bar
     frame.status = T.Text(frame, 12, { color = C.muted })
     frame.status:SetPoint("BOTTOMLEFT", pad, 24)
     frame.status:SetWidth(290) -- left of the three collect buttons
@@ -385,7 +385,7 @@ local function Build()
 
     M.BuildSend(frame)
 
-    -- Bouton pour revenir depuis la boîte Blizzard
+    -- Button to come back from the Blizzard mailbox
     if MailFrame then
         local reopen
         reopen = T.Button(MailFrame, Tr("ImpotPointGouv"), 120, 22, function()
@@ -583,11 +583,11 @@ function M.ShowOverlay()
     M.Refresh()
 end
 
--- ------------------------------------------------------------ onglet Send (façon TSM)
--- Destinataire (vos persos en un clic), or, et objets des sacs à cocher ; envoi par lots de 12 pièces jointes.
+-- ------------------------------------------------------------ Send tab (TSM-style)
+-- Recipient (your characters in one click), gold, and bag items to check; sent in batches of 12 attachments.
 local basket = {}
 
--- Choisir N piles d'un objet : on garde les N premières piles des sacs (l'ordre de l'envoi).
+-- Pick N stacks of an item: the first N stacks in the bags are kept (the send order).
 local function SetStacks(it, n)
     n = math.max(0, math.min(n, #(it.stacks or {})))
     if n == 0 then basket[it.id] = nil; return end
@@ -647,7 +647,7 @@ local function BagItems()
                 end
                 e.count = e.count + (info.stackCount or 1)
                 e.stacks = e.stacks or {}
-                e.stacks[#e.stacks + 1] = info.stackCount or 1 -- même ordre que l'envoi (sac par sac)
+                e.stacks[#e.stacks + 1] = info.stackCount or 1 -- same order as sending (bag by bag)
             end
         end
     end
@@ -678,10 +678,10 @@ function M.BuildSend(f)
     f.send = p
     local pad = 18
 
-    -- Colonne gauche : destinataire, or, panier
+    -- Left column: recipient, gold, basket
     local to = T.Text(p, 12, { bold = true, text = Tr("To") }); to:SetPoint("TOPLEFT", pad, -18)
     p.to = MakeBox(p, 250); p.to:SetPoint("TOPLEFT", pad, -38)
-    -- Saisie semi-automatique : vos persos (nom complet) et vos destinataires récents.
+    -- Autocomplete: your characters (full name) and your recent recipients.
     p.sug = CreateFrame("Frame", nil, p)
     p.sug:SetPoint("TOPLEFT", p.to, "BOTTOMLEFT", 0, -2); p.sug:SetWidth(250)
     p.sug:SetFrameLevel((p:GetFrameLevel() or 1) + 40)
@@ -749,7 +749,7 @@ function M.BuildSend(f)
         p.sug:Hide(); M.DrawSend()
     end)
 
-    -- Colonne droite : objets des sacs (clic = ajouter / retirer)
+    -- Right column: bag items (click = add / remove)
     local right = Card(p)
     right:SetPoint("TOPLEFT", pad + 270, -14); right:SetPoint("BOTTOMRIGHT", -pad, 16)
     local rt = T.Text(right, 12, { bold = true, text = Tr("Your bags") }); rt:SetPoint("TOPLEFT", 14, -10)
@@ -809,7 +809,7 @@ function M.BuildSend(f)
             local it = self.item
             if not it then return end
             RowTip(self)
-            -- L'objet réel du sac (suffixe, enchantement, état lié), pas une fiche générique.
+            -- The actual bag item (suffix, enchant, bound state), not a generic item tooltip.
             if it.bag and GameTooltip.SetBagItem then GameTooltip:SetBagItem(it.bag, it.slot)
             elseif GameTooltip.SetItemByID then GameTooltip:SetItemByID(it.id) end
             GameTooltip:Show()
@@ -824,7 +824,7 @@ function M.BuildSend(f)
         M.DrawSend()
     end)
     p.empty = T.Text(right, 12, { color = C.faint, text = Tr("Nothing mailable in your bags.") }); p.empty:SetPoint("CENTER")
-    -- Indique qu'il y a d'autres objets plus bas (molette).
+    -- Shows that there are more items below (mouse wheel).
     p.more = T.Text(right, 11, { color = C.gold, justify = "CENTER" }); p.more:SetPoint("BOTTOM", 0, 8)
     p.track = right:CreateTexture(nil, "ARTWORK"); p.track:SetTexture(T.WHITE); p.track:SetVertexColor(1, 1, 1, 0.05)
     p.track:SetPoint("TOPRIGHT", -3, -32); p.track:SetPoint("BOTTOMRIGHT", -3, 28); p.track:SetWidth(3)
@@ -833,7 +833,7 @@ function M.BuildSend(f)
     p:Hide()
 end
 
--- Destinataires possibles : vos persos (nom complet si connu) puis vos envois récents.
+-- Possible recipients: your characters (full name if known) then your recent sends.
 local function Candidates()
     local list, seen = {}, {}
     local me = ns.Ledger.CharKey()
@@ -860,7 +860,7 @@ function M.Suggest()
     local shown = 0
     for _, cand in ipairs(Candidates()) do
         local n = cand.name:lower()
-        -- Correspond au début du nom, ou au début du nom de famille ("vach" -> Roselyne Vachelot).
+        -- Matches the start of the name, or the start of the last name ("vach" -> Roselyne Vachelot).
         local hit = q == "" or n:find(q, 1, true) == 1 or n:find(" " .. q, 1, true)
         if hit and n ~= q and shown < #p.sug.buttons then
             shown = shown + 1
@@ -873,7 +873,7 @@ function M.Suggest()
     p.sug:SetShown(shown > 0 and p.to:HasFocus())
 end
 
--- Après un envoi réussi : mémorise le destinataire, et apprend le nom complet d'un de vos persos.
+-- After a successful send: remembers the recipient and learns the full name of one of your characters.
 local function Remember(name)
     if not name or name == "" then return end
     ns.db.mailRecent = ns.db.mailRecent or {}
@@ -895,7 +895,7 @@ function M.QuickFill(kind)
     wipe(basket)
     local key = RT.Bank()
     if kind ~= "crafts" then
-        -- Le crafteur choisi dans "To" s'il en est un, sinon le premier crafteur qui attend des composants.
+        -- The crafter picked in "To" if it is one, otherwise the first crafter waiting for materials.
         key = nil
         local typed = p.to:GetText() or ""
         for _, k in ipairs(ns.Queue.Crafters()) do
@@ -908,7 +908,7 @@ function M.QuickFill(kind)
         end
     end
     local want = kind == "crafts" and RT.CraftsWant() or (key and RT.ReagentsWant(key) or {})
-    -- Piles entières qui tiennent dans la quantité voulue (même règle que la Routine).
+    -- Whole stacks that fit in the wanted quantity (same rule as the Routine).
     for _, st in ipairs(RT.BagStacks(want)) do basket[st.id] = (basket[st.id] or 0) + st.count end
     if key then p.to:SetText(RT.CharName(key) or "") end
     p.status:SetText(next(basket) and "" or (kind == "crafts" and "Nothing to send to your bank." or "Your crafter needs nothing from these bags."))
@@ -978,7 +978,7 @@ function DrawSendInner()
         p.more:SetText("")
     end
     p.track:SetShown(extra > 0); p.thumb:SetShown(extra > 0)
-    -- Destinataires rapides : banque, crafteur, puis vos autres persos.
+    -- Quick recipients: bank, crafter, then your other characters.
     local RT = ns.Routine
     local me = ns.Ledger.CharKey()
     local keys, seen = {}, {}
@@ -1003,7 +1003,7 @@ function DrawSendInner()
     local n, stacks = 0, 0
     for id, q in pairs(basket) do n = n + q; stacks = stacks + 1 end
     local money = (tonumber(p.gold:GetText() or "") or 0) * 10000 + (tonumber(p.silver:GetText() or "") or 0) * 100
-    -- Pièces jointes = piles dans les sacs (12 par courrier).
+    -- Attachments = stacks in the bags (12 per mail).
     local MAX = ATTACHMENTS_MAX_SEND or 12
     local att = p.attachments or 0
     local mailsN = math.max(1, math.ceil(att / MAX))
@@ -1020,7 +1020,7 @@ function DrawSendInner()
             mailsN > 1 and (Tr("|cffe0a83d%d mails|r · %d attachments in total")):format(mailsN, att)
                 or (left > 0 and (Tr("|cff5cd173%d slot%s left|r in this mail")):format(left, left == 1 and "" or "s") or "|cffe0a83dmail full|r: more goes in a 2nd mail")))
     end
-    -- Barre de remplissage du courrier en cours.
+    -- Fill bar of the current mail.
     p.bar:SetWidth(math.max(1, p.barBg:GetWidth() * (att == 0 and 0 or inLast / MAX)))
     p.bar:SetShown(att > 0)
     local busy = ns.Routine and ns.Routine.IsSending()
@@ -1049,7 +1049,7 @@ end
 function M.SendStatus(text)
     if frame and frame.send and frame.send:IsShown() and text then
         frame.send.status:SetText(text)
-        C_Timer.After(0, M.DrawSend) -- le bouton ne reste pas sur "Sending…"
+        C_Timer.After(0, M.DrawSend) -- the button does not stay on "Sending…"
     end
 end
 
@@ -1065,7 +1065,7 @@ function M.SetTab(tab)
     end
 end
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Mail") end
 for _, e in ipairs({ "MAIL_SHOW", "MAIL_CLOSED", "MAIL_INBOX_UPDATE", "UI_ERROR_MESSAGE", "BAG_UPDATE" }) do
@@ -1092,7 +1092,7 @@ ev:SetScript("OnEvent", function(_, event, ...)
         local msg = type(b) == "string" and b or a
         if run and (msg == ERR_INV_FULL or msg == ERR_ITEM_MAX_COUNT) then run.bagsFull = true end
     elseif (event == "MAIL_INBOX_UPDATE" or event == "BAG_UPDATE") and run then
-        M.Poke() -- la récupération avance dès que le serveur répond, et rafraîchit elle-même
+        M.Poke() -- the collection moves on as soon as the server answers, and refreshes itself
     elseif (event == "MAIL_INBOX_UPDATE" or event == "BAG_UPDATE") and frame and frame:IsShown() then
         if queued then return end
         queued = true

@@ -1,12 +1,12 @@
--- ImpotPointGouv : données des listes (généré). Ne pas modifier à la main.
+-- ImpotPointGouv: list data (generated). Do not edit by hand.
 local _, ns = ...
 local D = {}
 ns.Data = D
 
--- Spés : { classe, spé, rôle }
+-- Specs: { class, spec, role }
 D.specs = {{"Druid","Balance","caster"}, {"Druid","Feral DPS","melee"}, {"Druid","Restoration","heal"}, {"Druid","Feral Tank","tank"}, {"Hunter","Beast Mastery","ranged"}, {"Mage","Arcane","caster"}, {"Hunter","Marksmanship","ranged"}, {"Paladin","Retribution","melee"}, {"Shaman","Elemental","caster"}, {"Hunter","Survival","ranged"}, {"Mage","Fire","caster"}, {"Priest","Shadow","caster"}, {"Priest","Holy","heal"}, {"Rogue","Subtlety","melee"}, {"Warlock","Affliction","caster"}, {"Mage","Frost","caster"}, {"Paladin","Holy","heal"}, {"Shaman","Restoration","heal"}, {"Rogue","Combat","melee"}, {"Paladin","Protection","tank"}, {"Warrior","Arms","melee"}, {"Priest","Discipline","heal"}, {"Warrior","Fury","melee"}, {"Rogue","Assassination","melee"}, {"Warlock","Destruction","caster"}, {"Shaman","Enhancement","melee"}, {"Warrior","Protection","tank"}, {"Warlock","Demonology","caster"}}
 
--- Objets (pré-BiS craftés, consommables) : n nom, p métier, sk compétence, s sort de la recette, sp spés qui l'utilisent, g équipement, low uniquement pour le leveling
+-- Items (crafted pre-BiS, consumables): n name, p profession, sk skill, s recipe spell, sp specs using it, g gear, low leveling only
 D.items = {
     [10009] = { n="Red Mageweave Pants", p="tail", sk=180, s=12060, rec=10302, src="Drop", sp="6", g=1 },
     [10033] = { n="Red Mageweave Headband", p="tail", sk=200, s=12084, rec=10320, src="Drop", sp="6", g=1 },
@@ -312,7 +312,7 @@ D.items = {
     [9421] = { n="Major Healthstone", sp="15 25 28" },
 }
 
--- Enchantements (id du sort) : rec = objet de la formule
+-- Enchants (spell id): rec = formula item
 D.ench = {
     [1213622] = { n="Enchant Gloves - Holy Power", p="ench", sk=300, rec=249536, src="Vendeur", sp="8" },
     [1213626] = { n="Enchant Gloves - Arcane Power", p="ench", sk=300, rec=249534, src="Vendeur", sp="1 6" },
@@ -422,7 +422,7 @@ D.ench = {
     [7857] = { n="Enchant Chest - Stamina", p="ench", sk=120, src="Formateur", sp="20 21 27" },
 }
 
--- Montée de métier 1-300 (listes de courses wow-professions.com, sans les objets marchands) : { tranche, quantité, id }
+-- Profession leveling 1-300 (wow-professions.com shopping lists, without vendor items): { range, quantity, id }
 D.level = {
     alch = { {"1-150",82,2447}, {"1-150",54,765}, {"1-150",50,785}, {"1-150",54,2449}, {"1-150",60,2450}, {"1-150",10,3820}, {"1-150",40,6359}, {"1-150",15,3356}, {"150-225",72,3820}, {"150-225",36,3356}, {"150-225",36,3357}, {"225-300",26,3357}, {"225-300",26,3820}, {"225-300",25,3358}, {"225-300",47,8838}, {"225-300",25,8839}, {"225-300",47,13422} },
     bs = { {"1-150",90,2835}, {"1-150",180,2840}, {"1-150",5,2842}, {"1-150",72,2836}, {"1-150",290,2841}, {"1-150",60,2838}, {"1-150",58,2319}, {"150-225",180,3575}, {"150-225",32,7912}, {"150-225",100,3859}, {"150-225",60,2838}, {"150-225",436,3860}, {"150-225",24,4234}, {"150-225",12,3864}, {"225-300",5,12365}, {"225-300",224,3860}, {"225-300",64,4304}, {"225-300",1910,12359}, {"225-300",30,8170}, {"225-300",67,7910}, {"225-300",25,7909} },
@@ -434,7 +434,7 @@ D.level = {
     fa = { {"1-225",154,2589}, {"1-225",150,2592}, {"1-225",134,4306}, {"1-225",19,4338}, {"225-300",89,4338}, {"225-300",20,14047}, {"225-300",30,13464} },
 }
 
--- Recettes de secours (si le jeu ne fournit pas les composants) : [produit] = { {id, n}, ... }
+-- Fallback recipes (when the game does not provide the materials): [product] = { {id, n}, ... }
 D.reagents = {
     [12360] = { {12359,1},{12363,1} },            -- Arcanite Bar
     [14342] = { {14256,2} },                      -- Mooncloth
@@ -492,15 +492,15 @@ D.reagents = {
     [18251] = { {17012,3} },                      -- Core Armor Kit
 }
 
--- Consommables de raid classiques (produits finis), ajoutés à la liste Consommables même si absents des guides.
+-- Classic raid consumables (finished products), added to the Consumables list even if missing from the guides.
 D.raidConsumables = { 13512,13511,13510,13513,13452,9187,13453,13454,9264,17708,9179,13447,20007,13445,8951,9088,
     13455,13457,13458,13459,13456,13461,3387,5634,9036,13446,13444,20002,13442,13931,13934,13935,13928,17222,18045,
     18262,12404,12643,20749,20748,3829,3824,15564,18251 }
 
--- Matériaux d'enchantement de haut niveau (secours si le jeu ne donne pas les composants des enchantements).
+-- High-level enchanting materials (fallback when the game does not give enchant materials).
 D.enchantMats = { 16204,16203,16202,14344,14343,11176,11177,11178,7078,7080,7082,7076,12803,12811,12808,7068,7067,7070,7069 }
 
--- Recharges : produit, métier, délai (s), sort de la recette (si connu), composants.
+-- Cooldowns: product, profession, delay (s), recipe spell (if known), materials.
 D.cooldowns = {
     { n = "Transmute: Arcanite",          p = "alch", cd = 86400,   s = 17187, out = 12360, r = { {12359,1},{12363,1} } },
     { n = "Transmute: Undeath to Water",  p = "alch", cd = 86400,   s = 17563, out = 7080,  r = { {12808,1} } },
@@ -514,8 +514,8 @@ D.cooldowns = {
     { n = "Refined Deeprock Salt",        p = "lw",   cd = 3 * 86400, item = 15846, out = 15409, r = { {8150,1} } },
 }
 
--- Composants par sort de recette (extraits d'AtlasLoot Classic, recettes Classic). Les recettes propres à Forever
--- viennent du jeu (GetRecipeSchematic, ou l'infobulle de la recette) quand il les fournit.
+-- Materials per recipe spell (extracted from AtlasLoot Classic, Classic recipes). Forever's own recipes
+-- come from the game (GetRecipeSchematic, or the recipe tooltip) when it provides them.
 D.spellReagents = {
     [2329] = { {2449,1}, {765,1}, {3371,1} },
     [2331] = { {785,1}, {765,1}, {3371,1} },

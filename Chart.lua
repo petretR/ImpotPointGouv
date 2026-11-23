@@ -1,4 +1,4 @@
--- ImpotPointGouv : graphique en courbe + aire, style "compte bancaire".
+-- ImpotPointGouv: line + area chart, "bank account" style.
 local _, ns = ...
 local T = ns.Theme
 local Chart = {}
@@ -29,7 +29,7 @@ function Chart.Create(parent)
     c.empty:SetPoint("CENTER", c.plot, "CENTER")
     c.empty:SetWidth(360)
 
-    -- Survol : ligne verticale + point + infobulle.
+    -- Hover: vertical line + dot + tooltip.
     c.cross = c.plot:CreateTexture(nil, "OVERLAY")
     c.cross:SetTexture(T.WHITE); c.cross:SetVertexColor(1, 1, 1, 0.18); c.cross:SetWidth(1)
     c.cross:Hide()
@@ -116,7 +116,7 @@ function Chart.SetData(c, points, opts)
         if p[2] > vmax then vmax = p[2] end
     end
     if opts.zeroLine then vmin = math.min(vmin, 0); vmax = math.max(vmax, 0) end
-    -- Lignes de référence (prix marchand, prix habituel) : visibles si elles restent proches de la courbe.
+    -- Reference lines (vendor price, usual price): shown when they stay close to the curve.
     for _, ref in ipairs(opts.refs or {}) do
         if ref.v and ref.v > 0 and ref.v <= vmax * 1.6 then vmin = math.min(vmin, ref.v); vmax = math.max(vmax, ref.v) end
     end
@@ -130,7 +130,7 @@ function Chart.SetData(c, points, opts)
     c.span = t1 - t0
     local function X(t) return (t - t0) / math.max(1, t1 - t0) * W end
 
-    -- Grille + étiquettes Y
+    -- Grid + Y labels
     local gi = 0
     for v = lo, hi + step * 0.5, step do
         gi = gi + 1
@@ -151,7 +151,7 @@ function Chart.SetData(c, points, opts)
     end
     HideFrom(c.grids, gi + 1); HideFrom(c.ylabels, gi + 1)
 
-    -- Étiquettes X (5)
+    -- X labels (5)
     local fmt = c.span <= 86400 * 1.5 and "%H:%M" or "%d/%m"
     for i = 1, 5 do
         local t = t0 + (t1 - t0) * (i - 1) / 4
@@ -162,12 +162,12 @@ function Chart.SetData(c, points, opts)
         lbl:SetText(date(fmt, t))
     end
 
-    -- Style "Finary" : courbe lissée, aire en dégradé qui s'efface vers le bas, point sur la dernière valeur.
+    -- "Finary" style: smoothed curve, area gradient fading downwards, dot on the last value.
     local base = opts.zeroLine and Y(0) or 0
     for i = 1, n do
         c.coords[i] = { x = X(points[i][1]), y = Y(points[i][2]), t = points[i][1], v = points[i][2] }
     end
-    -- Rééchantillonnage tous les 2 px (interpolation linéaire entre les points).
+    -- Resample every 2 px (linear interpolation between points).
     local STEP = 2
     local samples, j = {}, 1
     for x = 0, W, STEP do
@@ -176,7 +176,7 @@ function Chart.SetData(c, points, opts)
         local f = (b.x > a.x) and math.max(0, math.min(1, (x - a.x) / (b.x - a.x))) or 0
         samples[#samples + 1] = { x = x, y = a.y + (b.y - a.y) * f, v = a.v + (b.v - a.v) * f }
     end
-    -- Lissage léger (moyenne glissante) pour adoucir les marches.
+    -- Light smoothing (moving average) to soften the steps.
     local smooth = {}
     for i = 1, #samples do
         local sum, k = 0, 0
@@ -202,13 +202,13 @@ function Chart.SetData(c, points, opts)
         local above = top >= base
         local r, g, bl = color[1], color[2], color[3]
         if opts.zeroLine and not above then r, g, bl = T.C.neg[1], T.C.neg[2], T.C.neg[3] end
-        -- Pas de SetVertexColor après SetGradient : il effacerait le dégradé (aire blanche).
+        -- No SetVertexColor after SetGradient: it would erase the gradient (white area).
         local ok = hasGradient and col.SetGradient and pcall(col.SetGradient, col, "VERTICAL",
             CreateColor(r, g, bl, above and 0 or 0.26), CreateColor(r, g, bl, above and 0.26 or 0))
         if not ok then col:SetVertexColor(r, g, bl, 0.12) end
     end
     HideFrom(c.bars, #smooth)
-    -- Courbe : halo doux + trait net.
+    -- Curve: soft glow + sharp line.
     local li = 0
     for i = 1, #smooth - 1, 2 do
         local p, q = smooth[i], smooth[math.min(#smooth, i + 2)]
@@ -232,7 +232,7 @@ function Chart.SetData(c, points, opts)
         line:SetStartPoint("BOTTOMLEFT", plot, p.x, p.y); line:SetEndPoint("BOTTOMLEFT", plot, q.x, q.y)
     end
     HideFrom(c.lines, li + 1)
-    -- Bande du prix habituel (bas–haut) et lignes de référence en pointillés.
+    -- Usual price band (low–high) and dotted reference lines.
     local ri = 0
     local function Tex(layer, sub)
         ri = ri + 1
@@ -266,7 +266,7 @@ function Chart.SetData(c, points, opts)
     end
     HideFrom(c.refTex, ri + 1)
     HideFrom(c.refLabels, rl + 1)
-    -- Point sur la valeur actuelle.
+    -- Dot on the current value.
     if not c.lastDot then
         c.lastDot = plot:CreateTexture(nil, "OVERLAY", nil, 3); c.lastDot:SetTexture(T.CIRCLE); c.lastDot:SetSize(8, 8)
         c.lastRing = plot:CreateTexture(nil, "OVERLAY", nil, 2); c.lastRing:SetTexture(T.CIRCLE); c.lastRing:SetSize(18, 18)

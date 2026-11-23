@@ -1,4 +1,4 @@
--- ImpotPointGouv : conseiller de craft, ancré à droite de la fenêtre de métier.
+-- ImpotPointGouv: craft advisor, anchored to the right of the profession window.
 local _, ns = ...
 local Tr = ns.L
 local T, P = ns.Theme, ns.Prices
@@ -13,8 +13,8 @@ local VIS = 7
 local DE_ICON = "|TInterface\\Icons\\INV_Enchant_Disenchant:13:13:0:0:64:64:5:59:5:59|t "
 CR.DE_ICON = DE_ICON
 
--- ------------------------------------------------------------ accès aux API de métier
--- Couture, etc. : API TradeSkill. Enchantement (Classic) : API Craft. On gère les deux.
+-- ------------------------------------------------------------ profession API access
+-- Tailoring, etc.: TradeSkill API. Enchanting (Classic): Craft API. Both are handled.
 local Trade = {
     key = "trade",
     Frame = function() return TradeSkillFrame end,
@@ -54,7 +54,7 @@ local Craft = {
     end,
 }
 
--- Nouvelle API (C_TradeSkillUI), au cas où la fenêtre de Forever l'utilise.
+-- New API (C_TradeSkillUI), in case Forever's window uses it.
 local DIFF_ENUM = { [0] = "optimal", [1] = "medium", [2] = "easy", [3] = "trivial" }
 local Modern = {
     key = "modern",
@@ -72,7 +72,7 @@ local Modern = {
         local basic = (Enum and Enum.CraftingReagentType and Enum.CraftingReagentType.Basic) or 1
         for _, rid in ipairs(C_TradeSkillUI.GetAllRecipeIDs() or {}) do
             local info = C_TradeSkillUI.GetRecipeInfo(rid)
-            -- Recettes pas encore apprises : on garde au moins le nombre produit par craft.
+            -- Recipes not learned yet: keep at least the number made per craft.
             if info and info.learned == false and ns.Lists and ns.Lists.NoteMade and C_TradeSkillUI.GetRecipeSchematic then
                 local ok, sch = pcall(C_TradeSkillUI.GetRecipeSchematic, rid, false)
                 if ok then ns.Lists.NoteMade(sch) end
@@ -109,7 +109,7 @@ local DIFF = {
     easy = { 0.25, 0.75, 0.25 }, trivial = { 0.50, 0.50, 0.50 },
 }
 
--- ------------------------------------------------------------ lecture des recettes
+-- ------------------------------------------------------------ reading recipes
 local api, recipes, profName = nil, {}, nil
 
 -- First Aid: not returned by GetProfessions, never treated as foreign.
@@ -252,7 +252,7 @@ function CR.PruneForeign()
 end
 ns.On("LEDGER_READY", function() CR.PruneForeign(); if ns.Route then ns.Route.Invalidate() end end)
 
--- Toutes les recettes connues (tous métiers) qui produisent un objet : pour coûter les intermédiaires.
+-- All known recipes (all professions) that make an item: to cost intermediates.
 local function ProducerOf(id)
     for prof, list in pairs(ns.db.recipes) do
         for name, r in pairs(list) do
@@ -262,8 +262,8 @@ local function ProducerOf(id)
 end
 CR.ProducerOf = ProducerOf
 
--- ------------------------------------------------------------ modèle de coût
--- Coût unitaire d'un objet : le moins cher entre marchand, HV et fabrication maison.
+-- ------------------------------------------------------------ cost model
+-- Unit cost of an item: the cheapest of vendor, AH and home-made.
 local function UnitCost(id, depth)
     if not id then return nil, "unknown" end
     local best, src, est
@@ -301,7 +301,7 @@ local function SalesOf(name, days)
 end
 CR.SalesOf = SalesOf
 
--- Nombre de mises en vente (dépôts HV) d'un objet sur la période.
+-- Number of listings (AH deposits) of an item over the period.
 local function PostsOf(name, days)
     local n, since = 0, time() - (days or 14) * 86400
     for i = #ns.db.tx, 1, -1 do
@@ -313,7 +313,7 @@ local function PostsOf(name, days)
 end
 CR.PostsOf = PostsOf
 
--- Unités mises en vente (une pile de 20 compte pour 20) : base du taux de vente.
+-- Units listed (a stack of 20 counts as 20): basis of the sell rate.
 local function PostedUnits(name, days)
     local n, since = 0, time() - (days or 14) * 86400
     for i = #ns.db.tx, 1, -1 do
@@ -328,23 +328,23 @@ CR.PostedUnits = PostedUnits
 function CR.Rules()
     ns.db.settings.queue = ns.db.settings.queue or {}
     local q = ns.db.settings.queue
-    if q.minProfit == nil then q.minProfit = 10 end        -- cuivre
+    if q.minProfit == nil then q.minProfit = 10 end        -- copper
     if q.minMargin == nil then q.minMargin = 20 end        -- %
     if q.startQty == nil or q.startQty == 3 then q.startQty = 2 end
     if q.minQty == nil then q.minQty = 2 end
-    if q.maxQty == nil or not q.adaptive then q.maxQty = math.max(q.maxQty or 0, 200); q.adaptive = true end -- plafond de la cible adaptative
-    if q.maxListed == nil or q.maxListed == 500 then q.maxListed = 10000 end -- HV régionale
+    if q.maxQty == nil or not q.adaptive then q.maxQty = math.max(q.maxQty or 0, 200); q.adaptive = true end -- cap of the adaptive target
+    if q.maxListed == nil or q.maxListed == 500 then q.maxListed = 10000 end -- regional AH
     if q.unsoldPosts == nil then q.unsoldPosts = 3 end
     if q.ignoreWhiteGear == nil then q.ignoreWhiteGear = true end
-    if q.deposit == nil then q.deposit = 100 end           -- dépôt HV par mise en vente (cuivre)
-    if q.sellChance == nil then q.sellChance = 50 end      -- % supposé sans historique
-    if q.budgetPct == nil then q.budgetPct = 50 end        -- % de l'or du perso que la file peut engager
-    if q.vendorCap == nil then q.vendorCap = 40 end        -- crafts pour le marchand : quantité visée par session
+    if q.deposit == nil then q.deposit = 100 end           -- AH deposit per listing (copper)
+    if q.sellChance == nil then q.sellChance = 50 end      -- % assumed without history
+    if q.budgetPct == nil then q.budgetPct = 50 end        -- % of the character's gold the queue may commit
+    if q.vendorCap == nil then q.vendorCap = 40 end        -- crafts for the vendor: target quantity per session
     return q
 end
 
--- Dépôt réel d'un objet : moyenne de vos 5 dernières mises en vente (sinon la valeur des règles).
--- Suit automatiquement la durée que vous choisissez si le dépôt en dépend.
+-- Actual deposit for an item: average of your last 5 listings (otherwise the rules value).
+-- Follows the duration you pick automatically if the deposit depends on it.
 function CR.DepositFor(name)
     local sum, n = 0, 0
     for i = #ns.db.tx, 1, -1 do
@@ -358,7 +358,7 @@ function CR.DepositFor(name)
     return CR.Rules().deposit
 end
 
--- Valeur nette d'une vente HV : prix − 5 % − dépôts perdus en moyenne (selon l'historique de l'objet).
+-- Net value of an AH sale: price − 5 % − average lost deposits (from the item's history).
 function CR.AHNet(id, name)
     local ah = P.AHValue(id)
     if not ah then return nil end
@@ -384,7 +384,7 @@ function CR.Evaluate(rec)
         else
             ev.unknown = ev.unknown + 1
         end
-        -- Valeur des compos si on les revendait au lieu de crafter (hors compos marchand).
+        -- Value of the materials if resold instead of crafting (vendor materials excluded).
         if rg.id and not P.IsVendorItem(rg.id) then
             local ah = P.AHValue(rg.id)
             local vs = P.VendorSell(rg.id)
@@ -400,16 +400,16 @@ function CR.Evaluate(rec)
     end
     local ahv = P.AHValue(rec.pid)
     local vs = P.VendorSell(rec.pid)
-    -- Équipement blanc (ou gris) : ne se vend pas à l'HV, on ne garde que le prix marchand.
-    -- Les sacs, kits d'armure et compos (non équipables) gardent leur valeur HV.
+    -- White (or grey) gear: does not sell at the AH, only the vendor price is kept.
+    -- Bags, armor kits and materials (not equippable) keep their AH value.
     local _, _, quality, _, _, _, _, _, equipLoc, _, _, _, _, bindType = ns.GetItemInfo(rec.pid)
     if bindType == 1 then
-        -- Lié quand ramassé : invendable à l'HV, il reste le marchand ou le désenchantement.
+        -- Bind on pickup: cannot be sold at the AH, leaves the vendor or disenchanting.
         ahv = nil
         ev.bop = true
     end
     if not quality then
-        -- Détails de l'objet pas encore chargés par le jeu : on les demande, et on ne conclut rien.
+        -- Item details not loaded by the game yet: request them and conclude nothing.
         ev.infoPending = true
         ns.RequestItem(rec.pid)
     end
@@ -422,13 +422,13 @@ function CR.Evaluate(rec)
     ev.sold7 = SalesOf(pname, 7)
     ev.sold14 = SalesOf(pname, 14)
     ev.posts14 = PostsOf(pname, 14)
-    -- Risque de dépôt : remboursé si l'objet se vend, perdu sinon (à chaque mise en vente ratée).
+    -- Deposit risk: refunded if the item sells, lost otherwise (on every failed listing).
     local rules0 = CR.Rules()
     local chance = rules0.sellChance / 100
     ev.units14 = PostedUnits(pname, 14)
     if ev.units14 > 0 then chance = math.max(0.1, math.min(1, ev.sold14 / ev.units14)) end
     ev.sellChance = chance
-    ev.depositRisk = CR.DepositFor(pname) * (1 - chance) / chance -- dépôts perdus en moyenne avant une vente
+    ev.depositRisk = CR.DepositFor(pname) * (1 - chance) / chance -- average lost deposits before a sale
     ev.ahNet = ahv and (ahv * (1 - AH_CUT) - ev.depositRisk) * rec.made
     ev.vendorNet = vs and vs * rec.made
     local de = P.DisenchantValue(rec.pid)
@@ -480,7 +480,7 @@ function CR.Evaluate(rec)
             ev.verdict, ev.vcolor = "Loss", C.neg
         end
     end
-    -- Posté plusieurs fois sans jamais se vendre : pas rentable en pratique.
+    -- Listed several times without ever selling: not profitable in practice.
     local rules = CR.Rules()
     if ev.posts14 >= rules.unsoldPosts and ev.sold14 == 0 then
         ev.unsold = true
@@ -559,7 +559,7 @@ local function BuildPanel()
     end)
     close:SetPoint("TOPRIGHT", -8, -10)
 
-    -- Onglets Recettes / File
+    -- Recipes / Queue tabs
     panel.tabButtons = {}
     local prevTab
     for _, t in ipairs({ { "queue", "Queue" }, { "recipes", "Recipes" } }) do
@@ -569,11 +569,11 @@ local function BuildPanel()
         panel.tabButtons[t[1]] = b
     end
 
-    -- Accès rapide à la fenêtre de désenchantement
+    -- Quick access to the disenchant window
     local deBtn = CreateFrame("Button", nil, panel)
     deBtn:SetSize(24, 24)
     deBtn:SetPoint("TOPRIGHT", -44, -13)
-    -- Plus d'onglet "Recipes" : les profits sont déjà affichés dans la fenêtre de métier.
+    -- No more "Recipes" tab: profits are already shown in the profession window.
     for _, b in pairs(panel.tabButtons) do b:Hide() end
     local deTex = deBtn:CreateTexture(nil, "ARTWORK"); deTex:SetAllPoints()
     deTex:SetTexture("Interface\\Icons\\INV_Enchant_Disenchant"); deTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
@@ -585,7 +585,7 @@ local function BuildPanel()
         GameTooltip:Show()
     end)
     deBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    -- Visible seulement pour un enchanteur.
+    -- Visible only for an enchanter.
     deBtn:SetScript("OnShow", function(self)
         if ns.Destroy and ns.Destroy.KnowsDisenchant and not ns.Destroy.KnowsDisenchant() then self:Hide() end
     end)
@@ -608,7 +608,7 @@ local function BuildPanel()
     panel.info:SetPoint("TOPLEFT", 16, -50)
     panel.info:SetWidth(PW - 210)
 
-    -- Liste
+    -- List
     local list = CreateFrame("Frame", nil, panel)
     T.Surface(list, C.surface, 10)
     list:SetPoint("TOPLEFT", 12, -70)
@@ -668,7 +668,7 @@ local function BuildPanel()
         text = Tr("No readable recipes.\nExpand the profession categories.") })
     panel.listEmpty:SetPoint("CENTER"); panel.listEmpty:SetWidth(PW - 80)
 
-    -- Détail
+    -- Detail
     local det = CreateFrame("Frame", nil, panel)
     T.Surface(det, C.surface, 10)
     det:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 0, -10)
@@ -852,7 +852,7 @@ function CR.ProfName() return profName end
 function CR.Panel() return panel end
 
 function CR.SetTab(tab)
-    tab = "queue" -- une seule vue
+    tab = "queue" -- a single view
     ns.db.settings.craftTab = tab
     if not panel then return end
     local q = tab == "queue"
@@ -866,7 +866,7 @@ function CR.SetTab(tab)
     end
 end
 
-local DecorateList -- défini plus bas
+local DecorateList -- defined below
 
 local readError
 function CR.Refresh()
@@ -879,7 +879,7 @@ function CR.Refresh()
     if not panel or not panel:IsShown() then return end
     panel.sorted = sorted
     panel.sub:SetText(profName or "")
-    -- Fraîcheur des prix
+    -- Price freshness
     local newest, known = nil, 0
     for _, rec in ipairs(recipes) do
         if rec.pid then
@@ -904,11 +904,11 @@ function CR.Refresh()
     if ns.Queue and ns.db.settings.craftTab == "queue" then ns.Queue.Refresh() end
 end
 
--- ------------------------------------------------------------ profit dans la liste Blizzard
--- On ne connaît pas la structure interne de la fenêtre de métier de Forever : on parcourt ses
--- boutons visibles, on reconnaît ceux dont le texte est un nom de recette, et on pose notre propre
--- étiquette (frame enfant à nous, aucune donnée écrite sur les objets Blizzard).
-local labels = {}      -- [bouton Blizzard] = notre frame étiquette
+-- ------------------------------------------------------------ profit in the Blizzard list
+-- Forever's profession window internals are unknown: we walk its visible
+-- buttons, recognize those whose text is a recipe name, and attach our own
+-- label (a child frame of ours, no data written on Blizzard objects).
+local labels = {}      -- [Blizzard button] = our label frame
 local byName = {}
 
 local function CleanName(text)
@@ -932,7 +932,7 @@ local function LabelText(ev)
     return "|cff615f5c?|r"
 end
 
-local listLimit -- bord droit de la zone "liste" (moitié gauche de la fenêtre)
+local listLimit -- right edge of the "list" area (left half of the window)
 local function FindRecipeText(button)
     if not button.GetRegions then return nil end
     for _, region in ipairs({ button:GetRegions() }) do
@@ -980,7 +980,7 @@ DecorateList = function()
     Walk(root, 0)
 end
 
--- Les listes se recyclent en défilant : on repasse régulièrement tant que la fenêtre est ouverte.
+-- Lists recycle their rows while scrolling: rescan regularly while the window is open.
 local ticker = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ticker, "Craft") end
 local acc = 0
@@ -992,7 +992,7 @@ ticker:SetScript("OnUpdate", function(_, elapsed)
     if root and root:IsShown() and #recipes > 0 then DecorateList() end
 end)
 
--- ------------------------------------------------------------ ancrage
+-- ------------------------------------------------------------ anchoring
 local function VisibleFrame()
     for _, name in ipairs({ "TradeSkillFrame", "ProfessionsFrame", "CraftFrame" }) do
         local f = _G[name]
@@ -1019,7 +1019,7 @@ local function Attach(which)
     if not panel then BuildPanel() end
     local f = VisibleFrame()
     anchorFrame = f
-    -- Fenêtre réelle à utiliser pour la liste et la fermeture.
+    -- Actual window to use for the list and for closing.
     local realFrame = f
     api.Frame = function() return realFrame end
     local icon = CR.SideIcon(f)
@@ -1043,9 +1043,9 @@ local function Attach(which)
     CR.UpdateIcon()
 end
 
--- ------------------------------------------------------------ icône dans la colonne d'onglets
--- La colonne d'onglets de métier est à droite de la fenêtre : on repère ses boutons
--- (bord gauche au-delà du bord droit de la fenêtre) pour se placer au-dessus du "?".
+-- ------------------------------------------------------------ icon in the tab column
+-- The profession tab column is to the right of the window: find its buttons
+-- (left edge past the window's right edge) to sit above the "?".
 local sideIcons, sideRight = {}, nil
 
 local function FindSideStrip(f)
@@ -1119,9 +1119,9 @@ function CR.SideIcon(f)
         b:SetSize(size, size)
         local nearBottom = (ref:GetBottom() - f:GetBottom()) < f:GetHeight() * 0.25
         if nearBottom then
-            b:SetPoint("BOTTOM", ref, "TOP", 0, 10)    -- juste au-dessus du "?"
+            b:SetPoint("BOTTOM", ref, "TOP", 0, 10)    -- just above the "?"
         else
-            b:SetPoint("TOP", ref, "BOTTOM", 0, -10)   -- sous le dernier onglet
+            b:SetPoint("TOP", ref, "BOTTOM", 0, -10)   -- below the last tab
         end
     else
         b:SetSize(44, 44)
@@ -1140,7 +1140,7 @@ function CR.Show()
     if not panel then return end
     panel:ClearAllPoints()
     if anchorFrame then
-        -- Position mémorisée (déplacée à la main) sinon : à droite de la colonne d'onglets (≈ 64 px).
+        -- Saved position (moved by hand), otherwise: right of the tab column (≈ 64 px).
         local o = ns.db.settings.craftPanelOffset
         if o then
             panel:SetPoint("TOPLEFT", anchorFrame, "TOPRIGHT", o[1], o[2])
@@ -1163,7 +1163,7 @@ function CR.Show()
             self:SetPoint("TOPLEFT", anchorFrame, "TOPRIGHT", o2[1], o2[2])
         end)
     else
-        -- Fenêtre de métier introuvable : panneau flottant, déplaçable.
+        -- Profession window not found: floating, movable panel.
         panel:SetPoint("RIGHT", UIParent, "RIGHT", -60, 0)
         panel:SetMovable(true)
         panel:RegisterForDrag("LeftButton")
@@ -1176,7 +1176,7 @@ function CR.Show()
     CR.UpdateIcon()
 end
 
--- Sélection faite dans la fenêtre Blizzard -> mise à jour du détail.
+-- Selection made in the Blizzard window -> update the detail.
 local function HookSelection()
     if TradeSkillFrame_SetSelection and not CR.hookedTrade then
         CR.hookedTrade = true
@@ -1260,7 +1260,7 @@ function CR.Diag()
         local f = _G[n]
         Add(("%s : %s"):format(n, f and (f:IsShown() and "visible" or "exists, hidden") or "missing"))
     end
-    -- Toutes les fenêtres globales visibles dont le nom évoque les métiers.
+    -- All visible global windows whose name suggests professions.
     local found = {}
     for k, v in pairs(_G) do
         if type(k) == "string" and type(v) == "table" and (k:find("Profession") or k:find("TradeSkill") or k:find("Craft"))
@@ -1334,7 +1334,7 @@ function CR.Diag()
         f = f.GetParent and f:GetParent()
     end
     Add("Under mouse: " .. (#chain > 0 and table.concat(chain, "  <  ") or "nothing"))
-    -- Frères du bouton survolé (pour trouver la colonne d'onglets).
+    -- Siblings of the hovered button (to find the tab column).
     if focus and focus.GetParent and focus:GetParent() then
         local sib = {}
         for _, c in ipairs({ focus:GetParent():GetChildren() }) do
@@ -1346,7 +1346,7 @@ function CR.Diag()
     ShowDiagText(table.concat(out, "\n"))
 end
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Craft") end
 for _, e in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_UPDATE", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
@@ -1354,7 +1354,7 @@ for _, e in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_UPDATE", "TRADE_SKILL_CLOS
     "GET_ITEM_INFO_RECEIVED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
--- Au plus un rafraîchissement par seconde (les infos d'objets et les sacs arrivent en rafales).
+-- At most one refresh per second (item info and bag updates arrive in bursts).
 local queued, lastCR = false, 0
 local function QueueRefresh()
     if queued then return end
@@ -1368,7 +1368,7 @@ ev:SetScript("OnEvent", function(_, event, id, success)
     if event ~= "BAG_UPDATE" and event ~= "GET_ITEM_INFO_RECEIVED" then LogEvent(event) end
     if not ns.db then return end
     if event == "TRADE_SKILL_SHOW" or event == "CRAFT_SHOW" then
-        -- Laisser la fenêtre Blizzard se charger et s'afficher avant de s'y ancrer.
+        -- Let the Blizzard window load and show before anchoring to it.
         C_Timer.After(0.1, function() HookSelection(); Attach(ChooseAPI(event)) end)
     elseif event == "TRADE_SKILL_CLOSE" or event == "CRAFT_CLOSE" then
         C_Timer.After(0.05, function()
@@ -1384,7 +1384,7 @@ ev:SetScript("OnEvent", function(_, event, id, success)
 end)
 ns.On("PRICES_CHANGED", function() if api then QueueRefresh() end end)
 
--- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+-- Profiling (/ipg perf): heavy functions called outside timed events.
 if ns.Profile then
     CR.Refresh = ns.Profile.Wrap("Craft:Refresh", CR.Refresh)
 end

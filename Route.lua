@@ -1,11 +1,11 @@
--- ImpotPointGouv : meilleure route de montée d'un métier (de la compétence actuelle à 300).
--- Pour chaque point de compétence, coût attendu d'une recette = (composants − revente du produit) / chance de monter.
--- Chance : 100 % en orange, puis (gris − compétence) / (gris − jaune) en jaune et en vert, 0 en gris.
--- Accès à la recette, payé une fois : déjà connue (0), formateur (coût relevé en jeu, sinon estimé),
--- patron à l'HV (prix actuel, s'il y en a en vente) ou patron vendu par un marchand (≈ 4 × prix de revente).
--- Programmation dynamique sur la compétence, puis alternatives proches pour chaque tranche.
--- Une recette apprise n'est payée qu'une fois, même si la route y revient plus tard.
--- Les recettes à recharge (transmutations, étoffe lunaire, sel) sont exclues : un craft par recharge.
+-- ImpotPointGouv: best leveling route for a profession (from the current skill to 300).
+-- For each skill point, expected cost of a recipe = (materials − product resale) / skill-up chance.
+-- Chance: 100 % in orange, then (grey − skill) / (grey − yellow) in yellow and green, 0 in grey.
+-- Access to the recipe, paid once: already known (0), trainer (cost read in game, otherwise estimated),
+-- pattern at the AH (current price, if any is listed) or pattern sold by a vendor (≈ 4 × resale price).
+-- Dynamic programming over skill, then close alternatives for each step.
+-- A learned recipe is paid only once, even if the route comes back to it later.
+-- Cooldown recipes (transmutes, mooncloth, salt) are excluded: one craft per cooldown.
 local _, ns = ...
 local Tr = ns.L
 local P = ns.Prices
@@ -24,16 +24,16 @@ end
 RO.NAME_KEYS = NAME_KEYS
 RO.SpellName = SpellName
 
--- Recettes à recharge connues (Classic), en plus de celles de Data.lua (D.cooldowns).
+-- Known cooldown recipes (Classic), in addition to those of Data.lua (D.cooldowns).
 local CD_SPELLS = {
-    [11479] = true, [11480] = true,                          -- Transmutation : fer en or, mithril en vrai-argent
+    [11479] = true, [11480] = true,                          -- Transmute: iron to gold, mithril to truesilver
     [17187] = true, [17559] = true, [17560] = true, [17561] = true, [17562] = true,
-    [17563] = true, [17565] = true, [17566] = true, [25146] = true, -- autres transmutations
-    [18560] = true,                                          -- Étoffe lunaire
-    [19566] = true,                                          -- Sel de rochebrune raffiné (salière)
+    [17563] = true, [17565] = true, [17566] = true, [25146] = true, -- other transmutes
+    [18560] = true,                                          -- Mooncloth
+    [19566] = true,                                          -- Refined Deeprock Salt (Salt Shaker)
 }
 local cdOut
--- Vrai si la recette a une recharge (on ne peut pas la crafter en série pour monter).
+-- True if the recipe has a cooldown (it cannot be crafted in a row to level).
 function RO.IsCooldown(spell, prof, out)
     if CD_SPELLS[spell] then return true end
     if not cdOut then
@@ -47,7 +47,7 @@ function RO.IsCooldown(spell, prof, out)
     return out ~= nil and prof ~= nil and cdOut[prof .. ":" .. out] == true
 end
 
--- Recettes d'un métier (construites une fois).
+-- Recipes of a profession (built once).
 local cache = {}
 function RO.Recipes(prof)
     if cache[prof] then return cache[prof] end
@@ -65,7 +65,7 @@ function RO.Recipes(prof)
     return out
 end
 
--- Compétence actuelle : la plus haute parmi vos personnages.
+-- Current skill: the highest among your characters.
 function RO.CurrentSkill(prof)
     local best, who = 1, nil
     local want = Tr(NAME_KEYS[prof]):lower()
@@ -79,7 +79,7 @@ function RO.CurrentSkill(prof)
     return math.min(best, 299), who
 end
 
--- Recettes connues par un de vos personnages (noms, d'après les fenêtres de métier ouvertes).
+-- Recipes known by one of your characters (names, from the profession windows opened).
 local function KnownSet(prof)
     local set = {}
     for profName, recipes in pairs(ns.db.recipes or {}) do
@@ -92,12 +92,12 @@ local function KnownSet(prof)
 end
 RO.KnownSet = KnownSet
 
--- Coût de formation estimé (tant que le formateur n'a pas été visité) : grandit avec la compétence requise.
+-- Estimated training cost (until the trainer has been visited): grows with the required skill.
 local function TrainerEstimate(o)
     return math.max(10, math.floor(o * o * 0.4))
 end
 
--- Accès à une recette : coût, libellé, estimé ?  (nil = introuvable pour l'instant)
+-- Access to a recipe: cost, label, estimated?  (nil = not found for now)
 function RO.Access(r, known, opts)
     local name = r.name
     if name and known[name:lower()] then return 0, "known" end
@@ -119,7 +119,7 @@ function RO.Access(r, known, opts)
     return nil
 end
 
--- Prix d'un composant : HV (prix habituel, sinon actuel) ou marchand pour les fournitures.
+-- Price of a material: AH (usual price, otherwise current) or vendor for supplies.
 local function MatPrice(id, memo)
     if memo[id] ~= nil then return memo[id] or nil end
     local p
@@ -132,14 +132,14 @@ local function MatPrice(id, memo)
     return p
 end
 
--- Revente du produit, prudente. Chaque débouché :
---   marchand : prix de revente au marchand (garanti, sans limite) ;
---   HV : prix moins les 5 % de l'HV, seulement si le marché est liquide (≥ 10 en vente) ;
---   désenchantement : valeur nette attendue des composants (HV − 5 %).
--- Sans plafond : le coût affiché est le vrai (une recette rentable fait rapporter la route).
--- sell : débouchés retenus, { ah = true, vendor = true, de = true } ; pour chaque recette, le meilleur d'entre eux.
+-- Product resale, conservative. Each outlet:
+--   vendor: resale price to the vendor (guaranteed, unlimited);
+--   AH: price minus the AH's 5 %, only if the market is liquid (≥ 10 listed);
+--   disenchant: expected net value of the materials (AH − 5 %).
+-- No cap: the cost shown is the real one (a profitable recipe makes the route earn).
+-- sell: outlets kept, { ah = true, vendor = true, de = true }; for each recipe, the best of them.
 RO.SELL_KEYS = { "ah", "vendor", "de" }
--- Réglage enregistré -> ensemble de débouchés (ancien format : "ah" / "vendor" / "de" / "mix").
+-- Saved setting -> set of outlets (old format: "ah" / "vendor" / "de" / "mix").
 function RO.SellSet(v)
     if type(v) == "table" and (v.ah or v.vendor or v.de) then return v end
     if v == "ah" or v == "vendor" or v == "de" then return { [v] = true } end
@@ -167,10 +167,10 @@ local function Resale(r, sell)
     return best, how
 end
 
--- Coût d'un craft pour choisir la route (pas celui affiché) : un craft rentable compte pour 0,
--- sinon la route crafterait exprès là où la chance de monter est faible, pour vendre davantage.
--- + le temps d'un craft (2 pa) : un craft de plus ne vaut pas d'économiser moins de 2 pa, la route reste rapide.
--- Puis, à peine moins, celle qui rapporte le plus (bonus < 0,5 cuivre : ne passe jamais devant un craft de moins).
+-- Cost of a craft for choosing the route (not the one shown): a profitable craft counts as 0,
+-- otherwise the route would craft on purpose where the skill-up chance is low, to sell more.
+-- + the time of a craft (2 s): one more craft is not worth saving less than 2 s, the route stays fast.
+-- Then, barely less, the one that earns the most (bonus < 0.5 copper: never beats one craft fewer).
 RO.CRAFT_TIME = 200
 local function PlanCost(c)
     local t = RO.CRAFT_TIME
@@ -185,13 +185,13 @@ local function Chance(r, s)
     return (r.g - s) / math.max(1, r.g - r.y)
 end
 
--- Cache des routes : recalculées quand les prix, les persos, les choix ou les réglages changent,
--- au plus tard toutes les 10 min (recettes apprises, formateur). Changer de liste ne refait plus le calcul.
+-- Route cache: recomputed when prices, characters, choices or settings change,
+-- at the latest every 10 min (learned recipes, trainer). Switching lists no longer recomputes.
 local routeCache, routeVer = {}, 0
 function RO.Invalidate() routeVer = routeVer + 1 end
 for _, ev in ipairs({ "PRICES_CHANGED", "CHARS_CHANGED", "LISTS_CHANGED", "INVENTORY_CHANGED" }) do ns.On(ev, RO.Invalidate) end
 
--- Calcule la route. opts : { noAH = bool, from = skill, sell = { ah = bool, vendor = bool, de = bool } }
+-- Computes the route. opts: { noAH = bool, from = skill, sell = { ah = bool, vendor = bool, de = bool } }
 local Compute
 function RO.Compute(prof, opts)
     opts = opts or {}
@@ -252,8 +252,8 @@ Compute = function(prof, opts)
         end
     end
     local INF = math.huge
-    -- Programmation dynamique : best[x] = coût minimal pour atteindre x, en tranches contiguës.
-    -- owned : recettes déjà payées (apprentissage gratuit dans cette passe).
+    -- Dynamic programming: best[x] = minimal cost to reach x, in contiguous steps.
+    -- owned: recipes already paid for (free learning in this pass).
     local function Solve(owned)
         local best, arg = { [start] = 0 }, {}
         local M, Ms, PS = {}, {}, {}
@@ -265,7 +265,7 @@ Compute = function(prof, opts)
             for _, r in ipairs(cands) do
                 local ch = (pin and r ~= pin) and 0 or Chance(r, x)
                 if ch > 0 then
-                    -- démarrer (ou redémarrer) un segment avec r en x
+                    -- start (or restart) a segment with r at x
                     local cand = bx + (owned[r] and 0 or r.F) - PS[r]
                     if cand < M[r] then M[r], Ms[r] = cand, x end
                     PS[r] = PS[r] + r.k / ch
@@ -278,7 +278,7 @@ Compute = function(prof, opts)
             best[x + 1] = bestNext
             arg[x + 1] = { br, bs }
         end
-        -- Reconstruction des tranches (deux tranches de suite avec la même recette : fusionnées).
+        -- Rebuilding the steps (two steps in a row with the same recipe: merged).
         local segs = {}
         local t = 300
         while t > start and arg[t] and arg[t][1] do
@@ -289,7 +289,7 @@ Compute = function(prof, opts)
         end
         return segs, (best[300] or INF) < INF
     end
-    -- Coût réel (affiché), nombre de crafts et coût pour choisir la route (PlanCost).
+    -- Real cost (shown), number of crafts and cost used to choose the route (PlanCost).
     local function SegCost(r, a, b, free)
         local total, crafts, plan = free and 0 or r.F, 0, free and 0 or r.F
         for x = a, b - 1 do
@@ -301,7 +301,7 @@ Compute = function(prof, opts)
         end
         return total, crafts, plan
     end
-    -- Coût d'une route : chaque recette payée une seule fois (à sa première tranche).
+    -- Cost of a route: each recipe paid only once (at its first step).
     local function Price(segs)
         local paid, total, plan = {}, 0, 0
         for _, sg in ipairs(segs) do
@@ -313,8 +313,8 @@ Compute = function(prof, opts)
         end
         return total, paid, plan
     end
-    -- Passe 1 sans rien de payé ; puis on refait la route en considérant acquises les recettes déjà
-    -- choisies (le prix de leur apprentissage compte une fois), tant que la route baisse.
+    -- Pass 1 with nothing paid; then the route is redone treating the recipes already
+    -- chosen as owned (their learning price counts once), as long as the route gets cheaper.
     local segs, reached = Solve({})
     local total, paid, plan = Price(segs)
     for _ = 1, 4 do
@@ -325,7 +325,7 @@ Compute = function(prof, opts)
         if pl2 >= plan - 1 then break end
         segs, total, paid, plan = s2, t2, p2, pl2
     end
-    Price(segs) -- remet sg.cost / sg.reuse de la route retenue
+    Price(segs) -- restores sg.cost / sg.reuse of the route kept
     local maxPct = (ns.db.settings.routeAltPct or 30) / 100
     local maxAbs = (ns.db.settings.routeAltGold or 5) * 10000
     for _, sg in ipairs(segs) do
@@ -375,7 +375,7 @@ function RO.HasBans(prof)
     return (b and next(b) ~= nil) or (p and #p > 0) or false
 end
 
--- ------------------------------------------------------------ prix des formations (relevés chez le formateur)
+-- ------------------------------------------------------------ training costs (read at the trainer)
 local function ReadTrainer()
     if not GetNumTrainerServices or not GetTrainerServiceInfo then return end
     ns.db.trainer = ns.db.trainer or {}

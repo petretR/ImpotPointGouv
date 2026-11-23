@@ -1,12 +1,12 @@
--- ImpotPointGouv : suivi de chaque mouvement d'or et classement par catégorie.
+-- ImpotPointGouv: tracks every gold movement and sorts it by category.
 --
--- Principe : chaque variation de GetMoney() (PLAYER_MONEY) devient UNE opération.
--- La somme des opérations = la variation réelle de l'or. On choisit la catégorie :
---   1. attentes explicites posées par nos hooks (courrier HV, achat HV, dépôt...),
---      appariées au montant exact quand on le connaît ;
---   2. sinon le contexte (fenêtre marchand / courrier / HV / butin ouverte...) ;
---   3. sinon "Autre", éventuellement re-classé une seconde plus tard
---      (CHAT_MSG_MONEY -> Butin, QUEST_TURNED_IN -> Quêtes).
+-- Principle: each change of GetMoney() (PLAYER_MONEY) becomes ONE operation.
+-- The sum of the operations = the actual change in gold. The category is chosen from:
+--   1. explicit expectations set by our hooks (AH mail, AH purchase, deposit...),
+--      matched to the exact amount when it is known;
+--   2. otherwise the context (vendor / mail / AH / loot window open...);
+--   3. otherwise "Other", possibly reclassified a second later
+--      (CHAT_MSG_MONEY -> Loot, QUEST_TURNED_IN -> Quests).
 local _, ns = ...
 local L = {}
 ns.Ledger = L
@@ -16,13 +16,13 @@ local tinsert, tremove = table.insert, table.remove
 
 local charKey, lastMoney
 local pending = {}       -- attentes { amount?, sign?, k, info, exp, multi }
-local ctx = {}           -- [nom] = instant jusqu'auquel le contexte est actif
+local ctx = {}           -- [name] = time until which the context is active
 local lastTx, lastTxTime
 
--- ------------------------------------------------------------ personnage
+-- ------------------------------------------------------------ character
 function L.CharKey() return charKey end
 
--- WoW Forever : prénom + nom. UnitName ne donne que le prénom ; on cherche le nom complet ailleurs.
+-- WoW Forever: first name + last name. UnitName only gives the first name; the full name is found elsewhere.
 local function FullFrom(text, first)
     if type(text) ~= "string" or not first then return nil end
     text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
@@ -43,7 +43,7 @@ function L.DetectFullName(first)
     end
 end
 
--- Titre de la fiche personnage (touche C) : affiche le nom complet sur Forever.
+-- Character sheet title (C key): shows the full name on Forever.
 function L.HookCharacterFrame()
     if L.charHooked or not CharacterFrame then return end
     L.charHooked = true
@@ -60,29 +60,29 @@ function L.HookCharacterFrame()
                 local t = CharacterFrame:GetTitleText()
                 texts[#texts + 1] = type(t) == "table" and t.GetText and t:GetText() or t
             end
-            -- Dernier recours : n'importe quel texte de la fiche qui commence par le prénom.
+            -- Last resort: any text on the sheet that starts with the first name.
             for _, region in ipairs({ CharacterFrame:GetRegions() }) do
                 if region.GetObjectType and region:GetObjectType() == "FontString" then texts[#texts + 1] = region:GetText() end
             end
             local full
             for _, t in ipairs(texts) do full = full or FullFrom(t, c.name) end
             if not full and c.full then
-                -- (silencieux)
+                -- (silent)
                 return
             end
             if full and c.full ~= full then
                 c.full = full
-                -- (silencieux)
+                -- (silent)
                 ns.Fire("LEDGER_CHANGED")
             elseif full and not L.namePrinted then
                 L.namePrinted = true
-                -- (silencieux)
+                -- (silent)
             end
         end)
     end)
 end
 
--- Métiers du personnage (sans ouvrir de fenêtre) : sert à la page Characters et au guide de démarrage.
+-- The character's professions (without opening a window): used by the Characters page and the setup guide.
 function L.ReadProfessions(c)
     c = c or (charKey and ns.db.chars[charKey])
     if not c or not GetProfessions or not GetProfessionInfo then return end
@@ -92,7 +92,7 @@ function L.ReadProfessions(c)
     for _, i in ipairs({ p1 or 0, p2 or 0, cook or 0, fish or 0 }) do
         if i and i > 0 then
             local name, _, rank, maxRank, _, _, line = GetProfessionInfo(i)
-            -- Herboristerie, dépeçage, pêche : pas de recettes à lire.
+            -- Herbalism, skinning, fishing: no recipes to read.
             local gather = i == fish or line == 182 or line == 393 or line == 356
             if name then list[#list + 1] = { name = name, rank = rank, max = maxRank, gather = gather } end
         end
@@ -116,11 +116,11 @@ local function EnsureChar()
         isNew = true
     end
     c.name, c.class = name, class
-    if realm ~= "" then c.realm = realm end -- vide depuis le correctif 1.60.1 : on garde l'ancien
+    if realm ~= "" then c.realm = realm end -- empty since the 1.60.1 hotfix: keep the old one
     local full = L.DetectFullName(name)
     if full and c.full ~= full then
         c.full = full
-        -- nom complet enregistré sans message dans le chat
+        -- full name saved without a chat message
     end
     c.lastSeen = time()
     c.level = UnitLevel and UnitLevel("player") or c.level
@@ -129,7 +129,7 @@ local function EnsureChar()
     return c, isNew
 end
 
--- ------------------------------------------------------------ enregistrement
+-- ------------------------------------------------------------ recording
 function L.Snapshot(money)
     local s = ns.db.snaps[charKey]
     if not s then return end
@@ -151,10 +151,10 @@ function L.AddTx(k, amount, info)
         tx.i, tx.q, tx.who = info.i, info.q, info.who
         tx.gross, tx.cut, tx.dep, tx.unit = info.gross, info.cut, info.dep, info.unit
         tx.st = info.st
-        -- Détail objet (ventes marchand) : id, qualité, niveau d'objet, lié, classe, valeur HV du moment.
+        -- Item detail (vendor sales): id, quality, item level, bound, class, AH value at the time.
         tx.id, tx.qu, tx.il, tx.b, tx.cl, tx.mv = info.id, info.qu, info.il, info.b, info.cl, info.mv
     end
-    -- Où et à quel niveau : pour mesurer l'or par zone et par niveau.
+    -- Where and at what level: to measure gold per zone and per level.
     if ns.Track then tx.z = ns.Track.Zone() end
     tx.pl = UnitLevel and UnitLevel("player") or nil
     local list = ns.db.tx
@@ -165,7 +165,7 @@ function L.AddTx(k, amount, info)
     return tx
 end
 
--- Attente : la prochaine variation correspondante prendra cette catégorie.
+-- Expectation: the next matching change will get this category.
 function L.Expect(e)
     e.exp = GetTime() + (e.ttl or 6)
     pending[#pending + 1] = e
@@ -179,7 +179,7 @@ local function TakePending(delta)
     for i, e in ipairs(pending) do
         if e.amount and e.amount == delta then tremove(pending, i); return e end
     end
-    -- Attentes sans montant : la plus récente gagne (ex. achat juste après une mise en vente).
+    -- Expectations without an amount: the most recent wins (e.g. a purchase right after a listing).
     for i = #pending, 1, -1 do
         local e = pending[i]
         if not e.amount and e.sign and ((delta > 0) == (e.sign > 0)) then
@@ -189,7 +189,7 @@ local function TakePending(delta)
     end
 end
 
--- Somme des ventes marchand attendues (dans l'ordre) égale à la variation, quand aucune ne correspond seule.
+-- Sum of expected vendor sales (in order) equal to the change, when none matches on its own.
 local function TakeVendorBatch(delta)
     local now, sum, picks = GetTime(), 0, {}
     for _, e in ipairs(pending) do
@@ -227,9 +227,9 @@ local function Classify(delta)
     if Active("trade") then return "trade" end
     return "other"
 end
-L._Classify = Classify -- pour les tests
+L._Classify = Classify -- for tests
 
--- Re-classe une opération "Autre" toute récente quand l'info arrive après l'argent.
+-- Reclassifies a very recent "Other" operation when the info arrives after the money.
 local function Retag(k, amount)
     if lastTx and lastTx.k == "other" and lastTxTime and GetTime() - lastTxTime <= 2
         and (not amount or lastTx.a == amount) then
@@ -246,7 +246,7 @@ function L.OnMoney()
     local delta = now - lastMoney
     lastMoney = now
     if delta == 0 then return end
-    -- Plusieurs ventes au marchand arrivées en une seule variation d'or : une ligne par objet.
+    -- Several vendor sales arriving in a single gold change: one row per item.
     local batch = delta > 0 and TakeVendorBatch(delta)
     if batch then
         for _, e in ipairs(batch) do L.AddTx("vendor_sell", e.amount, e.info) end
@@ -260,7 +260,7 @@ function L.OnMoney()
     ns.Fire("LEDGER_CHANGED")
 end
 
--- ------------------------------------------------------------ hooks courrier / HV
+-- ------------------------------------------------------------ mail / AH hooks
 local AH_SUBJECT_HINTS = { "Outbid", "Surench", "enchère", "Auction", "Hôtel des ventes", "Hotel des ventes" }
 
 local function ParseCount(subject)
@@ -272,7 +272,7 @@ end
 local function PrepareMail(index)
     if not index or not GetInboxHeaderInfo then return end
     local _, _, sender, subject, money, _, daysLeft = GetInboxHeaderInfo(index)
-    -- Heure réelle de la vente : un courrier HV vit 30 jours, daysLeft dit depuis quand il est arrivé.
+    -- Actual time of the sale: an AH mail lives 30 days, daysLeft tells when it arrived.
     local soldAt = daysLeft and (time() - math.floor(math.max(0, 30 - daysLeft) * 86400)) or nil
     if not money or money <= 0 then return end
     local invoiceType, itemName, playerName, bid, _, deposit, consignment, _, _, count
@@ -305,7 +305,7 @@ local function PrepareMail(index)
     end
 end
 
--- Objet revenu de l'HV (expiré / annulé) récupéré au courrier : noté pour le taux de vente.
+-- Item back from the AH (expired / cancelled) collected from the mail: noted for the sell rate.
 local returnedSeen = {}
 function L.NoteReturnedItem(index)
     if not index or not GetInboxHeaderInfo then return end
@@ -324,8 +324,8 @@ function L.NoteReturnedItem(index)
     ns.Fire("LEDGER_CHANGED")
 end
 
--- L'objet mis en vente : mémorisé dès qu'il est posé dans la case de vente,
--- car PostAuction vide la case avant que notre hook ne s'exécute.
+-- The listed item: remembered as soon as it is placed in the sell slot,
+-- because PostAuction empties the slot before our hook runs.
 local sellItem
 local function CacheSellItem()
     if not GetAuctionSellItemInfo then return end
@@ -352,7 +352,7 @@ local function SafeHook(name, fn)
     if type(_G[name]) == "function" then hooksecurefunc(name, fn) end
 end
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local CONTEXT_EVENTS = {
     MERCHANT_SHOW = { "merchant", true },      MERCHANT_CLOSED = { "merchant", false },
     MAIL_SHOW = { "mail", true },              MAIL_CLOSED = { "mail", false },
@@ -386,8 +386,8 @@ local function Start()
     started = true
     local money = GetMoney()
     if not isNew and c.money and c.money ~= money then
-        -- L'or a changé hors de notre vue (addon désactivé, autre PC...).
-        -- Sauf si cette même somme vient d'être enregistrée pour ce perso (solde pas encore sauvegardé) : pas de double compte.
+        -- Gold changed out of our sight (addon disabled, another PC...).
+        -- Unless this same amount was just recorded for this character (balance not saved yet): no double count.
         local delta, dup = money - c.money, false
         for i = #ns.db.tx, 1, -1 do
             local tx = ns.db.tx[i]
@@ -411,7 +411,7 @@ local function Start()
     SafeHook("StartAuction", OnPost)
     SafeHook("RepairAllItems", function() L.Expect({ sign = -1, k = "repair", ttl = 4 }) end)
 
-    -- HV moderne (C_AuctionHouse), utilisée par WoW Forever.
+    -- Modern AH (C_AuctionHouse), used by WoW Forever.
     local AHM = C_AuctionHouse
     if AHM then
         local lastItemID
@@ -424,7 +424,7 @@ local function Start()
         end
         local function Hook(fname, fn) if type(AHM[fname]) == "function" then hooksecurefunc(AHM, fname, fn) end end
         Hook("SendSearchQuery", function(itemKey) lastItemID = itemKey and itemKey.itemID end)
-        -- On garde aussi le prix demandé (unit = prix unitaire) pour mesurer les ventes réelles.
+        -- Also keep the asked price (unit = unit price) to measure actual sales.
         Hook("PostItem", function(loc, _, qty, _, buyout)
             L.Expect({ sign = -1, multi = true, k = "ah_deposit", ttl = 10,
                 info = { i = LocName(loc), q = qty, unit = buyout and qty and qty > 0 and math.floor(buyout / qty) or buyout } })
@@ -467,17 +467,17 @@ frame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "NEW_AUCTION_UPDATE" then
         CacheSellItem()
     elseif event == "PLAYER_LOGOUT" then
-        -- Rien : à la déconnexion le jeu renvoie 0 or ; chaque variation est déjà enregistrée.
+        -- Nothing: on logout the game returns 0 gold; every change is already recorded.
     else
         local def = CONTEXT_EVENTS[event]
         if def then
-            -- Fermeture : on garde le contexte 2 s, l'argent arrive souvent juste après.
+            -- Closing: keep the context 2 s, the money often arrives right after.
             ctx[def[1]] = def[2] and math.huge or (GetTime() + 2)
         end
     end
 end)
 
--- ------------------------------------------------------------ requêtes pour l'UI
+-- ------------------------------------------------------------ queries for the UI
 function L.TotalMoney()
     local total = 0
     for key, c in pairs(ns.db.chars) do
@@ -495,8 +495,8 @@ function L.FirstTime()
     return first
 end
 
--- Solde total (tous persos) à l'instant t. Avant le premier relevé d'un perso,
--- on utilise ce premier relevé (évite un faux "gain" quand un perso est ajouté).
+-- Total balance (all characters) at time t. Before a character's first reading,
+-- that first reading is used (avoids a false "gain" when a character is added).
 local function ValueAt(s, t, startIdx)
     local i = startIdx or 1
     if not s[1] then return 0, i end
@@ -505,7 +505,7 @@ local function ValueAt(s, t, startIdx)
     return s[i][2], i
 end
 
--- Série échantillonnée pour le graphique : n points entre t0 et t1.
+-- Sampled series for the chart: n points between t0 and t1.
 function L.BalanceSeries(t0, t1, n)
     local pts, idx = {}, {}
     for i = 0, n - 1 do
@@ -522,7 +522,7 @@ function L.BalanceSeries(t0, t1, n)
     return pts
 end
 
--- Profit HV cumulé sur la période.
+-- Cumulative AH profit over the period.
 function L.AHProfitSeries(t0, t1, n)
     local pts = {}
     local list = ns.db.tx
@@ -540,7 +540,7 @@ function L.AHProfitSeries(t0, t1, n)
     return pts
 end
 
--- Statistiques de la période [t0, maintenant].
+-- Statistics for the period [t0, now].
 function L.Stats(t0)
     local st = { byCat = {}, items = {}, sales = 0, salesCount = 0, buys = 0, refunds = 0,
         deposits = 0, cut = 0, depRefund = 0, ahNet = 0, count = 0 }
@@ -567,7 +567,7 @@ function L.Stats(t0)
             end
         end
     end
-    -- Commerce : tout ce qui s'achète et se vend (HV + marchand), frais HV compris. Courrier entre vos persos exclu.
+    -- Trade: everything bought and sold (AH + vendor), AH fees included. Mail between your characters excluded.
     local TRADE = { ah_sale = true, ah_buy = true, ah_deposit = true, ah_refund = true, ah_other = true,
         vendor_sell = true, vendor_buy = true }
     st.trade, st.sold, st.bought, st.soldCount = 0, 0, 0, 0
@@ -577,7 +577,7 @@ function L.Stats(t0)
     for _, tx in ipairs(ns.db.tx) do
         if tx.t >= t0 and (tx.k == "ah_sale" or tx.k == "vendor_sell") then st.soldCount = st.soldCount + 1 end
     end
-    -- Taxes = commission HV + dépôts non rendus (expirés / annulés).
+    -- Taxes = AH commission + deposits not refunded (expired / cancelled).
     st.fees = st.cut + math.max(0, -st.deposits - st.depRefund)
     local top = {}
     for _, it in pairs(st.items) do top[#top + 1] = it end

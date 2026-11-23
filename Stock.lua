@@ -1,6 +1,6 @@
--- ImpotPointGouv : onglet Stock. Tout ce que vous possédez (sacs, banques, courrier, en vente,
--- en route, bataillon), tous personnages, avec sa valeur : HV nette (après la commission de 5 %)
--- ou prix marchand, le meilleur des deux. Les objets liés ne valent que le prix marchand.
+-- ImpotPointGouv: Stock tab. Everything you own (bags, banks, mail, listed,
+-- in transit, warband), all characters, with its value: net AH (after the 5 % commission)
+-- or vendor price, the better of the two. Bound items are worth the vendor price only.
 local _, ns = ...
 local Tr = ns.L
 local T, P, I = ns.Theme, ns.Prices, ns.Inventory
@@ -8,7 +8,7 @@ local C = T.C
 local S = {}
 ns.Stock = S
 
--- Valeur d'une unité : prix, source ("ah" | "vendor"), ou nil si aucun prix connu.
+-- Value of one unit: price, source ("ah" | "vendor"), or nil if no price is known.
 function S.Unit(id)
     local vs = P.VendorSell(id) or 0
     if I.IsBound(id) then
@@ -22,7 +22,7 @@ function S.Unit(id)
     return nil
 end
 
--- Lignes du stock : { id, q (détail), unit, src, total }.
+-- Stock rows: { id, q (detail), unit, src, total }.
 function S.Rows()
     local rows, total, n, unpriced = {}, 0, 0, 0
     for id, q in pairs(I.AllStock()) do
@@ -88,7 +88,7 @@ function S.BuildPage(page)
     local list = CreateFrame("Frame", nil, page)
     T.Surface(list, C.surface, 10)
     list:SetPoint("TOPLEFT", 0, -46); list:SetPoint("BOTTOMRIGHT", 0, 0)
-    -- En-têtes cliquables pour trier.
+    -- Clickable headers to sort.
     local heads = {
         { "Item", "LEFT", 44, "name" }, { "Where", "LEFT", 330 }, { "Qty", "RIGHT", -330, "qty" },
         { "Unit value", "RIGHT", -210, "unit" }, { "Total", "RIGHT", -20, "total" },
@@ -160,7 +160,7 @@ function S.BuildPage(page)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
-        -- Clic : historique des prix ; Maj-clic : lien dans la discussion.
+        -- Click: price history; Shift-click: link in chat.
         r:SetScript("OnMouseUp", function(self, button)
             local row = self.row
             if not row or button ~= "LeftButton" then return end

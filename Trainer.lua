@@ -1,6 +1,6 @@
--- ImpotPointGouv : rentabilité des patrons chez le maître de métier.
--- Pour chaque patron : profit par craft (meilleur canal HV / marchand / désenchantement)
--- et nombre de crafts pour rembourser le prix du patron.
+-- ImpotPointGouv: pattern profitability at the profession trainer.
+-- For each pattern: profit per craft (best channel AH / vendor / disenchant)
+-- and number of crafts to pay back the pattern price.
 local _, ns = ...
 local Tr = ns.L
 local T, P, CR = ns.Theme, ns.Prices, ns.Craft
@@ -14,8 +14,8 @@ local function ReverseNames()
     return rev
 end
 
--- Composants lus dans l'infobulle du patron. Sur Forever :
---   "Reagents:"  puis  "Bolt of Linen Cloth (12), Fine Thread (2),"  puis  "Minor Healing Potion (2)"
+-- Materials read from the pattern tooltip. On Forever:
+--   "Reagents:"  then  "Bolt of Linen Cloth (12), Fine Thread (2),"  then  "Minor Healing Potion (2)"
 local function Clean(text)
     return (text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|n", " ")
 end
@@ -39,7 +39,7 @@ local function ReagentsFromTooltip(i, rev)
         local pos = lt:find(header, 1, true)
         if pos then
             text = lt:sub(pos + #header)
-            -- Suite sur les lignes suivantes tant que la liste continue (ligne vide ou finissant par une virgule).
+            -- Continued on the next lines while the list goes on (empty line or ending with a comma).
             local j = k + 1
             local needMore = text:match("^%s*$") or text:match(",%s*$")
             while needMore and data.lines[j] do
@@ -81,7 +81,7 @@ local function Analyse(i, rev)
     return { name = name, cost = cost, ev = ev }
 end
 
--- ------------------------------------------------------------ infobulle ImpotPointGouv (sous celle de Blizzard)
+-- ------------------------------------------------------------ ImpotPointGouv tooltip (under Blizzard's)
 local C = T.C
 local tip
 
@@ -116,14 +116,14 @@ local function ShowTip(a, anchor)
     if not tip then BuildTip() end
     local ev = a.ev
     local rows = {}
-    -- rows: { gauche, droite, couleurGauche, espaceAvant }
+    -- rows: { left, right, leftColor, spaceBefore }
     local function Add(left, right, lc, gap) rows[#rows + 1] = { left, right or "", lc, gap } end
     local G, M, W = "|cffe0a83d", "|cff8a877f", "|cffece6d6"
     if not ev then
         Add(G .. Tr("Impot|r") .. W .. Tr("PointGouv|r"), "")
         Add(M .. Tr("This pattern doesn't make an item.|r"), "")
     else
-        -- En-tête : verdict
+        -- Header: verdict
         local verdict
         if ev.profit and not ev.noReagents then
             local how = ev.channel == "de" and "disenchant" or ev.channel == "vendor" and "sell to vendor" or "sell on AH"
@@ -133,7 +133,7 @@ local function ShowTip(a, anchor)
         end
         Add(G .. Tr("Impot|r") .. W .. Tr("PointGouv|r"), verdict)
 
-        -- Composants
+        -- Materials
         Add(M .. Tr("REAGENTS|r"), "", nil, true)
         for _, line in ipairs(ev.lines or {}) do
             local src = line.src == "vendor" and "vendor" or line.src == "ah" and "AH" or line.src == "craft" and "you craft it"
@@ -142,7 +142,7 @@ local function ShowTip(a, anchor)
         end
         Add(W .. Tr("Total cost|r"), Money(ev.cost > 0 and ev.cost or nil) .. (ev.unknown > 0 and " |cffed5c52+ ?|r" or ""))
 
-        -- Vente : la meilleure option en or
+        -- Sale: the best option in gold
         Add(M .. Tr("SELLING IT|r"), "", nil, true)
         local function Opt(label, value, key, why)
             local best = ev.channel == key and ev.profit
@@ -155,7 +155,7 @@ local function ShowTip(a, anchor)
         Opt("Disenchanted  " .. M .. "(estimate)" .. "|r", ev.deNet, "de",
             (not ev.deNet and ev.whiteGear) and "can't disenchant" or nil)
 
-        -- Résultat
+        -- Result
         Add(M .. Tr("RESULT|r"), "", nil, true)
         if ev.profit and not ev.noReagents then
             Add(W .. Tr("Profit per craft|r"), Money(ev.profit, { sign = true, color = true, iconSize = 12 }))
@@ -202,10 +202,10 @@ local function TrainerFrame()
     end
 end
 
--- Lignes du maître -> patron (recalculé régulièrement : la liste se recycle en défilant).
+-- Trainer rows -> pattern (recomputed regularly: the list recycles while scrolling).
 local rowService = {}
 local analysis = {}
-local badges = {} -- [ligne] = petite icône "rentable"
+local badges = {} -- [row] = small "profitable" icon
 
 local function Badge(row, a)
     local ev = a and a.ev
@@ -232,7 +232,7 @@ local function Badge(row, a)
     b:Show()
 end
 
--- Calculs (lecture des infobulles de patrons) : une fois à l'ouverture, refaits si un objet arrive.
+-- Calculations (reading pattern tooltips): once on opening, redone if an item arrives.
 local dirty = true
 function TR.Invalidate() dirty = true end
 
@@ -248,10 +248,10 @@ local function Analyze()
             if a.ev and a.ev.infoPending then pending = true end
         end
     end
-    dirty = pending -- objets pas encore chargés : on recalculera
+    dirty = pending -- items not loaded yet: recompute later
 end
 
--- Placement des icônes : rapide, appelé en continu (les lignes se recyclent en défilant).
+-- Icon placement: fast, called continuously (rows recycle while scrolling).
 function TR.Decorate()
     local root = TrainerFrame()
     if not root then return end
@@ -275,7 +275,7 @@ function TR.Decorate()
     for row, b in pairs(badges) do if not matched[row] then b:Hide() end end
 end
 
--- Survol : notre infobulle sous celle de Blizzard.
+-- Hover: our tooltip under Blizzard's.
 local ticker = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ticker, "Trainer") end
 local acc, rescan, current = 0, 0, nil
@@ -325,7 +325,7 @@ ev:SetScript("OnEvent", function(_, event, id, success)
 end)
 ns.On("PRICES_CHANGED", function() dirty = true end)
 
--- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+-- Profiling (/ipg perf): heavy functions called outside timed events.
 if ns.Profile then
     TR.Decorate = ns.Profile.Wrap("Trainer:Decorate", TR.Decorate)
 end

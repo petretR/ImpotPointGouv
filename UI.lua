@@ -1,4 +1,4 @@
--- ImpotPointGouv : fenêtre principale (Bilan, Transactions, Personnages), minimap, commandes.
+-- ImpotPointGouv: main window (Overview, Transactions, Characters), minimap, commands.
 local _, ns = ...
 local Tr = ns.L
 local T, L = ns.Theme, ns.Ledger
@@ -27,7 +27,7 @@ local function RangeStart()
     return time() - 30 * 86400, RANGES[3]
 end
 
--- ================================================================ fenêtre
+-- ================================================================ window
 local frame
 local pages, tabs = {}, {}
 local current
@@ -51,9 +51,8 @@ local function CardTitle(card, text)
     return fs
 end
 
--- ------------------------------------------------------------ page Bilan
--- Valeur du stock : composants et créations de vos recettes (+ compos d'enchantement) détenus par tous vos persos,
--- au prix où vous les vendriez aujourd'hui (HV nette ou marchand, le meilleur).
+-- ------------------------------------------------------------ Overview page
+-- Stock value: everything all your characters own, valued like the Stock tab (see Stock.lua).
 function UI.StockValue()
     return ns.Stock.Value()
 end
@@ -64,7 +63,7 @@ local function BuildBilan(page)
     page.period = T.Text(page, 12, { color = C.muted })
     page.period:SetPoint("LEFT", title, "RIGHT", 12, -1)
 
-    -- Sélecteur de période
+    -- Period selector
     page.rangeButtons = {}
     local prev
     for i = #RANGES, 1, -1 do
@@ -78,7 +77,7 @@ local function BuildBilan(page)
         page.rangeButtons[r.key] = b
     end
 
-    -- 4 cartes de synthèse
+    -- 4 summary cards
     page.cards = {}
     local defs = {
         { "Total gold", "all characters" },
@@ -107,7 +106,7 @@ local function BuildBilan(page)
             card.accent:SetPoint("LEFT", 0, 0)
         end
         if i == 3 then
-            -- Clic : l'onglet Stock (détail objet par objet).
+            -- Click: the Stock tab (item by item detail).
             card:EnableMouse(true)
             card:SetScript("OnMouseUp", function() UI.Toggle("stock") end)
             card:SetScript("OnEnter", function(self)
@@ -120,7 +119,7 @@ local function BuildBilan(page)
         page.cards[i] = card
     end
 
-    -- Colonne droite
+    -- Right column
     local rightW = 286
     local chartCard = Card(page)
     chartCard:SetPoint("TOPLEFT", 0, -142)
@@ -193,7 +192,7 @@ local function BuildBilan(page)
         c[1].value:SetText(ns.FormatMoney(total, { iconSize = 16 }))
         c[1].sub:SetText(ns.FormatMoney(total - startBal, { sign = true, color = true, iconSize = 10 }) ..
             Tr("  |cff615f5cthis period|r"))
-        -- Résultat du commerce (HV + marchand) ; le stock acheté mais pas encore vendu est montré à côté.
+        -- Trade result (AH + vendor); stock bought but not sold yet is shown next to it.
         c[2].value:SetText(ns.FormatMoney(st.trade, { sign = true, color = true, iconSize = 16 }))
         c[2].sub:SetText(Tr("bought ") .. ns.FormatMoney(-st.bought, { iconSize = 10 }) .. Tr("  ·  fees ") .. ns.FormatMoney(st.fees, { iconSize = 10 }))
         local sv, sn = UI.StockValue()
@@ -216,7 +215,7 @@ local function BuildBilan(page)
                 emptyText = "The tax office just opened your file.\nThe curve will grow as you earn and spend." })
         end
 
-        -- Répartition
+        -- Breakdown
         local rows = {}
         for k, v in pairs(st.byCat) do if v ~= 0 then rows[#rows + 1] = { k = k, v = v } end end
         table.sort(rows, function(a, b) return math.abs(a.v) > math.abs(b.v) end)
@@ -234,7 +233,7 @@ local function BuildBilan(page)
         end
         self.splitEmpty:SetShown(#rows == 0)
 
-        -- Meilleures ventes
+        -- Best sellers
         for i, row in ipairs(self.topRows) do
             local it = st.top[i]
             if it then
@@ -322,7 +321,7 @@ local function BuildTransactions(page)
         end
     end
 
-    -- Barre de défilement fine
+    -- Thin scroll bar
     local track = CreateFrame("Frame", nil, list)
     track:SetPoint("TOPRIGHT", -8, -40); track:SetPoint("BOTTOMRIGHT", -8, 10); track:SetWidth(4)
     T.Rounded(track, { 1, 1, 1, 0.04 }, 2, "BACKGROUND")
@@ -399,7 +398,7 @@ local function BuildTransactions(page)
     end
 end
 
--- ------------------------------------------------------------ page Personnages
+-- ------------------------------------------------------------ Characters page
 local function BuildCharacters(page)
     local title = T.Text(page, 20, { bold = true, text = Tr("Characters") })
     title:SetPoint("TOPLEFT", 0, -2)
@@ -435,12 +434,12 @@ local function BuildCharacters(page)
                 T.Surface(r, C.surface2, 8)
                 r.name = T.Text(r, 14, { bold = true }); r.name:SetPoint("TOPLEFT", 14, -8)
                 r.realm = T.Text(r, 11, { color = C.faint }); r.realm:SetPoint("LEFT", r.name, "RIGHT", 10, -1)
-                -- Ligne 2 : métiers sur toute la largeur.
+                -- Row 2: professions across the full width.
                 r.profs = T.Text(r, 11, { color = C.muted }); r.profs:SetPoint("TOPLEFT", 14, -32)
                 r.profs:SetPoint("RIGHT", r, "RIGHT", -14, 0); r.profs:SetWordWrap(false)
                 r.money = T.Text(r, 14, { bold = true, justify = "RIGHT" }); r.money:SetPoint("TOPRIGHT", -14, -9)
                 r.seen = T.Text(r, 11, { color = C.faint }); r.seen:SetPoint("LEFT", r.realm, "RIGHT", 0, 0)
-                -- Rôles en un clic.
+                -- Roles in one click.
                 r.bankB = T.Button(r, Tr("Bank"), 70, 22, function()
                     ns.db.settings.bankChar = (ns.db.settings.bankChar ~= r.key) and r.key or nil
                     if ns.Routine then ns.Routine.Refresh() end
@@ -462,7 +461,7 @@ local function BuildCharacters(page)
             r.name:SetTextColor(ns.ClassColor(e.c.class))
             r.realm:SetText((e.c.level and ("lvl " .. e.c.level .. "  ·  ") or "") .. ns.PrettyRealm(e.c.realm)
                 .. (e.key == L.CharKey() and "  ·  |cffe0a83donline|r" or ""))
-            -- Métiers : ✓ recettes lues, ⚠ à ouvrir une fois.
+            -- Professions: ✓ recipes read, ⚠ to open once.
             local parts = {}
             for _, p in ipairs(e.c.profs or {}) do
                 local seen = p.gather or (ns.db.profChars and ns.db.profChars[p.name] and ns.db.profChars[p.name][e.key])
@@ -482,7 +481,7 @@ local function BuildCharacters(page)
     end
 end
 
--- ------------------------------------------------------------ page Réglages
+-- ------------------------------------------------------------ Settings page
 local function BuildSettings(page)
     local title = T.Text(page, 20, { bold = true, text = Tr("Settings") })
     title:SetPoint("TOPLEFT", 0, -2)
@@ -507,7 +506,7 @@ local function BuildSettings(page)
         local yy = y[col]; y[col] = y[col] - 36
         return yy
     end
-    -- Interrupteur On/Off
+    -- On/Off switch
     local function Toggle(col, label, get, set, tip)
         local yy = Row(col, label, tip)
         local b
@@ -515,7 +514,7 @@ local function BuildSettings(page)
         b:SetPoint("TOPRIGHT", -16, yy)
         page.items[#page.items + 1] = function() b.text:SetText(get() and Tr("On") or Tr("Off")); b:SetSelected(get()) end
     end
-    -- Valeur avec − / +
+    -- Value with − / +
     local function Stepper(col, label, get, set, step, fmt, tip)
         local yy = Row(col, label, tip)
         local v = T.Text(cols[col], 12, { bold = true, justify = "CENTER" }); v:SetWidth(76)
@@ -584,7 +583,7 @@ local function Build()
     T.Surface(frame, C.window, 14, { 1, 1, 1, 0.09 })
     tinsert(UISpecialFrames, "ImpotPointGouvFrame")
 
-    -- En-tête (zone de déplacement)
+    -- Header (drag area)
     local header = CreateFrame("Frame", nil, frame)
     header:SetPoint("TOPLEFT", 1, -1)
     header:SetPoint("TOPRIGHT", -1, -1)
@@ -610,7 +609,7 @@ local function Build()
     deB.tooltip = Tr("Disenchant the greens in your bags, one key press each.")
     local rtB = T.Button(header, Tr("Routine"), 84, 26, function() ns.Routine.Toggle() end)
     rtB:SetPoint("RIGHT", deB, "LEFT", -6, 0)
-    -- Disenchant seulement sur un personnage enchanteur ; sinon Routine prend sa place.
+    -- Disenchant only on an enchanter character; otherwise Routine takes its place.
     frame.deB, frame.rtB, frame.closeB = deB, rtB, close
     rtB.tooltip = Tr("Your daily loop: craft queue, shopping list, Auctionator export, mail buttons.")
 
@@ -676,7 +675,7 @@ end
 local refreshQueued
 ns.On("MARKET_CHANGED", function()
     if current == "market" then UI.Refresh()
-    elseif current == "lists" and ns.ListsUI and ns.ListsUI.Soon then ns.ListsUI.Soon() end -- limité à une fois toutes les 2 s
+    elseif current == "lists" and ns.ListsUI and ns.ListsUI.Soon then ns.ListsUI.Soon() end -- limited to once every 2 s
 end)
 ns.On("LEDGER_CHANGED", function()
     if refreshQueued or not frame or not frame:IsShown() then return end
@@ -693,7 +692,7 @@ function UI.Toggle(page)
     ShowPage(page or current or "bilan")
 end
 
--- ------------------------------------------------------------ minimap + commandes
+-- ------------------------------------------------------------ minimap + commands
 local LDBIcon = LibStub and LibStub("LibDBIcon-1.0", true)
 local LDB = LibStub and LibStub("LibDataBroker-1.1", true)
 
@@ -735,7 +734,7 @@ ns.On("LEDGER_READY", function()
         UI.UpdateMinimap()
     end
     if ns.repairMsg then ns.Print(ns.repairMsg); ns.repairMsg = nil end
-    -- Premier lancement (ou mise à jour) avec des étapes manquantes : on montre le guide une fois.
+    -- First launch (or update) with missing steps: show the guide once.
     if ns.Setup and not ns.db.settings.setupShown then
         C_Timer.After(4, function()
             if ns.Setup.Remaining() > 0 then ns.db.settings.setupShown = true; ns.Setup.Show() end
@@ -747,7 +746,7 @@ ns.On("LEDGER_READY", function()
     end
 end)
 
--- ------------------------------------------------------------ menu (clic droit sur l'icône minimap)
+-- ------------------------------------------------------------ menu (right-click on the minimap icon)
 local menu
 function UI.Menu(anchor)
     if not menu then
@@ -779,7 +778,7 @@ function UI.Menu(anchor)
             b:SetScript("OnLeave", function() hl:SetColor({ 1, 1, 1, 0 }) end)
             b:SetScript("OnClick", function() menu:Hide(); e[2]() end)
         end
-        -- Se ferme dès que la souris l'a quitté depuis un moment.
+        -- Closes once the mouse has left it for a moment.
         local away = 0
         menu:SetScript("OnUpdate", function(self, el)
             if self:IsMouseOver(8, -8, -8, 8) then away = 0 else away = away + el end
@@ -808,7 +807,7 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
     elseif msg == "lists" or msg == "listes" then
         UI.Toggle("lists"); ns.Lists.Diag()
     elseif msg:match("^price") or msg:match("^prix") then
-        -- /ipg price (v0.24.0) : même fenêtre que /ipg item.
+        -- /ipg price (v0.24.0): same window as /ipg item.
         ns.History.Command((msg:gsub("^%S+%s*", "")))
     elseif msg:match("^perf") then
         ns.Profile.Report(msg:match("^perf%s+(%S+)"))

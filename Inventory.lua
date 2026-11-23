@@ -1,5 +1,5 @@
--- ImpotPointGouv : inventaire de chaque personnage (sacs, banque), banque de bataillon,
--- et objets que vous avez en vente à l'HV. Sert à la liste de courses du craft.
+-- ImpotPointGouv: inventory of each character (bags, bank), warband bank,
+-- and items you have listed at the AH. Used by the craft shopping list.
 local _, ns = ...
 local I = {}
 ns.Inventory = I
@@ -34,7 +34,7 @@ local function NumSlots(bag)
     return ok and n or 0
 end
 
--- Objets liés (non vendables à l'HV) : valorisés au prix marchand seulement.
+-- Bound items (cannot be sold at the AH): valued at vendor price only.
 local function Bound() ns.db.bound = ns.db.bound or {}; return ns.db.bound end
 
 local function ScanBags(list, into)
@@ -97,8 +97,8 @@ function I.ScanBank()
     c.bankT = time()
 end
 
--- ------------------------------------------------------------ courrier
--- Objets dans la boîte aux lettres du personnage (relevé à chaque ouverture).
+-- ------------------------------------------------------------ mail
+-- Items in the character's mailbox (read each time it opens).
 function I.ScanMail()
     local c = DBChar()
     if not c or not GetInboxNumItems then return end
@@ -111,12 +111,12 @@ function I.ScanMail()
         end
     end
     c.mail, c.mailT = into, time()
-    -- Ce qui était "en route" vers ce personnage est maintenant dans sa boîte.
+    -- What was "in transit" to this character is now in their mailbox.
     local me = (UnitName("player") or ""):lower()
     if ns.db.transit then ns.db.transit[me] = nil end
 end
 
--- Objets envoyés à un de vos personnages, pas encore relevés dans sa boîte.
+-- Items sent to one of your characters, not yet read in their mailbox.
 local function OwnCharName(recipient)
     if not recipient then return nil end
     local n = recipient:match("^([^%-]+)") or recipient
@@ -140,7 +140,7 @@ local function CaptureSend(recipient)
     for id, n in pairs(items) do t[id] = (t[id] or 0) + n end
 end
 if type(SendMail) == "function" then
-    -- Juste après l'appel, les pièces jointes sont encore dans la fenêtre d'envoi : on note ce qui part vers vos persos.
+    -- Right after the call, the attachments are still in the send window: note what goes to your characters.
     hooksecurefunc("SendMail", function(recipient) pcall(CaptureSend, recipient) end)
 end
 
@@ -151,7 +151,7 @@ function I.Mail(id)
     return total
 end
 
--- Détail par personnage : { {nom, sacs, banque, courrier}, ... }, en vente, en route.
+-- Detail per character: { {name, bags, bank, mail}, ... }, listed, in transit.
 function I.Breakdown(id)
     local rows = {}
     for key, c in pairs(ns.db.inv or {}) do
@@ -167,22 +167,22 @@ function I.Breakdown(id)
     return rows, I.Listed(id), transit, ((ns.db.warband or {})[id] or 0)
 end
 
--- ------------------------------------------------------------ requêtes
--- Ce que le personnage connecté a sous la main (sacs + banque + bataillon).
+-- ------------------------------------------------------------ queries
+-- What the logged-in character has at hand (bags + bank + warband).
 function I.Mine(id)
     local c = DBChar()
     if not c or not id then return 0 end
     return (c.bags[id] or 0) + (c.bank[id] or 0) + ((ns.db.warband or {})[id] or 0)
 end
 
--- Ce qu'un personnage précis possède (sacs + banque), d'après son dernier passage.
+-- What a given character owns (bags + bank), from their last visit.
 function I.CharCount(key, id)
     local c = (ns.db.inv or {})[key]
     if not c or not id then return 0 end
     return (c.bags[id] or 0) + (c.bank[id] or 0)
 end
 
--- Ce que les autres personnages possèdent : total + détail { {nom, qté}, ... }.
+-- What the other characters own: total + detail { {name, qty}, ... }.
 function I.Alts(id)
     local me = Key()
     local total, detail = 0, {}
@@ -200,14 +200,14 @@ function I.Alts(id)
     return total, detail
 end
 
--- Quantité mise en vente par vous (tous personnages).
+-- Quantity you have listed (all characters).
 function I.Listed(id)
     local total = 0
     for _, c in pairs(ns.db.inv or {}) do total = total + ((c.owned or {})[id] or 0) end
     return total
 end
 
--- Tout ce que vous possédez, objet par objet : { [id] = { bags, bank, mail, listed, warband, transit, total } }.
+-- Everything you own, item by item: { [id] = { bags, bank, mail, listed, warband, transit, total } }.
 function I.AllStock()
     local out = {}
     local function Add(id, field, n)
@@ -229,13 +229,13 @@ function I.AllStock()
 end
 function I.IsBound(id) return (ns.db.bound or {})[id] and true or false end
 
--- Stock total possédé (tous persos, banques, courrier, en route, en vente) : pour le réassort.
+-- Total stock owned (all characters, banks, mail, in transit, listed): for restocking.
 function I.Stock(id)
     local alts = I.Alts(id)
     return I.Mine(id) + alts + I.Listed(id) + I.Mail(id)
 end
 
--- ------------------------------------------------------------ événements
+-- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Inventory") end
 for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED",
@@ -266,7 +266,7 @@ ev:SetScript("OnEvent", function(_, event)
     elseif event == "MAIL_CLOSED" then
         I.ScanMail(); Changed()
     elseif event == "MAIL_INBOX_UPDATE" then
-        -- Pendant une récupération, cet événement arrive à chaque courrier : on regroupe.
+        -- During a collection this event fires for every mail: batch them.
         if mailQueued then return end
         mailQueued = true
         C_Timer.After(1.5, function() mailQueued = false; I.ScanMail(); Changed() end)
@@ -280,7 +280,7 @@ ev:SetScript("OnEvent", function(_, event)
         c.owned = {}
         for i = 1, C_AuctionHouse.GetNumOwnedAuctions() do
             local a = C_AuctionHouse.GetOwnedAuctionInfo(i)
-            -- status 0 = en vente, 1 = vendu (en attente de courrier)
+            -- status 0 = listed, 1 = sold (waiting for the mail)
             if a and a.itemKey and a.itemKey.itemID and (a.status == nil or a.status == 0) then
                 c.owned[a.itemKey.itemID] = (c.owned[a.itemKey.itemID] or 0) + (a.quantity or 1)
             end
@@ -289,7 +289,7 @@ ev:SetScript("OnEvent", function(_, event)
     end
 end)
 
--- Profilage (/ipg perf) : fonctions lourdes appelées hors des événements chronométrés.
+-- Profiling (/ipg perf): heavy functions called outside timed events.
 if ns.Profile then
     I.ScanBags = ns.Profile.Wrap("Inventory:ScanBags", I.ScanBags)
 end
