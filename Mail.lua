@@ -596,6 +596,41 @@ local function SetStacks(it, n)
     basket[it.id] = q
 end
 
+-- Typed quantity: one shared box, shown over the row's quantity.
+function M.EditQuantity(r)
+    local p = frame.send
+    if not p.qtyEdit then
+        local eb = CreateFrame("EditBox", nil, p)
+        eb:SetSize(70, 22)
+        eb:SetAutoFocus(true); eb:SetFontObject(ChatFontNormal); eb:SetNumeric(true); eb:SetMaxLetters(5)
+        eb:SetJustifyH("RIGHT")
+        T.Surface(eb, C.surface2, 6)
+        eb:SetTextInsets(6, 6, 0, 0)
+        eb:SetFrameLevel((p:GetFrameLevel() or 1) + 20)
+        eb:SetScript("OnEscapePressed", function(self) self:Hide() end)
+        eb:SetScript("OnEditFocusLost", function(self) self:Hide() end)
+        eb:SetScript("OnEnterPressed", function(self)
+            local it = self.item
+            local n = tonumber(self:GetText() or "")
+            if it and n then
+                n = math.min(n, it.count)
+                basket[it.id] = n > 0 and n or nil
+            end
+            self:Hide()
+            M.DrawSend()
+        end)
+        p.qtyEdit = eb
+    end
+    local eb = p.qtyEdit
+    eb.item = r.item
+    eb:ClearAllPoints()
+    eb:SetPoint("RIGHT", r.count, "RIGHT", 4, 0)
+    eb:SetText(tostring(basket[r.item.id] or ""))
+    eb:Show()
+    eb:SetFocus()
+    eb:HighlightText()
+end
+
 local function BagItems()
     local by, list = {}, {}
     local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or ((NUM_BAG_SLOTS or 4) + 1)
@@ -718,7 +753,7 @@ function M.BuildSend(f)
     local right = Card(p)
     right:SetPoint("TOPLEFT", pad + 270, -14); right:SetPoint("BOTTOMRIGHT", -pad, 16)
     local rt = T.Text(right, 12, { bold = true, text = Tr("Your bags") }); rt:SetPoint("TOPLEFT", 14, -10)
-    local rh = T.Text(right, 11, { color = C.faint, text = Tr("click to add / remove · − / + for the number of stacks") })
+    local rh = T.Text(right, 11, { color = C.faint, text = Tr("click to add / remove · − / + or type the quantity") })
     rh:SetPoint("TOPRIGHT", -14, -11)
     p.rows = {}
     for i = 1, 13 do
@@ -732,18 +767,38 @@ function M.BuildSend(f)
         r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
         r.name = T.Text(r, 12); r.name:SetPoint("LEFT", 56, 0); r.name:SetWidth(260)
         r.count = T.Text(r, 12, { bold = true, justify = "RIGHT" }); r.count:SetPoint("RIGHT", -8, 0)
-        -- Nombre de piles : − / + sur les objets cochés qui occupent plusieurs emplacements.
+        -- Quantity of a checked item: − / + by whole stacks (by one with Shift), or click the number to type it.
         local function Step(d)
             local it = r.item
-            if not it then return end
-            local cur = (frame.send.stackOf and frame.send.stackOf[it.id]) or 0
-            SetStacks(it, cur + d)
+            if not it or not basket[it.id] then return end
+            if IsShiftKeyDown and IsShiftKeyDown() then
+                local q = math.max(0, math.min(it.count, basket[it.id] + d))
+                basket[it.id] = q > 0 and q or nil
+            else
+                local whole = (frame.send.stackOf and frame.send.stackOf[it.id]) or 0
+                local q = 0
+                for k = 1, whole do q = q + (it.stacks[k] or 0) end
+                local partial = basket[it.id] > q
+                SetStacks(it, (d < 0 and partial) and whole or (whole + d))
+            end
             M.DrawSend()
         end
         r.plus = T.Button(r, "+", 22, 20, function() Step(1) end)
         r.plus:SetPoint("RIGHT", -6, 0)
         r.minus = T.Button(r, "−", 22, 20, function() Step(-1) end)
-        r.plus.tooltip = Tr("One more stack"); r.minus.tooltip = Tr("One stack less")
+        r.plus.tooltip = Tr("One more stack (Shift: one more item)")
+        r.minus.tooltip = Tr("One stack less (Shift: one item less)")
+        r.qty = CreateFrame("Button", nil, r)
+        r.qty:SetPoint("TOPLEFT", r.count, "TOPLEFT", -4, 4); r.qty:SetPoint("BOTTOMRIGHT", r.count, "BOTTOMRIGHT", 4, -4)
+        r.qty:SetScript("OnClick", function() if r.item and basket[r.item.id] then M.EditQuantity(r) end end)
+        r.qty:SetScript("OnEnter", function(self)
+            if not (r.item and basket[r.item.id]) then return end
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(Tr("Click to type how many to send"), 1, 1, 1)
+            GameTooltip:AddLine(Tr("Part of a stack is split into a free bag slot when you send."), 0.7, 0.7, 0.7, true)
+            GameTooltip:Show()
+        end)
+        r.qty:SetScript("OnLeave", function() GameTooltip:Hide() end)
         r:SetScript("OnClick", function(self)
             if not self.item then return end
             if basket[self.item.id] then basket[self.item.id] = nil else basket[self.item.id] = self.item.count end
@@ -872,8 +927,12 @@ function DrawSendInner()
     local p = frame and frame.send
     if not p or not p:IsShown() then return end
     p.items = BagItems()
-    p.stackOf = {}
-    for _, st in ipairs(ns.Routine and ns.Routine.BagStacks(basket) or {}) do p.stackOf[st.id] = (p.stackOf[st.id] or 0) + 1 end
+    p.stackOf, p.splitOf = {}, {}
+    local plan, splits = {}, {}
+    if ns.Routine then plan, splits = ns.Routine.PlanStacks(basket) end
+    for _, st in ipairs(plan) do p.stackOf[st.id] = (p.stackOf[st.id] or 0) + 1 end
+    for _, sp in ipairs(splits) do p.splitOf[sp.id] = true end
+    p.attachments = #plan + #splits
     p.offset = math.min(p.offset, math.max(0, #p.items - #p.rows))
     for i, r in ipairs(p.rows) do
         local it = p.items[p.offset + i]
@@ -885,19 +944,19 @@ function DrawSendInner()
             local qc = ITEM_QUALITY_COLORS and it.quality and ITEM_QUALITY_COLORS[it.quality]
             r.name:SetText(it.name)
             if qc then r.name:SetTextColor(qc.r, qc.g, qc.b) else r.name:SetTextColor(unpack(C.text)) end
-            local st = sel and p.stackOf and p.stackOf[it.id] or 0
-            local nStacks = #(it.stacks or {})
-            local stepper = sel ~= nil and nStacks > 1
-            r.plus:SetShown(stepper); r.minus:SetShown(stepper)
+            local slots = sel and ((p.stackOf[it.id] or 0) + (p.splitOf[it.id] and 1 or 0)) or 0
+            local stepper = sel ~= nil
+            r.plus:SetShown(stepper); r.minus:SetShown(stepper); r.qty:SetShown(stepper)
             r.count:ClearAllPoints()
             if stepper then
                 r.count:SetPoint("RIGHT", r.plus, "LEFT", -6, 0)
                 r.minus:ClearAllPoints(); r.minus:SetPoint("RIGHT", r.count, "LEFT", -6, 0)
-                r.plus:SetDisabled(st >= nStacks); r.minus:SetDisabled(false)
-                r.count:SetText(("|cffe0a83d%d|r / %d %s  |cff8a877f· %d|r"):format(st, nStacks, Tr("stacks"), sel))
+                r.plus:SetDisabled(sel >= it.count); r.minus:SetDisabled(false)
+                r.count:SetText(("|cffe0a83d%d|r / %d  |cff8a877f· %d %s|r"):format(sel, it.count, slots,
+                    Tr(slots > 1 and "slots" or "slot")))
             else
                 r.count:SetPoint("RIGHT", -8, 0)
-                r.count:SetText("×" .. it.count .. (sel and ("  |cff8a877f· " .. st .. " " .. Tr(st > 1 and "slots" or "slot") .. "|r") or ""))
+                r.count:SetText("×" .. it.count)
             end
             r:SetAlpha(sel and 1 or 0.8)
             r:Show()
@@ -946,8 +1005,7 @@ function DrawSendInner()
     local money = (tonumber(p.gold:GetText() or "") or 0) * 10000 + (tonumber(p.silver:GetText() or "") or 0) * 100
     -- Pièces jointes = piles dans les sacs (12 par courrier).
     local MAX = ATTACHMENTS_MAX_SEND or 12
-    local slots = ns.Routine and ns.Routine.BagStacks(basket) or {}
-    local att = #slots
+    local att = p.attachments or 0
     local mailsN = math.max(1, math.ceil(att / MAX))
     local inLast = att - (mailsN - 1) * MAX
     local left = MAX - inLast
