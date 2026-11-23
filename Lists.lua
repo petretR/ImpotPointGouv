@@ -195,6 +195,65 @@ end
 
 -- Nombre d'objets produits par un craft (ex. Cuir robuste traité : 2). Le jeu d'abord (recettes connues,
 -- puis toute recette vue dans une fenêtre de métier, puis le schéma demandé au jeu), sinon les données, sinon 1.
+-- ------------------------------------------------------------ bonus des plats (filtre de la liste Cuisine)
+-- Lu dans l'infobulle de l'objet (« bien nourri » : +12 Endurance…), donc valable pour les plats de Forever.
+LS.FOOD_STATS = { { "sta", "Stamina" }, { "agi", "Agility" }, { "str", "Strength" }, { "int", "Intellect" }, { "spi", "Spirit" }, { "ap", "AP" },
+    { "sp", "SP" }, { "hp", "HP" }, { "misc", "Misc" } }
+local FOOD_WORDS = {
+    sta = { "stamina", "endurance" },
+    agi = { "agility", "agilité" },
+    str = { "strength", "force" },
+    int = { "intellect", "intelligence" },
+    spi = { "spirit", "esprit" },
+    ap = { "attack power", "puissance d'attaque" },
+    -- « dégâts et soins des sorts » : compte pour SP et HP.
+    sp = { "spell damage", "spell power", "damage and healing", "dégâts des sorts", "puissance des sorts",
+        "dégâts et les soins" },
+    hp = { "healing done", "healing spells", "healing power", "healing by", "damage and healing",
+        "soins prodigués", "puissance de soins", "dégâts et les soins" },
+}
+local foodTags, scanTip = {}, nil
+-- Ensemble des bonus d'un plat ({ sta = true, … } ; { misc = true } sans stat suivie), nil tant que l'objet charge.
+function LS.FoodTags(id)
+    if not id then return nil end
+    if foodTags[id] then return foodTags[id] end
+    if not scanTip then
+        if not CreateFrame then return nil end
+        scanTip = CreateFrame("GameTooltip", "ImpotPointGouvScanTip", UIParent, "GameTooltipTemplate")
+    end
+    if not scanTip.SetItemByID or not ns.GetItemInfo(id) then ns.RequestItem(id); return nil end
+    scanTip:SetOwner(WorldFrame or UIParent, "ANCHOR_NONE")
+    scanTip:ClearLines()
+    scanTip:SetItemByID(id)
+    local parts = {}
+    for i = 2, scanTip:NumLines() or 0 do
+        local fs = _G["ImpotPointGouvScanTipTextLeft" .. i]
+        local t = fs and fs:GetText()
+        if t then parts[#parts + 1] = t:lower() end
+    end
+    scanTip:Hide()
+    if #parts == 0 then ns.RequestItem(id); return nil end
+    local text = " " .. table.concat(parts, " ") .. " "
+    local tags, any = {}, false
+    for key, words in pairs(FOOD_WORDS) do
+        for _, w in ipairs(words) do
+            if text:find("%f[%a]" .. w:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1") .. "%f[%A]") then
+                tags[key], any = true, true
+                break
+            end
+        end
+    end
+    if not any then tags.misc = true end
+    foodTags[id] = tags
+    return tags
+end
+-- Le plat a-t-il ce bonus ? (« all » : tout passe ; pas encore chargé : seulement dans « all »)
+function LS.FoodMatch(id, stat)
+    if not stat or stat == "all" then return true end
+    local t = LS.FoodTags(id)
+    return t ~= nil and t[stat] == true
+end
+
 function LS.YieldOf(id)
     if not id then return 1 end
     ProductIndex()
