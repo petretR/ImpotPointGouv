@@ -109,11 +109,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 
 ## Contributing
 
-1. Fork the repo, then create one branch per topic (`fix/mail-send`, `feat/weekly-report`…).
-2. Test in game (WoW Forever, modern client, Lua 5.1).
-3. Open a Pull Request describing what changes and how to test it.
-
-A new version is released automatically when the `## Version:` line of `ImpotPointGouv.toc` changes on `main`.
+Work happens in pull requests reviewed by the other maintainer; nothing is pushed to `main` directly. Every pull request adds a line to `CHANGELOG.md` and passes CI (syntax, toc, smoke tests). Releases are their own pull requests. Details in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

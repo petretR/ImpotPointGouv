@@ -1,0 +1,70 @@
+# Changelog
+
+All notable changes to ImpotPointGouv. Newest first.
+Every pull request adds its lines under **Unreleased**; a release pull request turns that section into the new version.
+
+## [Unreleased]
+
+### Added
+- CI on every pull request: Lua 5.1 syntax check, toc check, smoke tests in English and French (`tests/run.lua`).
+- `CONTRIBUTING.md`: branches, pull requests, changelog, versioning and release process.
+- Release notes are taken from this changelog.
+
+## [0.25.0] - 2026-11-23
+
+### Added
+- Leveling route: choose how crafts are sold (AH, Merchant, Disenchant, or the best of several); disenchant values from Auctionator's Classic table.
+- Price history window: lowest and market price per scan, units gone and newly listed, ranges from 1 day to All; merged with the 0.24.0 price card. `/ipg item` and `/ipg price` open it.
+- Lists: Cooking and Alchemy recipe lists, sortable columns, cooldown and profit-per-day columns for daily cooldowns.
+- `/ipg perf` profiler.
+
+### Changed
+- Recipe data comes from ForeverMaster: Forever skill thresholds and yields for all 2,160 recipes.
+- Crafts that make 2 count as 2, cooldown recipes leave the route, a recipe is paid for once.
+- Merchant materials count in recipe costs.
+- Realm lookup worked out once per session; data saved under an empty realm name is merged back.
+
+### Fixed
+- Market tab freezes (realm lookup, refresh loops, caches).
+
+## [0.24.0] - 2026-11-20
+
+### Added
+- Price card: price curve, usual-price band, vendor price line, four key numbers, volatility. Opens on click in Lists, Market and Stock, and with `/ipg price`.
+
+## [0.23.1] - 2026-11-20
+
+### Fixed
+- Prices and scans are kept when `GetRealmName()` returns an empty string (Forever 1.60.1).
+
+## [0.23.0] - 2026-11-18
+
+### Added
+- Stock tab: everything you own on every character, valued at AH or vendor price, sortable.
+- Market: Vendor crafts filter, recipes that sell to a vendor for more than their materials cost.
+
+### Changed
+- Leveling route shows the gold balance signed: − when a step costs, + when it earns.
+
+## [0.22.3] - 2026-11-18
+
+### Added
+- Mail: choose how many stacks to send.
+
+## [0.22.2] - 2026-11-18
+
+### Fixed
+- Mail tooltips show the real bag item, next to the window.
+
+## [0.22.1] - 2026-11-18
+
+### Changed
+- Best route rows redesigned: skill gauge, source pills, folded alternatives.
+
+### Fixed
+- Mail collection waited up to 5 s per mail when several AH sales were identical.
+
+## [0.22.0] - 2026-11-17
+
+### Added
+- Best leveling route per profession, with close alternatives and trainer cost capture.
