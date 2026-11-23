@@ -350,7 +350,7 @@ local function TooltipHint(tt, data)
     local adv = TR.PostAdvice(name, data.id)
     if adv then
         local why, what = TR.AdviceText(adv)
-        tt:AddLine(Tr("|cffe0a83dIPG|r  ") .. why, 0.93, 0.55, 0.32)
+        tt:AddLine("|cffe0a83dIPG|r  " .. why, 0.93, 0.55, 0.32)
         tt:AddLine("      " .. what, 0.93, 0.55, 0.32)
         tt:Show()
         return

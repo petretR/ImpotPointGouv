@@ -1073,7 +1073,7 @@ local function Build(panel)
             end
             if c.ev and c.ev.verdict then
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine(Tr("|cffe0a83dImpot|rPointGouv: ") .. c.ev.verdict, 1, 1, 1)
+                GameTooltip:AddLine("|cffe0a83dImpot|rPointGouv: " .. c.ev.verdict, 1, 1, 1)
                 if c.ev.profit then
                     GameTooltip:AddDoubleLine(Tr("Profit per craft"), ns.FormatMoney(c.ev.profit, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7)
                 end
