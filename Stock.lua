@@ -36,9 +36,13 @@ function S.Rows()
     return rows, math.floor(total), n, unpriced
 end
 
--- Pour la carte de la page Bilan.
+-- For the Overview card. Items with no price yet whose info the game has not loaded are requested,
+-- so their vendor price arrives and the card catches up (see the redraw below).
 function S.Value()
-    local _, total, n = S.Rows()
+    local rows, total, n = S.Rows()
+    for _, row in ipairs(rows) do
+        if not row.unit and not ns.GetItemInfo(row.id) then ns.RequestItem(row.id) end
+    end
     return total, n
 end
 
@@ -226,7 +230,13 @@ function S.BuildPage(page)
     end
 end
 
--- Noms et prix marchands qui arrivent après coup : redessine la page.
+-- Names and vendor prices that arrive later, and inventory changes: redraw the Stock tab and the
+-- Overview (its Stock value card), at most every 2 s.
+local function ShowsStock()
+    local f = _G.ImpotPointGouvFrame
+    local cur = ns.UI.Current and ns.UI.Current()
+    return f and f:IsShown() and (cur == "stock" or cur == "bilan")
+end
 local pend
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Stock") end
@@ -239,10 +249,16 @@ ev:SetScript("OnEvent", function(_, _, id, success)
     C_Timer.After(math.max(0.6, 2 - (GetTime() - lastDraw)), function()
         pend = false
         lastDraw = GetTime()
-        local f = _G.ImpotPointGouvFrame
-        if f and f:IsShown() and ns.UI.Current and ns.UI.Current() == "stock" then ns.UI.Refresh() end
+        if ShowsStock() then ns.UI.Refresh() end
     end)
 end)
+local invPend
 ns.On("INVENTORY_CHANGED", function()
-    if ns.UI.Current and ns.UI.Current() == "stock" then ns.UI.Refresh() end
+    if invPend or not ShowsStock() then return end
+    invPend = true
+    C_Timer.After(math.max(0.3, 2 - (GetTime() - lastDraw)), function()
+        invPend = false
+        lastDraw = GetTime()
+        if ShowsStock() then ns.UI.Refresh() end
+    end)
 end)
