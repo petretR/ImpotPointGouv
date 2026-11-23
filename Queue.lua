@@ -141,11 +141,8 @@ end
 -- allProfs = true: all the character's professions (otherwise only the open profession).
 -- ------------------------------------------------------------ adaptive target (demand)
 -- Each item has its own stock target, adjusted from one session to the next according to how
--- the listings posted since the last adjustment went:
---   all sold and fast (≤ 1 h)  → ×2      all sold      → ×1.5
---   ≥ 70 % sold                → ×1.25   more unsold than sold → ×0.6
--- Only adjusted when the cycle is resolved (nothing listed any more) or exhausted.
-local FAST = 3600
+-- the listings posted since the last adjustment went (rules in Q.Target below).
+-- Only adjusted when the cycle is resolved (nothing listed any more).
 
 local function AdaptDB() ns.db.settings.adapt = ns.db.settings.adapt or {}; return ns.db.settings.adapt end
 
@@ -278,17 +275,32 @@ end
 Q.IsSingle = IsSingle
 
 -- Stock target to sell for a recipe; `commit` saves the adjustment (Queue profitable).
--- Progression: start at 2 (1 for gear), +2 (+1) when it sells well, ×2 when everything sells within 1 h.
+-- First batch: your own sales of the last 7 days if any, otherwise sized on the market: at most one
+-- stack (startCap) and startShare % of the estimated daily sales (gear: 1). Then, from your real sales:
+--   everything sold within fastHours → ×2    sold out or ≥ 70 % sold → same batch
+--   more than half came back unsold  → ÷2    never above maxQty (5 stacks).
+function Q.FirstBatch(rec, ev, rules)
+    local single = IsSingle(rec.pid)
+    if single then return 1, nil end
+    local lo = rules.minQty
+    if (ev.sold7 or 0) > 0 then return Clamp(ev.sold7, lo, rules.startCap or 20), nil end
+    local rate = ns.Market and ns.Market.Rate and ns.Market.Rate(rec.pid) or 0
+    if rate > 0 then
+        local n = math.floor(rate * (rules.startShare or 5) / 100)
+        return Clamp(n, lo, rules.startCap or 20), rate
+    end
+    return Clamp(rules.startQty, lo, rules.startCap or 20), nil
+end
+
 function Q.Target(rec, ev, rules, commit)
     local single = IsSingle(rec.pid)
-    local step = single and 1 or 2
     local lo = single and 1 or rules.minQty
-    local start = single and 1 or rules.startQty
     local A = AdaptDB()
     local st = A[rec.pid]
     if not st then
-        local t = (ev.sold7 or 0) > 0 and Clamp(ev.sold7, lo, rules.maxQty) or start
+        local t, rate = Q.FirstBatch(rec, ev, rules)
         st = { t = t, at = 0 }
+        if rate then st.why = (Tr("%d · first batch, ~%d sold/day on the AH")):format(t, math.floor(rate + 0.5)) end
         if commit then A[rec.pid] = st end
     end
     local name = ns.db.items[rec.pid] or rec.name
@@ -308,19 +320,19 @@ function Q.Target(rec, ev, rules, commit)
     end
     -- Disenchanted and never posted: no AH demand to follow.
     if ev.channel == "de" and c.posted == 0 and (ev.posts14 or 0) == 0 then
-        return start, nil
+        return st.t, nil
     end
+    local fast = (rules.fastHours or 2) * 3600
     local t, why = st.t, nil
-    if c.posted > 0 then
+    if c.posted > 0 and c.pending == 0 then
         local soldOut = c.sold == c.posted
-        if soldOut and c.median and c.median <= FAST then
-            t = math.max(t + step, t * 2); why = (Tr("sold out, %d in ~%s")):format(c.sold, Ago(c.median))
-        elseif soldOut or (c.pending == 0 and c.sold >= 0.7 * c.posted) then
-            t = t + step; why = soldOut and (Tr("sold out, %d in ~%s")):format(c.sold, Ago(c.median or 0))
-                or (Tr("sold %d/%d")):format(c.sold, c.posted)
-        elseif c.pending == 0 and c.expired > c.sold then
-            t = math.max(lo, t - step); why = (Tr("only %d/%d sold")):format(c.sold, c.posted)
-        elseif c.pending == 0 then
+        if soldOut and c.median and c.median <= fast then
+            t = t * 2; why = (Tr("sold out, %d in ~%s")):format(c.sold, Ago(c.median))
+        elseif soldOut or c.sold >= 0.7 * c.posted then
+            why = (Tr("sold %d/%d, holding")):format(c.sold, c.posted)
+        elseif c.expired * 2 > c.posted then
+            t = math.floor(t / 2); why = (Tr("only %d/%d sold")):format(c.sold, c.posted)
+        else
             why = (Tr("sold %d/%d, holding")):format(c.sold, c.posted)
         end
     end
@@ -978,9 +990,12 @@ local function BuildRules(parent)
     local plain = function(v) return tostring(v) end
     local g, s
     local rows = {
-        { "minProfit", 0, 1000000, "Min profit per craft", 5, money },
+        { "minProfit", 0, 1000000, "Min profit per craft", 50, money },
         { "minMargin", 0, 500, "Min margin", 5, function(v) return v .. " %" end },
-        { "startQty", 1, 50, "Stock target (no sales yet)", 1, plain },
+        { "startQty", 1, 50, "First batch (no market data)", 1, plain },
+        { "startCap", 1, 200, "First batch at most", 5, plain },
+        { "startShare", 1, 100, "First batch, share of AH daily sales", 1, function(v) return v .. " %" end },
+        { "fastHours", 1, 48, "Double when sold out within", 1, function(v) return v .. " h" end },
         { "minQty", 1, 50, "Stock target min", 1, plain },
         { "maxQty", 1, 1000, "Stock target cap (adaptive)", 10, plain },
         { "maxListed", 0, 1000000, "Skip if more listed than", 1000, plain },
@@ -992,10 +1007,10 @@ local function BuildRules(parent)
     }
     for i, d in ipairs(rows) do
         g, s = Num(d[1], d[2], d[3])
-        Stepper(f, -44 - (i - 1) * 28, d[4], g, s, d[5], d[6])
+        Stepper(f, -44 - (i - 1) * 24, d[4], g, s, d[5], d[6])
     end
     -- Switch: white gear at vendor price
-    local wy = -44 - #rows * 28
+    local wy = -44 - #rows * 24
     local wl = T.Text(f, 12, { color = C.text, text = Tr("White gear: vendor price only") }); wl:SetPoint("TOPLEFT", 16, wy)
     local wb
     wb = T.Button(f, "", 70, 20, function()
@@ -1006,8 +1021,8 @@ local function BuildRules(parent)
     wb.text:SetText(r.ignoreWhiteGear and "On" or "Off"); wb:SetSelected(r.ignoreWhiteGear)
     wb.tooltip = Tr("White (common) gear rarely sells on the AH: value it at the vendor price only. Bags, armor kits and reagents are not affected.")
     local hint = T.Text(f, 11, { color = C.faint, wrap = true, justify = "LEFT",
-        text = Tr("Stock target: starts at 2 (gear: 1), +2 when it sells, ×2 when everything sells within an hour, −2 when it doesn't. Capped by your budget.") })
-    hint:SetPoint("TOPLEFT", 16, -44 - (#rows + 1) * 28 - 4)
+        text = Tr("First batch: one stack at most, and a small share of what the AH sells per day (gear: 1). Then ×2 when everything sells quickly, the same when it sells, ÷2 when most comes back. Capped by your budget.") })
+    hint:SetPoint("TOPLEFT", 16, -44 - (#rows + 1) * 24 - 4)
     hint:SetPoint("RIGHT", f, "RIGHT", -16, 0)
     local done = T.Button(f, Tr("Done"), 90, 26, function() f:Hide(); CR.Refresh() end, "primary")
     done:SetPoint("BOTTOMRIGHT", -12, 12)

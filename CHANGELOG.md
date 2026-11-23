@@ -11,6 +11,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
 
 ### Changed
+- Queue profitable: only recipes earning at least 2s per craft by default (setting). A new craft starts with one stack at most, sized on what the AH sells per day; a batch that sells out within 2 h doubles the next one, one that mostly comes back is halved, and a single item never goes above 5 stacks.
 - Lists: By recipe / Flat list moved next to the Auctionator button.
 - Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
 
