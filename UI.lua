@@ -540,7 +540,12 @@ local function BuildSettings(page)
     Toggle(1, "Minimap button", function() return not st().minimap.hide end,
         function(v) st().minimap.hide = not v; UI.UpdateMinimap() end)
     Head(1, "Crafting")
-    Stepper(1, "Min profit per craft", function() return R().minProfit end, Clamp("minProfit", 0, 1000000), 5, money)
+    Stepper(1, "Min profit per craft", function() return R().minProfit end, Clamp("minProfit", 0, 1000000), 50, money,
+        "Queue profitable only queues recipes that earn at least this much per craft, after the AH cut and deposit.")
+    Stepper(1, "First batch at most", function() return R().startCap end, Clamp("startCap", 1, 200), 5, plain,
+        "First batch of a new craft: at most this many, and a small share of what the AH sells per day.")
+    Stepper(1, "Double when sold out within", function() return R().fastHours end, Clamp("fastHours", 1, 48), 1,
+        function(v) return v .. " h" end, "When a whole batch sells this fast, the next one is twice as big.")
     Stepper(1, "Min margin", function() return R().minMargin end, Clamp("minMargin", 0, 500), 5, pct)
     Stepper(1, "Spend at most", function() return R().budgetPct end, Clamp("budgetPct", 5, 100), 5, pct,
         "Share of your total gold the craft queue can spend on reagents.")

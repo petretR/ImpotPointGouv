@@ -328,11 +328,20 @@ CR.PostedUnits = PostedUnits
 function CR.Rules()
     ns.db.settings.queue = ns.db.settings.queue or {}
     local q = ns.db.settings.queue
-    if q.minProfit == nil then q.minProfit = 10 end        -- copper
+    if q.minProfit == nil or q.minProfit == 10 then q.minProfit = 200 end -- copper (2s; 10c was the old default)
     if q.minMargin == nil then q.minMargin = 20 end        -- %
     if q.startQty == nil or q.startQty == 3 then q.startQty = 2 end
     if q.minQty == nil then q.minQty = 2 end
-    if q.maxQty == nil or not q.adaptive then q.maxQty = math.max(q.maxQty or 0, 200); q.adaptive = true end -- cap of the adaptive target
+    if q.maxQty == nil or not q.adaptive then q.maxQty = 100; q.adaptive = true end -- cap of the adaptive target
+    -- Batches sized on the market: first batch at most startCap (one stack) and startShare % of the
+    -- estimated daily sales; doubled when everything sells within fastHours; never more than maxQty (5 stacks).
+    if not q.batches then
+        q.batches = true
+        if q.maxQty == 200 then q.maxQty = 100 end
+    end
+    if q.startCap == nil then q.startCap = 20 end
+    if q.startShare == nil then q.startShare = 5 end      -- % of the market's estimated daily sales
+    if q.fastHours == nil then q.fastHours = 2 end
     if q.maxListed == nil or q.maxListed == 500 then q.maxListed = 10000 end -- regional AH
     if q.unsoldPosts == nil then q.unsoldPosts = 3 end
     if q.ignoreWhiteGear == nil then q.ignoreWhiteGear = true end

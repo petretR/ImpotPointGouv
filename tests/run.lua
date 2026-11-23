@@ -299,5 +299,36 @@ Check("mail splits two partial items one after the other", function()
     bags[0] = {}
 end)
 
+Check("queue profitable: first batch sized on the market, then adapted to real sales", function()
+    local Q, rules = ns.Queue, ns.Craft.Rules()
+    Assert(rules.minProfit == 200, "default min profit should be 2s, got " .. tostring(rules.minProfit))
+    local rate = ns.Market.Rate
+    local rec = { pid = 777001, name = "Item 777001" } -- the mock names every item "Item <id>"
+    ns.Market.Rate = function() return 450 end
+    Assert(Q.FirstBatch(rec, {}, rules) == 20, "450/day: capped at one stack (20)")
+    ns.Market.Rate = function() return 40 end
+    Assert(Q.FirstBatch(rec, {}, rules) == math.max(rules.minQty, 2), "40/day: 5 % = 2")
+    Assert(Q.FirstBatch(rec, { sold7 = 9 }, rules) == 9, "own sales of the last 7 days come first")
+    ns.Market.Rate = rate
+    -- Real sales: a batch of 20 posted and sold within an hour doubles the next one.
+    ns.db.items[rec.pid] = rec.name
+    ns.db.settings.adapt = ns.db.settings.adapt or {}
+    ns.db.settings.adapt[rec.pid] = { t = 20, at = time() - 10 }
+    local t0 = time()
+    table.insert(ns.db.tx, { t = t0, k = "ah_deposit", i = rec.name, q = 20, a = -100 })
+    Advance(1800)
+    table.insert(ns.db.tx, { t = time(), k = "ah_sale", i = rec.name, q = 20, a = 1000 })
+    Assert(Q.Target(rec, { channel = "ah" }, rules, true) == 40, "sold out in 30 min: 20 -> 40")
+    -- Next batch: most of it comes back unsold, so it is halved.
+    Advance(10)
+    table.insert(ns.db.tx, { t = time(), k = "ah_deposit", i = rec.name, q = 40, a = -100 })
+    Advance(10)
+    table.insert(ns.db.tx, { t = time(), k = "ah_sale", i = rec.name, q = 10, a = 1000 })
+    table.insert(ns.db.tx, { t = time(), k = "ah_expired", i = rec.name, q = 30, a = 0 })
+    Assert(Q.Target(rec, { channel = "ah" }, rules, true) == 20, "10/40 sold: 40 -> 20")
+    ns.db.settings.adapt[rec.pid] = nil
+end)
+
+
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end
