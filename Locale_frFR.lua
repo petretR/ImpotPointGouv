@@ -672,4 +672,12 @@ ns.AddLocale("frFR", {
     ["Healing power"] = "Puissance des soins",
     ["Intellect"] = "Intelligence",
     ["Everything else: mana or health regeneration, crit, no buff, campfire kits…"] = "Tout le reste : régénération de mana ou de vie, critique, sans bonus, kits de feu de camp…",
+    ["One more stack (Shift: one more item)"] = "Une pile de plus (Maj : un objet de plus)",
+    ["One stack less (Shift: one item less)"] = "Une pile de moins (Maj : un objet de moins)",
+    ["Click to type how many to send"] = "Clic pour taper la quantité à envoyer",
+    ["Part of a stack is split into a free bag slot when you send."] = "Une partie de pile est coupée dans un emplacement libre au moment de l'envoi.",
+    ["click to add / remove · − / + or type the quantity"] = "clic pour ajouter / retirer · − / + ou tape la quantité",
+    ["Splitting stacks…"] = "Découpe des piles…",
+    ["|cffed5c52The game did not split the stack in time: nothing was sent. Try again.|r"] = "|cffed5c52Le jeu n'a pas coupé la pile à temps : rien n'a été envoyé. Réessaie.|r",
+    ["|cffed5c52Free %d bag slot(s) to send part of a stack.|r"] = "|cffed5c52Libère %d emplacement(s) de sac pour envoyer une partie de pile.|r",
 })

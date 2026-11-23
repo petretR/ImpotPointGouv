@@ -6,6 +6,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 ## [Unreleased]
 
 ### Added
+- Mail: send part of a stack. Click the quantity of a checked item to type it, or use Shift with − / +; the addon splits the stack into a free bag slot when you send.
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
 
 ### Changed

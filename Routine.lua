@@ -77,7 +77,91 @@ local function BagStacks(want)
     return stacks
 end
 
-local function SendBatch()
+-- Whole stacks that fit in `want`, plus, for each item whose quantity is not a sum of whole stacks,
+-- one split: { id, count, bag, slot } = take `count` from that stack into a free bag slot.
+local function PlanStacks(want)
+    local stacks = BagStacks(want)
+    local got, used = {}, {}
+    for _, st in ipairs(stacks) do
+        got[st.id] = (got[st.id] or 0) + st.count
+        used[st.bag .. ":" .. st.slot] = true
+    end
+    local splits = {}
+    local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or ((NUM_BAG_SLOTS or 4) + 1)
+    for id, n in pairs(want) do
+        local rest = n - (got[id] or 0)
+        if rest > 0 then
+            for bag = 0, last do
+                local found
+                for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do
+                    local info = C_Container.GetContainerItemInfo(bag, slot)
+                    if info and info.itemID == id and not info.isBound and not used[bag .. ":" .. slot]
+                        and (info.stackCount or 1) > rest then
+                        splits[#splits + 1] = { id = id, count = rest, bag = bag, slot = slot }
+                        found = true
+                        break
+                    end
+                end
+                if found then break end
+            end
+        end
+    end
+    return stacks, splits
+end
+
+-- Empty slots in general-purpose bags (where a split stack can go).
+local function FreeBagSlots()
+    local free = {}
+    local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or ((NUM_BAG_SLOTS or 4) + 1)
+    for bag = 0, last do
+        local _, bagType = C_Container.GetContainerNumFreeSlots(bag)
+        if bagType == nil or bagType == 0 then
+            for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do
+                if not C_Container.GetContainerItemInfo(bag, slot) then free[#free + 1] = { bag = bag, slot = slot } end
+            end
+        end
+    end
+    return free
+end
+
+local SendBatch
+
+-- Splits the partial stacks into free slots, waits until the game shows them, then sends.
+local function DoSplits(cur, splits, free)
+    if CursorHasItem and CursorHasItem() then ClearCursor() end
+    local targets = {}
+    for i, sp in ipairs(splits) do
+        local to = free[i]
+        C_Container.SplitContainerItem(sp.bag, sp.slot, sp.count)
+        C_Container.PickupContainerItem(to.bag, to.slot)
+        targets[#targets + 1] = { bag = to.bag, slot = to.slot, id = sp.id, count = sp.count }
+    end
+    RT.Status(Tr("Splitting stacks…"))
+    local tries = 0
+    local function Check()
+        if sending ~= cur then return end
+        local ready = true
+        for _, t in ipairs(targets) do
+            local info = C_Container.GetContainerItemInfo(t.bag, t.slot)
+            if not (info and info.itemID == t.id and (info.stackCount or 1) == t.count and not info.isLocked) then ready = false end
+        end
+        if ready then
+            for _, t in ipairs(targets) do cur.stacks[#cur.stacks + 1] = t end
+            SendBatch()
+        elseif tries < 15 then
+            tries = tries + 1
+            C_Timer.After(0.2, Check)
+        else
+            if CursorHasItem and CursorHasItem() then ClearCursor() end
+            sending = nil
+            RT.Status(Tr("|cffed5c52The game did not split the stack in time: nothing was sent. Try again.|r"))
+            RT.Refresh()
+        end
+    end
+    C_Timer.After(0.2, Check)
+end
+
+function SendBatch()
     if not sending then return end
     if not mailOpen then RT.Status(Tr("Mailbox closed: sending stopped.")); sending = nil; return end
     if #sending.stacks == 0 and not (sending.money and sending.money > 0) then
@@ -141,14 +225,20 @@ function RT.SendTo(name, want, what, money)
     if sending then RT.Status(Tr("Already sending…")); return false end
     if not mailOpen then RT.Status(Tr("Open a mailbox first.")); return false end
     if not name or name == "" then RT.Status(Tr("|cffed5c52Unknown recipient.|r")); return false end
-    local stacks = BagStacks(want or {})
-    if #stacks == 0 and not (money and money > 0) then RT.Status(Tr("Nothing to send: ") .. (what or "items") .. Tr(" not found in your bags.")); return false end
+    local stacks, splits = PlanStacks(want or {})
+    if #stacks == 0 and #splits == 0 and not (money and money > 0) then RT.Status(Tr("Nothing to send: ") .. (what or "items") .. Tr(" not found in your bags.")); return false end
+    local free = #splits > 0 and FreeBagSlots() or {}
+    if #free < #splits then
+        RT.Status((Tr("|cffed5c52Free %d bag slot(s) to send part of a stack.|r")):format(#splits))
+        return false
+    end
     sending = { name = name, stacks = stacks, mails = 0, sent = {}, order = {}, money = money }
-    SendBatch()
+    if #splits > 0 then DoSplits(sending, splits, free) else SendBatch() end
     return true
 end
 function RT.IsSending() return sending ~= nil end
 RT.BagStacks = function(want) return BagStacks(want) end
+RT.PlanStacks = function(want) return PlanStacks(want) end
 RT.CharName = function(key) return CharName(key) end
 
 -- Regroupe des piles par objet pour l'aperçu.
