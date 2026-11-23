@@ -189,5 +189,32 @@ Check("Collect expired takes only expired auctions", function()
     for i = #inbox, 1, -1 do inbox[i] = nil end
 end)
 
+Check("overview stock value follows inventory changes and late item info", function()
+    ns.UI.Toggle("bilan")
+    RunTimers(3)
+    local refreshes, orig = 0, ns.UI.Refresh
+    ns.UI.Refresh = function(...) refreshes = refreshes + 1; return orig(...) end
+    ns.Fire("INVENTORY_CHANGED")
+    ns.Fire("INVENTORY_CHANGED")
+    RunTimers(3)
+    Assert(refreshes == 1, "refreshes after two inventory changes: " .. refreshes)
+    -- An item with no price yet and no item info gets requested, and its info redraws the Overview.
+    local key = ns.Ledger.CharKey()
+    ns.db.inv = ns.db.inv or {}
+    ns.db.inv[key] = ns.db.inv[key] or { bags = {}, bank = {}, owned = {}, mail = {} }
+    ns.db.inv[key].bags[987654] = 3
+    local getInfo = C_Item.GetItemInfo
+    C_Item.GetItemInfo = function(id) if id == 987654 then return nil end return getInfo(id) end
+    ns.Stock.Value()
+    Assert(ns.ItemWanted(987654), "uncached stock item was not requested")
+    C_Item.GetItemInfo = getInfo
+    refreshes = 0
+    Fire("GET_ITEM_INFO_RECEIVED", 987654, true)
+    RunTimers(3)
+    Assert(refreshes >= 1, "Overview not redrawn when the item info arrived")
+    ns.db.inv[key].bags[987654] = nil
+    ns.UI.Refresh = orig
+end)
+
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end
