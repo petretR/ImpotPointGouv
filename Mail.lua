@@ -291,7 +291,7 @@ local function Build()
     header:SetScript("OnDragStop", function() frame:StopMovingOrSizing() end)
     local hd = T.Divider(header, 0.07); hd:SetPoint("BOTTOMLEFT"); hd:SetPoint("BOTTOMRIGHT")
     local icon = header:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. Tr("icon.tga")); icon:SetSize(30, 30); icon:SetPoint("LEFT", 18, 0)
+    icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(30, 30); icon:SetPoint("LEFT", 18, 0)
     local title = T.Text(header, 17, { bold = true, text = Tr("Mail") })
     title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, 0)
     local tag = T.Text(header, 11, { color = C.faint, text = Tr("|cffe0a83dImpot|rPointGouv  ·  mailbox") })
@@ -388,7 +388,7 @@ local function Build()
     -- Button to come back from the Blizzard mailbox
     if MailFrame then
         local reopen
-        reopen = T.Button(MailFrame, Tr("ImpotPointGouv"), 120, 22, function()
+        reopen = T.Button(MailFrame, "ImpotPointGouv", 120, 22, function()
             reopen:Hide(); M.ShowOverlay()
         end, "primary")
         reopen:SetPoint("TOPRIGHT", MailFrame, "TOPRIGHT", -60, -4)
@@ -502,11 +502,11 @@ function M.Draw()
             r.from:SetText(m.sender)
             r.exp:SetText(ExpireText(m.daysLeft))
             if m.cod > 0 then
-                r.amount:SetText(Tr("|cffed5c52CR ") .. ns.FormatMoney(-m.cod, { iconSize = 11 }) .. "|r")
+                r.amount:SetText("|cffed5c52CR " .. ns.FormatMoney(-m.cod, { iconSize = 11 }) .. "|r")
             elseif m.money > 0 then
                 r.amount:SetText(ns.FormatMoney(m.money, { sign = true, color = true, iconSize = 11 }))
             else
-                r.amount:SetText(Tr("|cff615f5c—|r"))
+                r.amount:SetText("|cff615f5c—|r")
             end
             r:SetAlpha(run and 0.75 or 1)
             r:Show()
@@ -535,7 +535,7 @@ function M.Refresh(quiet)
     c[3].value:SetText(items)
     local free = FreeSlots()
     c[3].sub:SetText(free .. (free > 1 and " free bag slots" or " free bag slot"))
-    if items > free then c[3].sub:SetText(Tr("|cffed5c52") .. c[3].sub:GetText() .. "|r") end
+    if items > free then c[3].sub:SetText("|cffed5c52" .. c[3].sub:GetText() .. "|r") end
     c[4].value:SetText(expired + cancelled)
     c[4].sub:SetText(expired .. Tr(" expired") .. (expired > 1 and "s" or "") .. "  ·  " .. cancelled .. Tr(" cancelled") .. (cancelled > 1 and "s" or ""))
 
@@ -919,7 +919,7 @@ local DrawSendInner
 function M.DrawSend()
     local ok, err = pcall(DrawSendInner)
     if not ok and frame and frame.send then
-        frame.send.status:SetText(Tr("|cffed5c52") .. tostring(err):gsub("^.-:%d+: ", "") .. "|r")
+        frame.send.status:SetText("|cffed5c52" .. tostring(err):gsub("^.-:%d+: ", "") .. "|r")
         frame.send.go.text:SetText(Tr("Send")); frame.send.go:SetDisabled(false)
     end
 end

@@ -120,7 +120,7 @@ local function ShowTip(a, anchor)
     local function Add(left, right, lc, gap) rows[#rows + 1] = { left, right or "", lc, gap } end
     local G, M, W = "|cffe0a83d", "|cff8a877f", "|cffece6d6"
     if not ev then
-        Add(G .. Tr("Impot|r") .. W .. Tr("PointGouv|r"), "")
+        Add(G .. "Impot|r" .. W .. "PointGouv|r", "")
         Add(M .. Tr("This pattern doesn't make an item.|r"), "")
     else
         -- Header: verdict
@@ -131,7 +131,7 @@ local function ShowTip(a, anchor)
         else
             verdict = M .. Tr("Missing prices|r")
         end
-        Add(G .. Tr("Impot|r") .. W .. Tr("PointGouv|r"), verdict)
+        Add(G .. "Impot|r" .. W .. "PointGouv|r", verdict)
 
         -- Materials
         Add(M .. Tr("REAGENTS|r"), "", nil, true)

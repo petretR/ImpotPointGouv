@@ -547,7 +547,7 @@ local function BuildPanel()
     T.Surface(panel, C.window, 14, { 1, 1, 1, 0.09 })
 
     local icon = panel:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. Tr("icon.tga")); icon:SetSize(26, 26); icon:SetPoint("TOPLEFT", 14, -12)
+    icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(26, 26); icon:SetPoint("TOPLEFT", 14, -12)
     panel.title = T.Text(panel, 15, { bold = true, text = Tr("Craft queue") })
     panel.title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, 1)
     panel.sub = T.Text(panel, 11, { color = C.faint })
@@ -794,7 +794,7 @@ local function DrawDetail()
         det.vProfit:SetText(Money(ev.profit, { sign = true, color = true, iconSize = 13 }) ..
             (ev.margin and ("  |cff8a877f" .. math.floor(ev.margin * 100 + 0.5) .. " %|r") or ""))
     else
-        det.vProfit:SetText(Tr("|cff615f5c—|r"))
+        det.vProfit:SetText("|cff615f5c—|r")
     end
     local note = ev.note or ""
     if ev.estimated then note = (note ~= "" and note .. " " or "") .. Tr("≈ : estimated vendor price, visit the vendor to learn it.") end
@@ -819,9 +819,9 @@ function CR.Draw()
                 r.profit:SetText(((ev.channel == "de" and ev.profit > 0) and DE_ICON or "") ..
                     Money(ev.profit, { sign = true, color = true, short = true, iconSize = 10 }))
             elseif rec.enchant and ev.cost > 0 then
-                r.profit:SetText(Tr("|cff8a877f") .. Money(ev.cost, { short = true }) .. "|r")
+                r.profit:SetText("|cff8a877f" .. Money(ev.cost, { short = true }) .. "|r")
             else
-                r.profit:SetText(Tr("|cff615f5c—|r"))
+                r.profit:SetText("|cff615f5c—|r")
             end
             r.sel = (rec.name == selected)
             r.hl:SetColor(r.sel and { C.gold[1], C.gold[2], C.gold[3], 0.12 } or { 1, 1, 1, 0 })
@@ -1076,16 +1076,16 @@ function CR.SideIcon(f)
         b = CreateFrame("Button", nil, f)
         b.art = b:CreateTexture(nil, "ARTWORK")
         b.art:SetAllPoints()
-        b.art:SetTexture(ns.MEDIA .. Tr("icon.tga"))
+        b.art:SetTexture(ns.MEDIA .. "icon.tga")
         b.glow = b:CreateTexture(nil, "OVERLAY")
-        b.glow:SetTexture(ns.MEDIA .. Tr("icon.tga"))
+        b.glow:SetTexture(ns.MEDIA .. "icon.tga")
         b.glow:SetAllPoints()
         b.glow:SetBlendMode("ADD")
         b.glow:SetAlpha(0)
         b:SetScript("OnEnter", function(self)
             self.glow:SetAlpha(0.35)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(Tr("|cffe0a83dImpot|rPointGouv"))
+            GameTooltip:AddLine("|cffe0a83dImpot|rPointGouv")
             GameTooltip:AddLine(Tr("Click: show / hide the craft advisor"), 1, 1, 1)
             GameTooltip:AddLine(Tr("Right-click: open the overview"), 0.7, 0.7, 0.7)
             GameTooltip:Show()
@@ -1209,7 +1209,7 @@ local function Describe(o)
     local kind = o.GetObjectType and o:GetObjectType() or "?"
     local txt = ""
     if o.GetLeft and o:GetLeft() then
-        txt = (Tr(" @%d,%d %dx%d")):format(o:GetLeft(), o:GetBottom() or 0, o:GetWidth() or 0, o:GetHeight() or 0)
+        txt = (" @%d,%d %dx%d"):format(o:GetLeft(), o:GetBottom() or 0, o:GetWidth() or 0, o:GetHeight() or 0)
     end
     return (name or ("<" .. kind .. ">")) .. txt
 end
@@ -1255,7 +1255,7 @@ CR.ShowText = function(text) ShowDiagText(text) end
 function CR.Diag()
     local out = {}
     local function Add(s) out[#out + 1] = s end
-    Add("Version " .. ns.version .. Tr("  ·  Interface ") .. tostring(select(4, GetBuildInfo())))
+    Add("Version " .. ns.version .. "  ·  Interface " .. tostring(select(4, GetBuildInfo())))
     for _, n in ipairs({ "TradeSkillFrame", "ProfessionsFrame", "CraftFrame", "ProfessionsBookFrame" }) do
         local f = _G[n]
         Add(("%s : %s"):format(n, f and (f:IsShown() and "visible" or "exists, hidden") or "missing"))
@@ -1300,7 +1300,7 @@ function CR.Diag()
                     Add("GetRecipeSchematic: " .. table.concat(parts, " | "))
                     for i, slot in ipairs(sch.reagentSlotSchematics or {}) do
                         local r = slot.reagents and slot.reagents[1]
-                        Add((Tr("  slot %d: itemID=%s qty=%s type=%s")):format(i, tostring(r and r.itemID),
+                        Add(("  slot %d: itemID=%s qty=%s type=%s"):format(i, tostring(r and r.itemID),
                             tostring(slot.quantityRequired), tostring(slot.reagentType)))
                     end
                 else

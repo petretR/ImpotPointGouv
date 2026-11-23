@@ -128,7 +128,7 @@ function D.Arm()
     local spell = SpellName()
     if it and spell then
         button:SetAttribute("type", "macro")
-        button:SetAttribute("macrotext", (Tr("/cast %s\n/use %d %d")):format(spell, it.bag, it.slot))
+        button:SetAttribute("macrotext", ("/cast %s\n/use %d %d"):format(spell, it.bag, it.slot))
     else
         button:SetAttribute("type", nil)
         button:SetAttribute("macrotext", nil)

@@ -5,7 +5,7 @@ ns.name = ADDON
 ns.version = "1.0.0"
 _G.ImpotPointGouv = ns
 
-ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. Tr("\\media\\")
+ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 -- Gold movement categories. group = "ah" for everything related to the auction house.
 ns.CATEGORIES = {
@@ -320,8 +320,8 @@ function ns.FormatMoney(copper, opts)
     local text = table.concat(parts, " ")
     if neg then text = "−" .. text elseif opts.sign and copper > 0 then text = "+" .. text end
     if opts.color then
-        if copper > 0 then text = Tr("|cff5cd173") .. text .. "|r"
-        elseif copper < 0 then text = Tr("|cffed5c52") .. text .. "|r" end
+        if copper > 0 then text = "|cff5cd173" .. text .. "|r"
+        elseif copper < 0 then text = "|cffed5c52" .. text .. "|r" end
     end
     return text
 end

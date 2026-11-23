@@ -365,8 +365,8 @@ local function BuildTransactions(page)
                 r.dot:SetVertexColor(cat.color[1], cat.color[2], cat.color[3], 1)
                 r.cat:SetText(cat.label)
                 local d = tx.i or ""
-                if tx.q and tx.q > 1 then d = d .. Tr("  |cff615f5c×") .. tx.q .. "|r" end
-                if tx.who and tx.who ~= "" and tx.k ~= "mail" then d = d .. Tr("  |cff615f5c(") .. tx.who .. ")|r"
+                if tx.q and tx.q > 1 then d = d .. "  |cff615f5c×" .. tx.q .. "|r" end
+                if tx.who and tx.who ~= "" and tx.k ~= "mail" then d = d .. "  |cff615f5c(" .. tx.who .. ")|r"
                 elseif tx.k == "mail" and tx.who then d = tx.who .. (tx.i and ("  |cff615f5c" .. tx.i .. "|r") or "") end
                 r.detail:SetText(d)
                 r.amount:SetText(ns.FormatMoney(tx.a, { sign = true, color = true, iconSize = 11 }))
@@ -596,10 +596,10 @@ local function Build()
     hd:SetPoint("BOTTOMLEFT", 0, 0); hd:SetPoint("BOTTOMRIGHT", 0, 0)
 
     local icon = header:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. Tr("icon.tga"))
+    icon:SetTexture(ns.MEDIA .. "icon.tga")
     icon:SetSize(30, 30)
     icon:SetPoint("LEFT", PAD, 0)
-    local name = T.Text(header, 17, { bold = true, text = Tr("|cffe0a83dImpot|r|cffece6d6PointGouv|r") })
+    local name = T.Text(header, 17, { bold = true, text = "|cffe0a83dImpot|r|cffece6d6PointGouv|r" })
     name:SetPoint("LEFT", icon, "RIGHT", 10, 0)
 
     local close = T.CloseButton(header, function() frame:Hide() end)
@@ -713,13 +713,13 @@ ns.On("LEDGER_READY", function()
     UI.ready = true
     if LDB and LDBIcon then
         local obj = LDB:NewDataObject(ns.name, {
-            type = "launcher", label = Tr("ImpotPointGouv"), text = Tr("ImpotPointGouv"),
-            icon = ns.MEDIA .. Tr("icon.tga"),
+            type = "launcher", label = "ImpotPointGouv", text = "ImpotPointGouv",
+            icon = ns.MEDIA .. "icon.tga",
             OnClick = function(self, button)
                 if button == "RightButton" then UI.Menu(self) else UI.Toggle() end
             end,
             OnTooltipShow = function(tt)
-                tt:AddLine(Tr("|cffe0a83dImpot|rPointGouv"))
+                tt:AddLine("|cffe0a83dImpot|rPointGouv")
                 tt:AddDoubleLine(Tr("Total gold"), ns.FormatMoney(L.TotalMoney(), { iconSize = 12 }), 0.7, 0.7, 0.7, 1, 1, 1)
                 local st = L.Stats(time() - 86400)
                 tt:AddDoubleLine(Tr("AH profit (24h)"), ns.FormatMoney(st.ahNet, { sign = true, color = true, iconSize = 12 }),
