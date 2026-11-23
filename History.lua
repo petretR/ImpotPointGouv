@@ -722,7 +722,7 @@ function H.Show(id)
     if not id then return end
     H.frame = H.frame or Build()
     H.id = id
-    if not ns.GetItemInfo(id) and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+    if not ns.GetItemInfo(id) then ns.RequestItem(id) end
     H.frame:Show()
     H.frame:Raise()
     H.Refresh()
