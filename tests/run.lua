@@ -276,5 +276,28 @@ Check("mail Send tab: quantity by stacks, by one with Shift, or typed", function
     bags[0] = {}
 end)
 
+Check("mail splits two partial items one after the other", function()
+    bags[0] = { { itemID = 500, stackCount = 20 }, { itemID = 600, stackCount = 20 } }
+    sentMails = {}
+    -- Like the game: a second split is refused while the first split slot is still locked.
+    local split, locked = C_Container.SplitContainerItem, false
+    C_Container.SplitContainerItem = function(...)
+        if locked then return end
+        locked = true
+        C_Timer.After(0.1, function() locked = false end)
+        return split(...)
+    end
+    Fire("MAIL_SHOW")
+    RunTimers(1)
+    Assert(ns.Routine.SendTo("Alt", { [500] = 5, [600] = 7 }), "send refused")
+    RunTimers(5)
+    C_Container.SplitContainerItem = split
+    local got = {}
+    for _, m in ipairs(sentMails) do for _, it in pairs(m.items) do got[it.itemID] = (got[it.itemID] or 0) + it.stackCount end end
+    Assert(got[500] == 5 and got[600] == 7, ("sent %s of 500 and %s of 600"):format(tostring(got[500]), tostring(got[600])))
+    Fire("MAIL_CLOSED")
+    bags[0] = {}
+end)
+
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

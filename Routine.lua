@@ -127,38 +127,43 @@ end
 local SendBatch
 
 -- Splits the partial stacks into free slots, waits until the game shows them, then sends.
+-- Splits the partial stacks into free slots one at a time (the game may refuse a second split
+-- while the first one is still locked), waits until each shows in its slot, then sends.
 local function DoSplits(cur, splits, free)
     if CursorHasItem and CursorHasItem() then ClearCursor() end
-    local targets = {}
-    for i, sp in ipairs(splits) do
+    RT.Status(Tr("Splitting stacks…"))
+    local i, tries, target = 0, 0, nil
+    local function Fail()
+        if CursorHasItem and CursorHasItem() then ClearCursor() end
+        sending = nil
+        RT.Status(Tr("|cffed5c52The game did not split the stack in time: nothing was sent. Try again.|r"))
+        RT.Refresh()
+    end
+    local Check
+    local function Next()
+        i, tries = i + 1, 0
+        local sp = splits[i]
+        if not sp then SendBatch(); return end
         local to = free[i]
         C_Container.SplitContainerItem(sp.bag, sp.slot, sp.count)
         C_Container.PickupContainerItem(to.bag, to.slot)
-        targets[#targets + 1] = { bag = to.bag, slot = to.slot, id = sp.id, count = sp.count }
+        target = { bag = to.bag, slot = to.slot, id = sp.id, count = sp.count }
+        C_Timer.After(0.2, Check)
     end
-    RT.Status(Tr("Splitting stacks…"))
-    local tries = 0
-    local function Check()
+    function Check()
         if sending ~= cur then return end
-        local ready = true
-        for _, t in ipairs(targets) do
-            local info = C_Container.GetContainerItemInfo(t.bag, t.slot)
-            if not (info and info.itemID == t.id and (info.stackCount or 1) == t.count and not info.isLocked) then ready = false end
-        end
-        if ready then
-            for _, t in ipairs(targets) do cur.stacks[#cur.stacks + 1] = t end
-            SendBatch()
+        local info = C_Container.GetContainerItemInfo(target.bag, target.slot)
+        if info and info.itemID == target.id and (info.stackCount or 1) == target.count and not info.isLocked then
+            cur.stacks[#cur.stacks + 1] = target
+            Next()
         elseif tries < 15 then
             tries = tries + 1
             C_Timer.After(0.2, Check)
         else
-            if CursorHasItem and CursorHasItem() then ClearCursor() end
-            sending = nil
-            RT.Status(Tr("|cffed5c52The game did not split the stack in time: nothing was sent. Try again.|r"))
-            RT.Refresh()
+            Fail()
         end
     end
-    C_Timer.After(0.2, Check)
+    Next()
 end
 
 function SendBatch()
