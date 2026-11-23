@@ -104,6 +104,7 @@ local FILTER = {
     buys = { won = true, outbid = true },
     expired = { expired = true, cancelled = true },
     other = { mail = true, pending = true },
+    auctionExpired = { expired = true }, -- "Collect expired" button: unsold auctions only
 }
 
 local function Takeable(m, mode, bagsFull)
@@ -196,7 +197,7 @@ function Step()
         end
         run.pend = nil
     end
-    if run.mode == "all" and not run.bagsFull and FreeSlots() == 0 then run.bagsFull = true end
+    if run.mode ~= "gold" and not run.bagsFull and FreeSlots() == 0 then run.bagsFull = true end
     local n, total = Scan()
     local seen = {}
     for i = n, 1, -1 do
@@ -369,15 +370,18 @@ local function Build()
     -- Barre du bas
     frame.status = T.Text(frame, 12, { color = C.muted })
     frame.status:SetPoint("BOTTOMLEFT", pad, 24)
-    frame.status:SetWidth(380)
+    frame.status:SetWidth(290) -- left of the three collect buttons
     frame.session = T.Text(frame, 11, { color = C.faint })
     frame.session:SetPoint("BOTTOMLEFT", pad, 8)
-    frame.takeAll = T.Button(frame, Tr("Collect all"), 170, 34, function() StartRun("all") end)
+    frame.takeAll = T.Button(frame, Tr("Collect all"), 140, 34, function() StartRun("all") end)
     frame.takeAll:SetPoint("BOTTOMRIGHT", -pad, 16)
     frame.takeAll.tooltip = Tr("Takes the gold and items from every mail (except C.O.D.).")
-    frame.takeGold = T.Button(frame, Tr("Collect gold"), 130, 34, function() StartRun("gold") end)
+    frame.takeGold = T.Button(frame, Tr("Collect gold"), 120, 34, function() StartRun("gold") end)
     frame.takeGold:SetPoint("RIGHT", frame.takeAll, "LEFT", -8, 0)
     frame.takeGold.tooltip = Tr("Takes only the gold: items stay in the mailbox.")
+    frame.takeExpired = T.Button(frame, Tr("Collect expired"), 150, 34, function() StartRun("auctionExpired") end)
+    frame.takeExpired:SetPoint("RIGHT", frame.takeGold, "LEFT", -8, 0)
+    frame.takeExpired.tooltip = Tr("Takes back the items of your expired auctions only (not cancelled ones).")
 
     M.BuildSend(frame)
 
@@ -546,6 +550,9 @@ function M.Refresh(quiet)
     end
     frame.takeAll.text:SetText(run and run.mode == "all" and "Stop" or "Collect all")
     frame.takeGold.text:SetText(run and run.mode == "gold" and "Stop" or "Collect gold")
+    frame.takeExpired.text:SetText(run and run.mode == "auctionExpired" and "Stop"
+        or (expired > 0 and (Tr("Collect expired") .. " (" .. expired .. ")") or Tr("Collect expired")))
+    frame.takeExpired:SetDisabled((run ~= nil and run.mode ~= "auctionExpired") or (not run and expired == 0))
     frame.takeAll:SetDisabled(run ~= nil and run.mode ~= "all")
     frame.takeGold:SetDisabled(run ~= nil and run.mode ~= "gold")
     if sessionStart then
