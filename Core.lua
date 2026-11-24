@@ -40,7 +40,7 @@ local DEFAULTS = {
     snaps = {},   -- [key] = { {time, money}, ... }
     tx = {},      -- { {t, c, k, a, i, q, who, gross, cut, dep}, ... }
     settings = { minimap = {}, range = "30d", chartMode = "balance", firstRun = true, craftSort = "profit" },
-    prices = {},  -- [realm][itemID] = { cur, qty, t, d = { {day, lowest, qty}, ... } }
+    prices = {},  -- [realm][itemID] = { cur, qty, t, o, d, w, s, ... }: see PriceStore.lua
     vendor = {},  -- [itemID] = unit purchase price at the vendor (learned)
     items = {},   -- [itemID] = name
     recipes = {}, -- [profession][recipe] = { p = product, m = quantity made, r = { {id, n}, ... } }
@@ -153,69 +153,16 @@ function ns.Realm()
 end
 
 -- Data saved under an empty realm (""): merged into the real realm.
-local function DayOf(s) return tonumber((s or ""):match("^(%-?%d+)")) end
-local function F(s) local o, i = {}, 0; for f in (s .. ","):gmatch("([^,]*),") do i = i + 1; o[i] = tonumber(f) end; return o end
-local function N(v) return v and tostring(math.floor(v + 0.5)) or "" end
 local function MergePrices(dst, src)
+    local today = math.floor(time() / 86400)
+    local tracked = function(id)
+        local ok, v = pcall(function() return ns.Prices and ns.Prices.IsTracked and ns.Prices.IsTracked(id) end)
+        return ok and v or false
+    end
     for id, e in pairs(src) do
         local d = dst[id]
         if not d then dst[id] = e
-        else
-            local byDay = {}
-            for _, p in ipairs(d.d or {}) do byDay[p[1]] = p end
-            for _, p in ipairs(e.d or {}) do
-                local q = byDay[p[1]]
-                if q then q[2] = math.min(q[2], p[2]); q[3] = p[3] else byDay[p[1]] = p end
-            end
-            local days = {}
-            for _, p in pairs(byDay) do days[#days + 1] = p end
-            table.sort(days, function(a, b) return a[1] < b[1] end)
-            while #days > 30 do table.remove(days, 1) end
-            d.d = days
-            if e.h then
-                d.h = d.h or {}
-                for _, p in ipairs(e.h) do d.h[#d.h + 1] = p end
-                table.sort(d.h, function(a, b) return a[1] < b[1] end)
-                while #d.h > 120 do table.remove(d.h, 1) end
-            end
-            if (e.t or 0) >= (d.t or 0) then d.cur, d.qty, d.t = e.cur, e.qty, e.t end
-        end
-    end
-end
-local function MergeHist(dst, src)
-    for id, h in pairs(src) do
-        local d = dst[id]
-        if not d then dst[id] = h
-        else
-            for _, s in ipairs(h.s or {}) do d.s[#d.s + 1] = s end
-            table.sort(d.s, function(a, b) return (DayOf(a) or 0) < (DayOf(b) or 0) end)
-            while #d.s > 400 do table.remove(d.s, 1) end
-            local byDay, order = {}, {}
-            for _, s in ipairs(d.d or {}) do local f = F(s); byDay[f[1]] = f; order[#order + 1] = f[1] end
-            for _, s in ipairs(h.d or {}) do
-                local f = F(s)
-                local g = byDay[f[1]]
-                if g then
-                    -- same day: lowest, Σ market, n market, qty (most recent), gone, added, scans
-                    g[2] = (g[2] and f[2]) and math.min(g[2], f[2]) or g[2] or f[2]
-                    g[3] = ((g[3] or 0) + (f[3] or 0)) > 0 and ((g[3] or 0) + (f[3] or 0)) or nil
-                    g[4] = (g[4] or 0) + (f[4] or 0)
-                    g[5] = f[5] or g[5]
-                    g[6] = (g[6] or f[6]) and ((g[6] or 0) + (f[6] or 0)) or nil
-                    g[7] = (g[7] or f[7]) and ((g[7] or 0) + (f[7] or 0)) or nil
-                    g[8] = (g[8] or 0) + (f[8] or 0)
-                else
-                    byDay[f[1]] = f; order[#order + 1] = f[1]
-                end
-            end
-            table.sort(order)
-            d.d = {}
-            for _, day in ipairs(order) do
-                local f = byDay[day]
-                d.d[#d.d + 1] = table.concat({ N(f[1]), N(f[2]), N(f[3]), N(f[4] or 0), N(f[5]), N(f[6]), N(f[7]), N(f[8] or 1) }, ",")
-            end
-            if (h.lt or 0) >= (d.lt or 0) then d.lad, d.lhi, d.lt = h.lad, h.lhi, h.lt end
-        end
+        else ns.Store.MergeEntry(d, e, tracked(id), today) end
     end
 end
 local function MergeMarket(dst, src)
@@ -254,7 +201,6 @@ function ns.FixEmptyRealm()
         moved = moved + 1
     end
     Take(db.prices, MergePrices)
-    Take(db.hist, MergeHist)
     Take(db.market, MergeMarket)
     Take(db.scan, function(dst, src)
         for k, v in pairs(src) do if type(v) == "number" then dst[k] = math.max(dst[k] or 0, v) end end
@@ -281,7 +227,14 @@ function ns.InitDB()
         local n = fresh and 0 or RepairDoubleOffline(ns.db)
         if n > 0 then ns.repairMsg = (Tr("data repaired: %d \"Offline change\" counted twice removed.")):format(n) end
         ns.db.version = 3
-    end    -- Session spent with an empty realm name: its data goes back into the real realm.
+    end
+    -- Price history in tiers (PriceStore.lua): converted once from the v1.0 prices / hist tables.
+    if fresh then ns.db.priceFormat = 2
+    elseif ns.db.priceFormat ~= 2 then
+        local n = ns.Store.Migrate(ns.db)
+        if n > 0 then ns.migrateMsg = (Tr("price history converted to the new format (%d items).")):format(n) end
+    end
+    -- Session spent with an empty realm name: its data goes back into the real realm.
     if not fresh then ns.FixEmptyRealm() end
     -- Drop empty names saved by scans (listings read before the game had loaded the item).
     for id, n in pairs(ns.db.items or {}) do if n == "" then ns.db.items[id] = nil end end

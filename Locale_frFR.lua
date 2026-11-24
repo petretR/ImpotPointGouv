@@ -18,6 +18,7 @@ ns.AddLocale("frFR", {
     ["mail"] = "courrier",
     ["Offline change"] = "Écart hors ligne",
     ["Other"] = "Autre",
+    ["price history converted to the new format (%d items)."] = "historique des prix converti au nouveau format (%d objets).",
     ["Quests"] = "Quêtes",
     ["Repairs"] = "Réparations",
     ["Trades"] = "Échanges",
@@ -683,6 +684,7 @@ ns.AddLocale("frFR", {
 
     -- History.lua
     ["%d scans that day"] = "%d scans ce jour-là",
+    ["%d scans that week"] = "%d scans cette semaine-là",
     ["1 day"] = "1 jour",
     ["1 month"] = "1 mois",
     ["1 week"] = "1 semaine",
@@ -691,6 +693,7 @@ ns.AddLocale("frFR", {
     ["AH SUPPLY"] = "OFFRE À L'HV",
     ["good time to buy"] = "bon moment pour acheter",
     ["good time to sell"] = "bon moment pour vendre",
+    ["Highest lowest listing"] = "Plus haute annonce la moins chère",
     ["LAST 4 DAYS"] = "4 DERNIERS JOURS",
     ["Last scan %s · %d scans today"] = "Dernier scan %s · %d scans aujourd'hui",
     ["Limited"] = "Limité",
@@ -700,10 +703,12 @@ ns.AddLocale("frFR", {
     ["No price 24 h ago yet"] = "Pas encore de prix d'il y a 24 h",
     ["No scans for this item in this period. Scan its list (or do a full scan) at the AH."] = "Aucun scan de cet objet sur cette période. Scanne sa liste (ou fais un scan complet) à l'HV.",
     ["Not listed"] = "Pas en vente",
+    ["Only one scan: units gone unknown"] = "Un seul scan : unités parties inconnues",
     ["Plentiful"] = "Abondant",
     ["Scan the AH a few times to read this item's fluctuations."] = "Scanne l'HV plusieurs fois pour lire les fluctuations de cet objet.",
     ["Scarce"] = "Rare",
     ["SINCE FIRST SCAN"] = "DEPUIS LE 1ER SCAN",
+    ["Sold per day (estimate)"] = "Vendus par jour (estimation)",
     ["stable"] = "stable",
     ["Units gone"] = "Unités parties",
     ["Units listed"] = "Unités ajoutées",
@@ -717,6 +722,8 @@ ns.AddLocale("frFR", {
     ["volatility %d%% (%s)"] = "volatilité %d%% (%s)",
     ["VS USUAL PRICE"] = "VS PRIX HABITUEL",
     ["VS VENDOR PRICE"] = "VS PRIX MARCHAND",
+    ["Week of %s"] = "Semaine du %s",
+    ["Within 10% of the lowest"] = "À moins de 10 % du moins cher",
     ["~%s sold/day"] = "~%s vendus/jour",
 
     -- Unused

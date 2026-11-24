@@ -11,6 +11,10 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
 
 ### Changed
+- Price history: new storage. Every item now keeps a daily summary for 30 days (lowest, usual and highest price, quantity listed, units within 10 % of the lowest, estimated units sold), then one per week for a year. Items in your lists keep every scan for 7 days and a daily summary for 6 months. Your existing history is converted once at the first login (a full game restart is needed after updating).
+- Sold/day now shows for items in no list after a day with two scans or more, so most leveling-route steps get one. A full scan that no longer sees an item counts its units as gone.
+- Usual and market prices use the median of each day's lowest prices instead of the day's last reading, so one cheap listing moves them less.
+- Price history window: hover shows the usual price, the highest of the day's lowest prices and the units within 10 % of the lowest; long ranges show weekly points.
 - Queue profitable: only recipes earning at least 2s per craft by default (setting). A new craft starts with one stack at most, sized on what the AH sells per day; a batch that sells out within 2 h doubles the next one, one that mostly comes back is halved, and a single item never goes above 5 stacks.
 - Lists: By recipe / Flat list moved next to the Auctionator button.
 - Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
