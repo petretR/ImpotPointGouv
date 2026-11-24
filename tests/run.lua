@@ -525,6 +525,40 @@ Check("watched items: per profession by default, per item by hand", function()
     ns.db.watch = nil
 end)
 
+Check("market trends: figures per group from full scans, then daily records", function()
+    local M = ns.Market
+    ns.db.cats = nil
+    local saved = C_Item.GetItemInfoInstant
+    -- class 7 / sub 5 = cloth, class 4 = armor
+    C_Item.GetItemInfoInstant = function(id) if id >= 960000 and id < 960100 then return id, nil, nil, "", "", 7, 5 end return id, nil, nil, "", "", 4, 1 end
+    local function Scan(qty, low)
+        local acc = {}
+        for i = 1, 50 do acc[960000 + i] = { low = low, qty = qty }; acc[961000 + i] = { low = low * 10, qty = 2 } end
+        for id, a in pairs(acc) do P.Record(id, a.low, a.qty, true) end
+        M.OnFullScan(acc)
+    end
+    NextDay(1)
+    Scan(20, 100)
+    for k = 1, 3 do Advance(4 * 3600); Scan(20 - k * 2, 100 + k) end
+    local rows = M.Overview()
+    local cloth
+    for _, r in ipairs(rows) do if r.group == "raw:Cloth" then cloth = r end end
+    Assert(cloth, "a Cloth row")
+    Assert(cloth.items == 50 and cloth.units == 50 * 14, "items and units listed now: " .. tostring(cloth.units))
+    Assert(cloth.value == 50 * 14 * 103, "value at the lowest prices")
+    Assert(cloth.gonePerDay and math.abs(cloth.gonePerDay - 50 * 6 / 0.5) < 1, "units gone per day: " .. tostring(cloth.gonePerDay))
+    Assert(cloth.index and cloth.index > 0.95 and cloth.index < 1.1, "price index near usual: " .. tostring(cloth.index))
+    NextDay(1); Scan(20, 100)
+    local db = M.CatsDB()
+    local days = ns.Store.Records(db.d["raw:Cloth"], nil, M.G_DAYS)
+    Assert(#days == 1 and days[1][7] == 4 and days[1][5] == 300, "yesterday closed: 4 scans, 300 gone")
+    Assert(#(db.d["raw:Cloth"] or "") < 60, "a daily record is a few bytes")
+    ns.db.settings.marketFilter = "trends"
+    ns.UI.Toggle("market")
+    ns.db.settings.marketFilter = nil
+    C_Item.GetItemInfoInstant = saved
+end)
+
 Check("price history: data saved under an empty realm merges", function()
     local now = time()
     local today = math.floor(now / DAY)

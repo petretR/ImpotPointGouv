@@ -202,6 +202,14 @@ function ns.FixEmptyRealm()
     end
     Take(db.prices, MergePrices)
     Take(db.market, MergeMarket)
+    -- Market figures by group: keep the real realm's, take the groups it does not have.
+    Take(db.cats, function(dst, src)
+        for _, k in ipairs({ "s", "d" }) do
+            dst[k] = dst[k] or {}
+            for g, str in pairs(src[k] or {}) do if not dst[k][g] then dst[k][g] = str end end
+        end
+        dst.last = math.max(dst.last or 0, src.last or 0)
+    end)
     Take(db.scan, function(dst, src)
         for k, v in pairs(src) do if type(v) == "number" then dst[k] = math.max(dst[k] or 0, v) end end
     end)

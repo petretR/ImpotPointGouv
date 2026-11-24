@@ -163,6 +163,8 @@ local function Append(str, rec, kind)
     return str .. ";" .. packed
 end
 
+S.Append = function(str, rec, kind) return Append(str, rec, kind) end
+
 -- Replaces the last record (same scan seen twice).
 local function ReplaceLast(str, rec, kind)
     local head = str:match("^(.*);[^;]*$")

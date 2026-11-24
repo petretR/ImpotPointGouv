@@ -46,6 +46,7 @@ function M.OnFullScan(acc)
             end
         end
     end
+    M.RecordGroups(acc, prev)
     local snap = { t = now, q = {} }
     for id, a in pairs(acc) do
         snap.q[id] = a.qty
@@ -344,7 +345,7 @@ end
 -- Raw materials: what you farm (cloth, leather, ore, meat/fish, herbs, elemental, enchanting).
 local RAW = { [5] = "Cloth", [6] = "Leather", [7] = "Metal & Stone", [8] = "Cooking", [9] = "Herb", [10] = "Elemental", [12] = "Enchanting" }
 M.FILTERS = {
-    { "all", "All" }, { "raw", "Farm" }, { "gear", "Gear" }, { "consum", "Consumables" }, { "flip", "AH flip" },
+    { "trends", "Trends" }, { "all", "All" }, { "raw", "Farm" }, { "gear", "Gear" }, { "consum", "Consumables" }, { "flip", "AH flip" },
     { "vflip", "Vendor flip" }, { "vcraft", "Vendor crafts" },
 }
 
@@ -356,6 +357,150 @@ local function Category(id)
     return "other"
 end
 M.Category = Category
+
+-- ------------------------------------------------------------ market-wide figures
+-- Per full scan, per group of items (cloth, herbs, gear...): items and units listed, value at the lowest
+-- prices, units gone since the previous full scan (sold, cancelled or expired), and a price index: the median
+-- of "lowest now / usual price" over the group's items (1000 = usual). A few numbers per scan, whatever
+-- the number of items.
+--   ns.db.cats[realm] = { o = open day, s = { [group] = "t,items,units,value,gone,index;..." } (7 days),
+--                         d = { [group] = "day,items,units,value,gone,index,scans;..." } (1 year) }
+local Store = ns.Store
+local G_POINTS = { n = 6, rel = {} }
+local G_DAYS = { n = 7, rel = {} }
+M.G_POINTS, M.G_DAYS = G_POINTS, G_DAYS
+M.GROUPS = {
+    { "raw:Cloth", "Cloth", "INV_Fabric_Linen_01" }, { "raw:Leather", "Leather", "INV_Misc_LeatherScrap_03" },
+    { "raw:Metal & Stone", "Metal & Stone", "INV_Ore_Copper_01" }, { "raw:Herb", "Herb", "INV_Misc_Herb_10" },
+    { "raw:Cooking", "Cooking", "INV_Misc_Food_15" }, { "raw:Elemental", "Elemental", "INV_Misc_Dust_01" },
+    { "raw:Enchanting", "Enchanting", "INV_Enchant_DustStrange" }, { "consum", "Consumables", "INV_Potion_51" },
+    { "gear", "Gear", "INV_Chest_Chain" }, { "recipe", "Recipes", "INV_Scroll_03" }, { "other", "Other", "INV_Misc_Bag_10" },
+}
+local function GroupOf(id)
+    local classID = Instant(id)
+    if classID == 9 then return "recipe" end
+    local cat, sub = Category(id)
+    return sub and ("raw:" .. sub) or cat
+end
+M.GroupOf = GroupOf
+local function CatsDB()
+    ns.db.cats = ns.db.cats or {}
+    local r = Realm()
+    ns.db.cats[r] = ns.db.cats[r] or { s = {}, d = {} }
+    return ns.db.cats[r]
+end
+M.CatsDB = CatsDB
+
+-- The open day's points become one daily record per group; old points and days are dropped.
+local function CloseGroupDay(db, today)
+    local day = db.o
+    if day and day < today then
+        for g, str in pairs(db.s) do
+            local pts = Store.Records(str, day * 86400, G_POINTS)
+            local items, units, value, idx, gone, n, known = {}, {}, {}, {}, 0, 0, false
+            for _, p in ipairs(pts) do
+                if math.floor(p[1] / 86400) == day then
+                    n = n + 1
+                    items[#items + 1], units[#units + 1], value[#value + 1] = p[2] or 0, p[3] or 0, p[4] or 0
+                    if p[6] then idx[#idx + 1] = p[6] end
+                    if p[5] then gone, known = gone + p[5], true end
+                end
+            end
+            if n > 0 then
+                local rec = { day, Store.Median(items), Store.Median(units), Store.Median(value), known and gone or nil,
+                    Store.Median(idx), n }
+                db.d[g] = Store.Append(db.d[g], rec, G_DAYS)
+            end
+        end
+    end
+    local cutT, cutD = today * 86400 - 7 * 86400, today - 366
+    for g, str in pairs(db.s) do
+        local keep = Store.Records(str, cutT, G_POINTS)
+        local total = select(2, str:gsub(";", "")) + 1
+        if #keep < total then db.s[g] = #keep > 0 and Store.Pack(keep, G_POINTS) or nil end
+    end
+    for g, str in pairs(db.d) do
+        local keep = Store.Records(str, cutD, G_DAYS)
+        local total = select(2, str:gsub(";", "")) + 1
+        if #keep < total then db.d[g] = #keep > 0 and Store.Pack(keep, G_DAYS) or nil end
+    end
+    db.o = today
+end
+M._CloseGroupDay = CloseGroupDay
+
+-- acc: { [id] = { low, qty } } of this full scan; prev: the previous scan's { t, q = { [id] = qty } }.
+function M.RecordGroups(acc, prev)
+    local db = CatsDB()
+    local now = time()
+    CloseGroupDay(db, math.floor(now / 86400))
+    local agg = {}
+    local function A(g)
+        local a = agg[g]
+        if not a then a = { items = 0, units = 0, value = 0, ratios = {} }; agg[g] = a end
+        return a
+    end
+    for id, it in pairs(acc) do
+        if it.qty and it.qty > 0 then
+            local a = A(GroupOf(id))
+            a.items, a.units = a.items + 1, a.units + it.qty
+            if it.low then
+                a.value = a.value + it.low * it.qty
+                local usual = P.Market(id)
+                if usual and usual > 0 then a.ratios[#a.ratios + 1] = it.low / usual end
+            end
+        end
+    end
+    -- Units gone since the previous full scan (only when the two scans are close enough to compare).
+    if prev and prev.t and prev.q and now - prev.t > 60 and now - prev.t <= MAX_GAP then
+        for id, q0 in pairs(prev.q) do
+            local a = acc[id]
+            local drop = q0 - (a and a.qty or 0)
+            if drop > 0 then
+                local g = A(GroupOf(id))
+                g.gone = (g.gone or 0) + drop
+            end
+        end
+        for _, a in pairs(agg) do a.gone = a.gone or 0 end
+    end
+    for g, a in pairs(agg) do
+        local idx = Store.Median(a.ratios)
+        db.s[g] = Store.Append(db.s[g], { now, a.items, a.units, a.value, a.gone, idx and idx * 1000 }, G_POINTS)
+    end
+    db.last = now
+end
+
+-- One row per group: now, 7 days ago, units gone per day, price index.
+function M.Overview()
+    local db = CatsDB()
+    local now = time()
+    local out = {}
+    for _, gd in ipairs(M.GROUPS) do
+        local g = gd[1]
+        local pts = Store.Records(db.s[g], now - 7 * 86400 - 6 * 3600, G_POINTS)
+        local last = pts[#pts]
+        if last and now - last[1] < 3 * 86400 then
+            local row = { group = g, label = gd[2], icon = gd[3], t = last[1], items = last[2], units = last[3],
+                value = last[4], index = last[6] and last[6] / 1000 }
+            -- A week ago: the oldest point at least 6 days old, else the oldest daily record of that time.
+            local old
+            for _, p in ipairs(pts) do if now - p[1] >= 6 * 86400 then old = p end end
+            if not old then
+                for _, d in ipairs(Store.Records(db.d[g], math.floor(now / 86400) - 8, G_DAYS)) do
+                    if math.floor(now / 86400) - d[1] >= 6 then old = d end
+                end
+            end
+            if old then row.unitsWeek, row.valueWeek, row.indexWeek = old[3], old[4], old[6] and old[6] / 1000 end
+            -- Gone per day: over the points of the last 7 days that have a comparison.
+            local gone, first, lastT = 0, nil, nil
+            for i, p in ipairs(pts) do
+                if p[5] and i > 1 then gone = gone + p[5]; first = first or pts[i - 1][1]; lastT = p[1] end
+            end
+            if first and lastT - first >= 6 * 3600 then row.gonePerDay = gone / ((lastT - first) / 86400) end
+            out[#out + 1] = row
+        end
+    end
+    return out
+end
 
 -- Sorted list for a filter. Flip: current listing far below the usual price, item that sells.
 function M.List(filter)
@@ -491,6 +636,7 @@ function M.BuildPage(page)
         prev = b
         page.fb[d[1]] = b
     end
+    page.fb.trends.tooltip = Tr("The whole AH by group (cloth, herbs, gear...): prices compared to usual, units gone per day, value and units listed, and how they changed over 7 days.")
     page.fb.raw.tooltip = Tr("Raw materials (cloth, leather, ore, meat & fish, herbs, elemental, enchanting): what is worth farming.")
     page.fb.flip.tooltip = Tr("Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit).")
     page.fb.vcraft.tooltip = Tr("Recipes (all professions) whose result sells to a vendor for more than its materials cost at the AH. The ones you can craft now come first.")
@@ -528,6 +674,25 @@ function M.BuildPage(page)
         r:SetScript("OnEnter", function(self)
             local row = self.row
             if not row then return end
+            if row.group then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(Tr(row.label), 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Items listed"), tostring(row.items or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Units listed"), ns.Thousands(row.units or 0)
+                    .. (row.unitsWeek and ("  |cff8a877f(" .. ns.Thousands(row.unitsWeek) .. " " .. Tr("a week ago") .. ")|r") or ""), 0.7, 0.7, 0.7, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Value at the lowest prices"), ns.FormatMoney(row.value or 0, { iconSize = 11, short = true })
+                    .. (row.valueWeek and ("  |cff8a877f(" .. ns.FormatMoney(row.valueWeek, { iconSize = 11, short = true }) .. ")|r") or ""), 0.7, 0.7, 0.7, 1, 1, 1)
+                if row.index then
+                    GameTooltip:AddDoubleLine(Tr("Lowest prices vs usual (median)"), ("%d%%"):format(math.floor(row.index * 100 + 0.5))
+                        .. (row.indexWeek and ("  |cff8a877f(" .. math.floor(row.indexWeek * 100 + 0.5) .. "% " .. Tr("a week ago") .. ")|r") or ""), 0.7, 0.7, 0.7, 1, 1, 1)
+                end
+                GameTooltip:AddLine(Tr("Above 100 %: the group is dearer than usual (a good time to sell). Below: cheaper (a good time to buy)."), 0.5, 0.5, 0.5, true)
+                GameTooltip:AddLine(Tr("Gone: units that vanished between two full scans (sold, cancelled or expired)."), 0.5, 0.5, 0.5, true)
+                local f = row.group:match("^raw:") and "raw" or (row.group == "gear" or row.group == "consum") and row.group
+                if f then GameTooltip:AddLine(Tr("Click: what sells in this group"), 0.88, 0.66, 0.24) end
+                GameTooltip:Show()
+                return
+            end
             T.ItemTooltip(self, row.id)
             GameTooltip:AddLine(" ")
             if row.rec then
@@ -570,6 +735,11 @@ function M.BuildPage(page)
         r:SetScript("OnMouseUp", function(self, button)
             local row = self.row
             if not row or button ~= "LeftButton" then return end
+            if row.group then
+                local f = row.group:match("^raw:") and "raw" or (row.group == "gear" or row.group == "consum") and row.group
+                if f then page.filter = f; ns.db.settings.marketFilter = f; page.offset = 0; page:Refresh() end
+                return
+            end
             if IsModifiedClick and IsModifiedClick("CHATLINK") then
                 local _, link = ns.GetItemInfo(row.id)
                 if link and ChatEdit_InsertLink then ChatEdit_InsertLink(link) end
@@ -593,7 +763,30 @@ function M.BuildPage(page)
         for i, r in ipairs(self.rows) do
             local row = data[self.offset + i]
             r.row = row
-            if row then
+            if row and row.group then
+                -- Trends: one group of the whole AH.
+                local function Change(now, before)
+                    if not now or not before or before <= 0 then return "" end
+                    local v = (now / before - 1) * 100
+                    if math.abs(v) < 0.5 then return "  |cff615f5c=|r" end
+                    return ("  %s%s%d%%|r"):format(v > 0 and "|cff5cd173" or "|cffed5c52", v > 0 and "+" or "−", math.floor(math.abs(v) + 0.5))
+                end
+                r.icon:SetTexture("Interface\\Icons\\" .. row.icon)
+                r.name:SetText(Tr(row.label))
+                if row.index then
+                    local v = (row.index - 1) * 100
+                    local col = v > 2 and "|cffe0a83d" or v < -2 and "|cff5cd173" or "|cffece6d6"
+                    r.price:SetText(("%s%s%d%%|r"):format(col, v > 0 and "+" or (v < 0 and "−" or ""), math.floor(math.abs(v) + 0.5)))
+                else
+                    r.price:SetText("|cff615f5c—|r")
+                end
+                r.rate:SetText(row.gonePerDay and ns.Thousands(math.floor(row.gonePerDay + 0.5)) or "|cff615f5c—|r")
+                r.gold:SetText(Money(row.value) .. Change(row.value, row.valueWeek))
+                r.listed:SetText(ns.Thousands(row.units or 0) .. Change(row.units, row.unitsWeek))
+                r.tag:SetText((Tr("%d items")):format(row.items or 0)); r.tag:SetTextColor(unpack(C.faint))
+                r.buy:Hide(); r.tag:Show()
+                r:Show()
+            elseif row then
                 local name = ns.GetItemInfo(row.id)
                 if not name then ns.RequestItem(row.id) end
                 local _, _, icon = Instant(row.id)
@@ -651,6 +844,19 @@ function M.BuildPage(page)
         for k, b in pairs(self.fb) do b:SetSelected(k == self.filter) end
         local db = DB()
         local hours = M.ObservedHours()
+        self.heads[1]:SetText(self.filter == "trends" and Tr("Group") or Tr("Item"))
+        if self.filter == "trends" then
+            self.heads[2]:SetText(Tr("Prices vs usual")); self.heads[3]:SetText(Tr("Gone / day"))
+            self.heads[4]:SetText(Tr("Value listed")); self.heads[5]:SetText(Tr("Units listed"))
+            self.data = M.Overview()
+            local last = CatsDB().last
+            self.sub:SetText(last and (Tr("whole AH by group  ·  last full scan %s  ·  change over 7 days")):format(P.Ago(time() - last))
+                or Tr("whole AH by group"))
+            self.empty:SetText(Tr("Do a full scan at the auction house: the figures by group start with it, and their trends after a few days."))
+            self.empty:SetShown(#self.data == 0)
+            self:Draw()
+            return
+        end
         local vf = self.filter == "vflip"
         self.heads[2]:SetText(vf and "Price / vendor" or self.filter == "flip" and "Now / usual" or "Price")
         self.heads[3]:SetText(vf and "Units" or "Sold / day")
