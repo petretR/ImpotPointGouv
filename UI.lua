@@ -739,6 +739,7 @@ ns.On("LEDGER_READY", function()
         UI.UpdateMinimap()
     end
     if ns.repairMsg then ns.Print(ns.repairMsg); ns.repairMsg = nil end
+    if ns.migrateMsg then ns.Print(ns.migrateMsg); ns.migrateMsg = nil end
     -- First launch (or update) with missing steps: show the guide once.
     if ns.Setup and not ns.db.settings.setupShown then
         C_Timer.After(4, function()

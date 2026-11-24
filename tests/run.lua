@@ -329,6 +329,156 @@ Check("queue profitable: first batch sized on the market, then adapted to real s
     ns.db.settings.adapt[rec.pid] = nil
 end)
 
+-- ------------------------------------------------------------ price history (PriceStore.lua)
+local Store = ns.Store
+local DAY = 86400
+-- Moves the clock to hh:mm of the next day (UTC days, as the store counts them).
+local function NextDay(hour)
+    local today = math.floor(time() / DAY)
+    Advance((today + 1) * DAY + (hour or 8) * 3600 - time())
+end
+
+Check("price history: migration from the v1.0 prices / hist tables", function()
+    local now = time()
+    local today = math.floor(now / DAY)
+    local db = { prices = { R = {
+        [901] = { cur = 120, qty = 30, t = now - 100, d = { { today - 3, 100, 40 }, { today - 2, 110, 35 }, { today - 1, 105, 33 }, { today, 120, 30 } } },
+        [902] = { cur = 50, qty = 9, t = now - 100,
+            d = { { today - 1, 40, 10 } },
+            h = { { now - DAY - 7200, 40, 12 }, { now - DAY - 3600, 45, 10 }, { now - 100, 50, 9 } } },
+    } }, hist = { R = {
+        [902] = { s = { (now - DAY - 7200) .. ",40,42,12,,", (now - DAY - 3600) .. ",45,46,10,2,0", (now - 100) .. ",50,52,9,1,0" },
+            d = { (today - 1) .. ",40,88,2,10,2,0,2" }, lad = "50:9", lhi = -1, lt = now - 100 },
+    } } }
+    Assert(Store.Migrate(db, now) == 2, "two items converted")
+    Assert(db.hist == nil and db.priceFormat == 2, "hist dropped, format marked")
+    Assert(Store.Migrate(db, now) == 0, "runs only once")
+    local a, b = db.prices.R[901], db.prices.R[902]
+    Assert(type(a.d) == "string" and a.cur == 120 and a.qty == 30, "untracked: daily records and current price kept")
+    local days = Store.Days(a)
+    Assert(#days == 4 and days[1][1] == today - 3 and days[4].open, "3 closed days + today open, got " .. #days)
+    Assert(days[2][Store.D.low] == 110, "daily low kept")
+    Assert(a.s == nil, "untracked: no per-scan points")
+    Assert(b.s and #Store.Points(b) == 3, "tracked: per-scan points kept")
+    Assert(Store.Points(b)[2][3] == 46, "market price of a point kept")
+    local bd = Store.Days(b)
+    local y = bd[1]
+    Assert(y[1] == today - 1 and y[Store.D.mkt] == 44, "yesterday's market price kept (88 / 2)")
+    Assert(y[Store.D.sold] == 2 and y[Store.D.scans] == 2, "yesterday's sold recomputed from its scans")
+    Assert(b.o and b.o[1] == today and #Store.Samples(b.o) == 1, "today's scan is the open day's sample")
+    Assert(b.lq == 10, "last quantity before today kept for sales across midnight")
+    Assert(b.lad == "50:9" and b.lat == now - 100, "ladder kept")
+end)
+
+Check("price history: a day closes into one daily record", function()
+    local id = 903
+    NextDay(1)
+    local ladder = function(low, n) return { [low] = n, [math.floor(low * 1.05)] = 10, [low * 2] = 50 } end
+    P.Record(id, 100, 70, true, ladder(100, 10))
+    Advance(4 * 3600); P.Record(id, 90, 60, true, ladder(90, 0)) -- 10 gone
+    Advance(30); P.Record(id, 90, 60, true, ladder(90, 0))       -- same scan, merged
+    Advance(4 * 3600); P.Record(id, 95, 75, true, ladder(95, 15))  -- relisted
+    Advance(4 * 3600); P.Record(id, 1, 5, false)                  -- seen by a search: low only
+    Advance(3600); P.Record(id, 120, 50, true, ladder(120, 0))    -- 25 gone
+    local e = P.Entry(id)
+    Assert(#Store.Samples(e.o) == 4, "4 scans today, got " .. #Store.Samples(e.o))
+    NextDay(2)
+    P.Record(id, 110, 45, true, ladder(110, 0))                   -- 5 gone overnight
+    local d = Store.Days(e)
+    Assert(#d == 2, "yesterday closed + today open")
+    local y = d[1]
+    local D = Store.D
+    Assert(y[D.low] == 1 and y[D.high] == 120, "low (search included) and high")
+    Assert(y[D.usual] == 97.5 or y[D.usual] == 98, "usual = median of 100, 90, 95, 120: " .. tostring(y[D.usual]))
+    Assert(y[D.qty] == 65 or y[D.qty] == 64, "median quantity: " .. tostring(y[D.qty]))
+    Assert(y[D.sold] == 35 and y[D.scans] == 4, "sold 10 + 25, 4 scans: " .. tostring(y[D.sold]))
+    Assert(y[D.depth] and y[D.depth] >= 10, "depth: units within 10 % of the lowest")
+    Assert(Store.DayRecord(e)[D.sold] == nil, "today: one scan, sold unknown (not 0)")
+    Assert(e.lq == 50, "yesterday's last quantity carried")
+end)
+
+Check("price history: Sold/day for an item in no list, from daily records", function()
+    local id = 904
+    Assert(not P.IsTracked(id), "not tracked")
+    for day = 1, 3 do
+        NextDay(6)
+        P.Record(id, 200, 40, true)
+        Advance(6 * 3600); P.Record(id, 210, 30, true)
+        Advance(6 * 3600); P.Record(id, 205, 25, true)
+        Advance(6 * 3600); P.Record(id, 200, 40, true)
+    end
+    NextDay(6); P.Record(id, 200, 40, true)
+    local st = P.Stats(id)
+    Assert(st.sales and st.sales >= 15 and st.sales <= 15.5, "about 15 sold per day, got " .. tostring(st.sales))
+    Assert(st.med == 200 or st.med == 202.5 or st.med == 205, "usual price from daily records: " .. tostring(st.med))
+    Assert(P.Market(id) and P.Market(id) >= 200 and P.Market(id) <= 205, "market value")
+    local pts = ns.History.Series(id, 7 * DAY)
+    Assert(#pts >= 4, "history window has daily points")
+    ns.History.Show(id)
+end)
+
+Check("price history: sizes stay bounded (scans, days, weeks)", function()
+    local id = 905
+    ns.Lists.IsWatched = (function(f) return function(x) return x == id or f(x) end end)(ns.Lists.IsWatched)
+    Assert(P.IsTracked(id), "tracked through its list")
+    local untracked = 906
+    for _ = 1, 420 do
+        NextDay(0)
+        for k = 1, 3 do
+            Advance(3 * 3600)
+            P.Record(id, 100 + k, 50 - k, true, { [100 + k] = 50 - k })
+            P.Record(untracked, 100 + k, 50 - k, true)
+        end
+    end
+    local e, u = P.Entry(id), P.Entry(untracked)
+    local pts = Store.Points(e)
+    Assert(#pts <= 7 * 3 + 1 and #pts >= 20, "per-scan points: 7 days, got " .. #pts)
+    Assert(#Store.Records(e.d, nil, Store.DAYS) <= Store.KEEP_DAYS_TRACKED + 7, "tracked: about 6 months of days, got " .. #Store.Records(e.d, nil, Store.DAYS))
+    Assert(#Store.Records(u.d, nil, Store.DAYS) <= Store.KEEP_DAYS + 7, "untracked: about 30 days, got " .. #Store.Records(u.d, nil, Store.DAYS))
+    Assert(not u.s, "untracked: no per-scan points")
+    local wk = Store.Records(u.w, nil, Store.WEEKS)
+    -- one year back from today: about 48 weeks before the 30 daily days
+    Assert(#wk >= 46 and #wk <= Store.KEEP_WEEKS, "weekly records: up to one year, got " .. #wk)
+    local w = wk[#wk]
+    Assert(w[Store.W.sold] and w[Store.W.soldDays] == 7, "a week sums the sold of its 7 days")
+    Assert(w[Store.W.usual] == 102, "weekly usual = median of daily usual")
+    print(("      sizes: tracked d %d B, s %d B; untracked d %d B, w %d B"):format(#e.d, #(e.s or ""), #u.d, #(u.w or "")))
+    Assert(#e.d < 190 * 30 and #u.d < 40 * 30 and #(u.w or "") < 53 * 40, "packed text stays small")
+    local pts1y = ns.History.Series(untracked, 365 * DAY)
+    Assert(#pts1y >= 70, "one year view: weekly then daily points, got " .. #pts1y)
+    for i = 2, #pts1y do Assert(pts1y[i].t > pts1y[i - 1].t, "points in time order") end
+end)
+
+Check("price history: a full scan that misses an item records it as sold out", function()
+    local acc = {}
+    for i = 1, 300 do acc[950000 + i] = { low = 10, qty = 5 } end
+    for id, a in pairs(acc) do P.Record(id, a.low, a.qty, true) end
+    local gone = 950001
+    acc[gone] = nil
+    Advance(1800)
+    P._RecordUnseen(acc)
+    local e = P.Entry(gone)
+    Assert(e.cur == nil and e.qty == 0, "no listing any more")
+    local list = Store.Samples(e.o)
+    Assert(list[#list][3] == 0, "a qty 0 sample")
+    local tiny = { [950002] = acc[950002] }
+    Advance(1800)
+    Assert(P._RecordUnseen(tiny) == 0, "an incomplete scan marks nothing")
+end)
+
+Check("price history: data saved under an empty realm merges", function()
+    local now = time()
+    local today = math.floor(now / DAY)
+    local a = { cur = 10, qty = 1, t = now - 50, d = Store.Pack({ { today - 2, 10 }, { today - 1, 11, nil, nil, nil, nil, 3 } }, Store.DAYS) }
+    local b = { cur = 12, qty = 2, t = now, d = Store.Pack({ { today - 3, 9 }, { today - 1, 13, nil, nil, nil, nil, 5 } }, Store.DAYS),
+        o = { today, Store.PackOne({ 60, 12, 2 }, nil, Store.SAMPLES) } }
+    Store.MergeEntry(a, b, false, today)
+    local d = Store.Days(a)
+    Assert(#d == 4 and d[1][1] == today - 3, "days from both, in order")
+    Assert(d[3][Store.D.low] == 13, "same day: the record with more scans wins")
+    Assert(a.cur == 12 and a.o, "newest current price and open day")
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

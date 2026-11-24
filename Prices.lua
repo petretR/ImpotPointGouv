@@ -34,7 +34,6 @@ local function DB()
     ns.db.prices[r] = ns.db.prices[r] or {}
     return ns.db.prices[r]
 end
-local function Today() return math.floor(time() / 86400) end
 
 function P.ItemID(link)
     if type(link) == "number" then return link end
@@ -59,49 +58,61 @@ function P.HasName(id)
 end
 
 -- ------------------------------------------------------------ recording
--- full = true: the item's complete listing (scan) -> reliable quantity, daily price replaced.
--- ladder (optional): { [unit price] = quantity } seen by this scan, for the market history.
+-- Storage and its format: PriceStore.lua.
+local Store = ns.Store
+
+-- Tracked: kept in detail (one point per scan for 7 days, daily records for 6 months).
+-- For now, items in a list; every other item keeps 30 days of daily records.
+function P.IsTracked(id)
+    return ns.Lists and ns.Lists.IsWatched and ns.Lists.IsWatched(id) or false
+end
+
+-- full = true: the item's complete listing (scan) -> reliable quantity, a sample of the day.
+-- ladder (optional): { [unit price] = quantity } seen by this scan: market depth, and for tracked items
+-- the market price and the units gone / added since the last scan.
 function P.Record(id, low, qty, full, ladder)
     if not id then return end
     local db = DB()
     local e = db[id]
-    if not e then e = { d = {} }; db[id] = e end
-    local day = Today()
-    local last = e.d[#e.d]
+    if not e then e = {}; db[id] = e end
+    local now = time()
     if low then
-        if not last or last[1] ~= day then
-            e.d[#e.d + 1] = { day, low, qty or 0 }
-            while #e.d > 30 do table.remove(e.d, 1) end
-        elseif full then
-            last[2], last[3] = low, qty or 0
-        else
-            last[2] = math.min(last[2], low)
-        end
         e.cur = low
     elseif full then
         e.cur = nil -- no listing any more
     end
+    if full then e.qty = qty or 0 end
+    Store.Observe(e, low, qty, full, ladder, full and P.IsTracked(id), now)
     -- Shared with Auctionator: its tooltip then shows the prices from our scans.
     if full and low and ns.db.settings.shareAuctionator ~= false and Auctionator and Auctionator.Database
         and Auctionator.Database.SetPrice then
         pcall(Auctionator.Database.SetPrice, Auctionator.Database, tostring(id), low, qty)
     end
-    if full then
-        e.qty = qty or 0
-        -- Fine history (one point per scan, at least 15 min apart): usual price, volatility, sales.
-        -- Only for tracked items (lists), to keep the saved file small.
-        if ns.Lists and ns.Lists.IsWatched and ns.Lists.IsWatched(id) then
-        e.h = e.h or {}
-        local h, now = e.h, time()
-        local lp = h[#h]
-        if lp and now - lp[1] < 900 then lp[2], lp[3] = low or 0, qty or 0
-        else h[#h + 1] = { now, low or 0, qty or 0 } end
-        while #h > 0 and (#h > 120 or now - h[1][1] > 21 * 86400) do table.remove(h, 1) end
-        if ns.History then ns.History.Note(id, low, qty, ladder) end
+    e.t = now
+    if ns.History then ns.History.Touched(id) end
+end
+
+-- A full scan that did not see an item: nothing is listed any more (its units are gone).
+-- Only items seen in the last 30 days, and only when the scan looks complete.
+local function RecordUnseen(acc)
+    local seen, recent, now = 0, 0, time()
+    for _ in pairs(acc) do seen = seen + 1 end
+    local db = DB()
+    for _, e in pairs(db) do
+        if e.cur and e.t and now - e.t < 2 * 86400 then recent = recent + 1 end
+    end
+    -- A partial answer from the server would mark half the AH as sold out: skip it.
+    if seen < 200 or seen < recent * 0.5 then return 0 end
+    local n = 0
+    for id, e in pairs(db) do
+        if not acc[id] and e.t and now - e.t < 30 * 86400 then
+            P.Record(id, nil, 0, true, e.cur and {} or nil)
+            n = n + 1
         end
     end
-    e.t = time()
+    return n
 end
+P._RecordUnseen = RecordUnseen
 
 -- 7-day statistics: median (usual price), low (20 %), high (80 %), volatility, sales / day.
 local function Pct(sorted, p)
@@ -109,7 +120,7 @@ local function Pct(sorted, p)
     if n == 0 then return nil end
     return sorted[math.max(1, math.min(n, math.ceil(n * p)))]
 end
--- Cache: an item's stats only change with a new scan (e.t); recomputed at the latest
+-- Cache: an item's stats only change with a new record (e.t); recomputed at the latest
 -- every 10 min (the 7-day window slides). Lists ask for them thousands of times per redraw.
 local statsCache = {}
 local StatsRaw
@@ -118,20 +129,30 @@ function P.Stats(id)
     if not e then return nil end
     local c = statsCache[id]
     local now = time()
-    if c and c.e == e and c.t == e.t and c.nh == #(e.h or {}) and now - c.at < 600 then return c.st end
+    if c and c.e == e and c.t == e.t and now - c.at < 600 then return c.st end
     local st = StatsRaw(id, e)
-    statsCache[id] = { e = e, t = e.t, nh = #(e.h or {}), at = now, st = st }
+    statsCache[id] = { e = e, t = e.t, at = now, st = st }
     return st
 end
+
+-- Value of a day for prices: its usual (median) lowest price, else its lowest.
+local DU, DL, DSOLD = Store.D.usual, Store.D.low, Store.D.sold
+local function DayValue(d) return d[DU] or d[DL] end
+
 StatsRaw = function(id, e)
-    local now, vals = time(), {}
-    local h = e.h or {}
-    for _, pt in ipairs(h) do
-        if now - pt[1] <= 7 * 86400 and pt[2] > 0 then vals[#vals + 1] = pt[2] end
+    local now = time()
+    local today = math.floor(now / 86400)
+    local pts = Store.Points(e, now - 7 * 86400)
+    local days = Store.Days(e, today - 7)
+    local vals = {}
+    for _, pt in ipairs(pts) do
+        if pt[2] and pt[2] > 0 then vals[#vals + 1] = pt[2] end
     end
-    if #vals < 3 and e.d then
-        for i = #e.d, math.max(1, #e.d - 6), -1 do
-            if e.d[i][1] >= math.floor(now / 86400) - 7 then vals[#vals + 1] = e.d[i][2] end
+    if #vals < 3 then
+        vals = {}
+        for _, d in ipairs(days) do
+            local v = DayValue(d)
+            if v and v > 0 then vals[#vals + 1] = v end
         end
     end
     local st = { cur = e.cur, t = e.t, qty = e.qty, n = #vals }
@@ -146,24 +167,42 @@ StatsRaw = function(id, e)
         for _, v in ipairs(vals) do var = var + (v - mean) ^ 2 end
         st.cv = mean > 0 and math.sqrt(var / #vals) / mean or 0
     end
-    -- Estimated sales: quantity drops between two successive scans (cancels included).
+    -- Estimated sales (cancelled and expired auctions count too).
+    -- Per-scan points when there are enough of them, else the daily records.
     local drop, first, last = 0, nil, nil
-    for i, pt in ipairs(h) do
-        if now - pt[1] <= 7 * 86400 then
-            first = first or pt[1]; last = pt[1]
-            local prev = h[i - 1]
-            if prev and now - prev[1] <= 7 * 86400 and prev[3] > pt[3] then drop = drop + (prev[3] - pt[3]) end
+    for i, pt in ipairs(pts) do
+        first = first or pt[1]; last = pt[1]
+        local prev = pts[i - 1]
+        if prev and prev[4] and pt[4] and prev[4] > pt[4] then drop = drop + (prev[4] - pt[4]) end
+    end
+    if first and last and last - first >= 6 * 3600 then
+        st.sales = drop / ((last - first) / 86400)
+    else
+        -- Closed days with a known Sold (2 scans or more); today counts once it spans 6 hours.
+        local sold, n = 0, 0
+        for _, d in ipairs(days) do
+            if d[DSOLD] and d[1] < today then sold, n = sold + d[DSOLD], n + 1 end
+        end
+        if n > 0 then
+            st.sales, st.salesDays = sold / n, n
+        else
+            local list = Store.Samples(e.o)
+            local o1, o2 = list[1], list[#list]
+            if e.o and e.o[1] == today and #list >= 2 and o2[1] - o1[1] >= 6 * 3600 then
+                local d = Store.DayRecord(e)
+                if d and d[DSOLD] then st.sales = d[DSOLD] / ((o2[1] - o1[1]) / 86400) end
+            end
         end
     end
-    if first and last and last - first >= 6 * 3600 then st.sales = drop / ((last - first) / 86400) end
     -- Curve: lowest price per day, last 7 days.
-    local today, spark = math.floor(now / 86400), {}
-    for _, pt in ipairs(h) do
-        local d = today - math.floor(pt[1] / 86400)
-        if d < 7 and pt[2] > 0 then
-            local k = 7 - d
-            spark[k] = spark[k] and math.min(spark[k], pt[2]) or pt[2]
-        end
+    local spark = {}
+    for _, d in ipairs(days) do
+        local k = 7 - (today - d[1])
+        if k >= 1 and k <= 7 and d[DL] then spark[k] = d[DL] end
+    end
+    for _, pt in ipairs(pts) do
+        local k = 7 - (today - math.floor(pt[1] / 86400))
+        if k >= 1 and k <= 7 and pt[2] and pt[2] > 0 then spark[k] = spark[k] and math.min(spark[k], pt[2]) or pt[2] end
     end
     st.spark = spark
     return st
@@ -171,18 +210,24 @@ end
 
 function P.Entry(id) return id and DB()[id] end
 
+-- Market value: median of the usual price of the last 7 days seen (over 14 days at most).
+local marketCache = {}
 function P.Market(id)
     local e = P.Entry(id)
-    if not e or not e.d or #e.d == 0 then return nil end
-    local vals, minDay = {}, Today() - 14
-    for i = #e.d, math.max(1, #e.d - 6), -1 do
-        if e.d[i][1] >= minDay then vals[#vals + 1] = e.d[i][2] end
+    if not e then return nil end
+    local c = marketCache[id]
+    local now = time()
+    if c and c.e == e and c.t == e.t and now - c.at < 600 then return c.v end
+    local vals = {}
+    local days = Store.Days(e, math.floor(now / 86400) - 14)
+    for i = #days, math.max(1, #days - 6), -1 do
+        local v = DayValue(days[i])
+        if v then vals[#vals + 1] = v end
     end
-    if #vals == 0 then return nil end
-    table.sort(vals)
-    local n = #vals
-    if n % 2 == 1 then return vals[(n + 1) / 2] end
-    return math.floor((vals[n / 2] + vals[n / 2 + 1]) / 2)
+    local v
+    if #vals > 0 then v = math.floor(Store.Median(vals)) end
+    marketCache[id] = { e = e, t = e.t, at = now, v = v }
+    return v
 end
 
 -- AH value used: the lower of market and recent current listing (you sell at the real market price).
@@ -495,6 +540,7 @@ local function ProcessFull()
             C_Timer.After(0.02, Chunk)
         else
             for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
+            RecordUnseen(scan.acc)
             if ns.Market then ns.Market.OnFullScan(scan.acc) end
             ns.db.scan[Realm()] = ns.db.scan[Realm()] or {}
             ns.db.scan[Realm()].lastFull = time()
@@ -606,6 +652,7 @@ local function ModernProcessFull()
             C_Timer.After(0.02, Chunk)
         else
             for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
+            RecordUnseen(scan.acc)
             if ns.Market then ns.Market.OnFullScan(scan.acc) end
             ns.db.scan[Realm()] = ns.db.scan[Realm()] or {}
             ns.db.scan[Realm()].lastFull = time()
@@ -929,6 +976,30 @@ ev:SetScript("OnEvent", function(_, event, ...)
         end
     end
 end)
+
+-- At login: close the days left open (items not seen since), a few hundred items per frame.
+function P.CloseOldDays(now)
+    local today = math.floor((now or time()) / 86400)
+    local todo = {}
+    for id, e in pairs(DB()) do
+        if type(e) == "table" and e.o and e.o[1] < today then todo[#todo + 1] = id end
+    end
+    local i = 0
+    local function Chunk()
+        local db = DB()
+        for _ = 1, 300 do
+            i = i + 1
+            local id = todo[i]
+            if not id then return end
+            local e = db[id]
+            if e and e.o and e.o[1] < today then Store.Close(e, P.IsTracked(id), today) end
+        end
+        C_Timer.After(0.05, Chunk)
+    end
+    Chunk()
+    return #todo
+end
+ns.On("DB_READY", function() C_Timer.After(10, function() if ns.db then P.CloseOldDays() end end) end)
 
 -- Profiling (/ipg perf): heavy functions called outside timed events.
 if ns.Profile then

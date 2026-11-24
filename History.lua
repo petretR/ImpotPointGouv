@@ -1,298 +1,100 @@
 -- ImpotPointGouv: market history per item ("Price history" window).
--- * Recording: for each item in the lists, one point per scan (7 days) and one summary per day (2 years).
---   Point = lowest price (without bait listings), market price (average of the cheapest 15 to 30 %,
---   TSM-style, without outliers), quantity listed, units gone and units added since the previous scan.
--- * Window: a single one, reused; two curves (low / market), one point per scan, gone / added bars.
+-- * Data: PriceStore.lua (per-scan points for tracked items, daily then weekly records for every item).
+-- * Window: a single one, reused; two curves (low / market), one point per scan or per day,
+--   gone / added bars (estimated sold per day on daily and weekly points).
 local _, ns = ...
 local Tr = ns.L
 local P = ns.Prices
 local H = {}
 ns.History = H
 
-local KEEP_SCANS = 7 * 86400   -- points per scan kept
-local MAX_SCANS = 400          -- per item
-local KEEP_DAYS = 730          -- daily summaries kept
-local MERGE = 120              -- two recordings less than 2 min apart = the same scan
-local DIFF_MAX_GAP = 48 * 3600 -- beyond that, two scans are no longer compared (gone / added unknown)
-local LADDER_LEVELS = 60       -- price levels kept to compare with the next scan
+local Store = ns.Store
+local D, W = Store.D, Store.W
 
-local function Realm() return ns.Realm() end
-local function Root()
-    ns.db.hist = ns.db.hist or {}
-    local r = Realm()
-    ns.db.hist[r] = ns.db.hist[r] or {}
-    return ns.db.hist[r]
-end
+-- Kept for other modules: market price of a ladder (see PriceStore.lua).
+H.Analyze = Store.Analyze
 
--- ------------------------------------------------------------ analysing a scan
--- ladder: { [unit price] = quantity } -> sorted levels { {price, qty}, ... }
-local function Levels(ladder)
-    local lv = {}
-    for p, q in pairs(ladder or {}) do if p and p > 0 and q and q > 0 then lv[#lv + 1] = { p, q } end end
-    table.sort(lv, function(a, b) return a[1] < b[1] end)
-    return lv
-end
-
--- Price at quantile f (0..1) of the units of lv, starting at level first.
-local function Quantile(lv, f, first)
-    local total = 0
-    for i = first, #lv do total = total + lv[i][2] end
-    local want, acc = total * f, 0
-    for i = first, #lv do
-        acc = acc + lv[i][2]
-        if acc >= want then return lv[i][1] end
-    end
-    return lv[#lv] and lv[#lv][1]
-end
-
--- Returns the lowest price (without baits) and the market price, from the sorted levels.
--- Bait: a level of at most 2 units (or < 5 % of the total) below 60 % of the reference price;
--- at most three are dropped. Market: at least 15 % of the units, up to 30 % as long as the next level
--- does not jump by more than 20 %; then drop what is more than 1.5 standard deviations away and average.
-function H.Analyze(lv)
-    if #lv == 0 then return nil, nil end
-    local first, total = 1, 0
-    for _, l in ipairs(lv) do total = total + l[2] end
-    for _ = 1, 3 do
-        local l = lv[first]
-        if not l or first >= #lv then break end
-        local rest = total - l[2]
-        local ref = Quantile(lv, 0.15, first + 1)
-        if (l[2] <= 2 or l[2] < total * 0.05) and ref and l[1] < ref * 0.6 and rest > 0 then
-            first, total = first + 1, rest
-        else
-            break
-        end
-    end
-    local low = lv[first][1]
-    -- cheapest slice
-    local minU, maxU = total * 0.15, total * 0.30
-    local slice, taken, prev = {}, 0, nil
-    for i = first, #lv do
-        local p, q = lv[i][1], lv[i][2]
-        if taken >= minU and prev and p > prev * 1.2 then break end
-        local take = math.min(q, math.max(0, maxU - taken))
-        if taken < minU then take = math.max(take, math.min(q, minU - taken)) end
-        if take <= 0 then break end
-        slice[#slice + 1] = { p, take }
-        taken, prev = taken + take, p
-        if taken >= maxU then break end
-    end
-    if taken <= 0 then return low, low end
-    local sum, n = 0, 0
-    for _, s in ipairs(slice) do sum, n = sum + s[1] * s[2], n + s[2] end
-    local mean = sum / n
-    local var = 0
-    for _, s in ipairs(slice) do var = var + s[2] * (s[1] - mean) ^ 2 end
-    local sd = math.sqrt(var / n)
-    if sd > 0 then
-        local s2, n2 = 0, 0
-        for _, s in ipairs(slice) do
-            if math.abs(s[1] - mean) <= 1.5 * sd then s2, n2 = s2 + s[1] * s[2], n2 + s[2] end
-        end
-        if n2 > 0 then mean = s2 / n2 end
-    end
-    return low, math.floor(mean + 0.5)
-end
-
--- Levels <-> compact text "price:qty,price:qty" (the LADDER_LEVELS cheapest).
-local function PackLadder(lv)
-    local parts = {}
-    for i = 1, math.min(#lv, LADDER_LEVELS) do parts[i] = lv[i][1] .. ":" .. lv[i][2] end
-    return table.concat(parts, ",")
-end
-local function UnpackLadder(s)
-    local m = {}
-    for p, q in (s or ""):gmatch("(%d+):(%d+)") do m[tonumber(p)] = tonumber(q) end
-    return m
-end
-
--- Units gone / added between two scans, over the price range both have seen.
-local function Diff(prev, prevHi, now, nowHi)
-    local hi = math.min(prevHi or 0, nowHi or 0)
-    local gone, new = 0, 0
-    for p, q in pairs(prev) do
-        if p <= hi then
-            local d = (now[p] or 0) - q
-            if d < 0 then gone = gone - d else new = new + d end
-        end
-    end
-    for p, q in pairs(now) do
-        if p <= hi and not prev[p] then new = new + q end
-    end
-    return gone, new
-end
-
--- ------------------------------------------------------------ storage
--- Point per scan: "t,low,market,qty,gone,added"; daily summary: "day,low,Σmarket,n market,qty,gone,added,scans".
-local function Num(v) return v and tostring(math.floor(v + 0.5)) or "" end
-local function Split(s)
-    local out, i = {}, 0
-    for f in (s .. ","):gmatch("([^,]*),") do i = i + 1; out[i] = tonumber(f) end
-    return out
-end
-H._Split = Split
-
--- Takes over the history already known (points per scan and daily prices) the first time.
-local function Import(id, h)
-    local e = P.Entry(id)
-    if not e then return end
-    local now = time()
-    for _, pt in ipairs(e.h or {}) do
-        if now - pt[1] <= KEEP_SCANS then
-            h.s[#h.s + 1] = table.concat({ Num(pt[1]), Num(pt[2] ~= 0 and pt[2] or nil), "", Num(pt[3]), "", "" }, ",")
-        end
-    end
-    for _, pt in ipairs(e.d or {}) do
-        h.d[#h.d + 1] = table.concat({ Num(pt[1]), Num(pt[2]), "", "0", Num(pt[3]), "", "", "1" }, ",")
-    end
-end
-
--- merged: same scan already counted (no extra scan or market price, only the differences).
-local function AddDaily(h, t, low, mkt, qty, gone, new, merged)
-    local day = math.floor(t / 86400)
-    local last = h.d[#h.d] and Split(h.d[#h.d])
-    if last and last[1] == day then
-        local lo = last[2]
-        if low and (not lo or low < lo) then lo = low end
-        local ms, mn = last[3] or 0, last[4] or 0
-        if mkt and not merged then ms, mn = ms + mkt, mn + 1 end
-        local g = (gone or last[6]) and ((last[6] or 0) + (gone or 0)) or nil
-        local a = (new or last[7]) and ((last[7] or 0) + (new or 0)) or nil
-        h.d[#h.d] = table.concat({ Num(day), Num(lo), mn > 0 and Num(ms) or "", Num(mn), Num(qty or last[5]), Num(g), Num(a),
-            Num((last[8] or 0) + (merged and 0 or 1)) }, ",")
-    else
-        h.d[#h.d + 1] = table.concat({ Num(day), Num(low), Num(mkt), mkt and "1" or "0", Num(qty), Num(gone), Num(new), "1" }, ",")
-        local cut = day - KEEP_DAYS
-        while h.d[1] and (Split(h.d[1])[1] or 0) < cut do table.remove(h.d, 1) end
-    end
-end
-
--- Called by Prices.Record for a tracked item after a full search.
--- ladder: price levels seen (nil if the scan gives none, e.g. a "browse" search: low and quantity only).
-function H.Note(id, low, qty, ladder)
-    if not id then return end
-    local root = Root()
-    local h = root[id]
-    if not h then
-        h = { s = {}, d = {} }
-        root[id] = h
-        Import(id, h)
-    end
-    local now = time()
-    local mkt, gone, new
-    if ladder then
-        local lv = Levels(ladder)
-        local lo
-        lo, mkt = H.Analyze(lv)
-        low = lo -- nil if nothing is listed any more
-        local nowHi = #lv == 0 and math.huge or lv[math.min(#lv, LADDER_LEVELS)][1]
-        if h.lad and h.lt and now - h.lt <= DIFF_MAX_GAP then
-            gone, new = Diff(UnpackLadder(h.lad), (h.lhi == -1) and math.huge or h.lhi, ladder, nowHi)
-        end
-        -- lhi = highest price seen (-1: nothing listed, every future level counts as added)
-        h.lad, h.lhi, h.lt = PackLadder(lv), nowHi ~= math.huge and nowHi or -1, now
-    end
-    local last = h.s[#h.s] and Split(h.s[#h.s])
-    local merged = last and last[1] and now >= last[1] and now - last[1] < MERGE
-    if merged then
-        -- same scan seen through two paths (full scan then search): keep the latest, add up the differences
-        local g = (gone or last[5]) and ((last[5] or 0) + (gone or 0)) or nil
-        local a = (new or last[6]) and ((last[6] or 0) + (new or 0)) or nil
-        h.s[#h.s] = table.concat({ Num(last[1]), Num(low), Num(mkt or last[3]), Num(qty), Num(g), Num(a) }, ",")
-    else
-        h.s[#h.s + 1] = table.concat({ Num(now), Num(low), Num(mkt), Num(qty), Num(gone), Num(new) }, ",")
-        while h.s[1] and (#h.s > MAX_SCANS or now - (Split(h.s[1])[1] or 0) > KEEP_SCANS) do table.remove(h.s, 1) end
-    end
-    AddDaily(h, now, low, mkt, qty, gone, new, merged)
+-- Called by Prices.Record: redraw the window if it shows this item.
+function H.Touched(id)
     if H.frame and H.frame:IsShown() and H.id == id then H.dirty = true end
 end
 
--- No history yet: what prices already keep (list points per scan, daily lows).
-local function FromPrices(id, span)
+local function DailyPoint(d)
+    return { t = d[1] * 86400 + 43200, low = d[D.low], high = d[D.high], usual = d[D.usual], mkt = d[D.mkt],
+        qty = d[D.qty], gone = d[D.gone] or d[D.sold], new = d[D.new], sold = d[D.sold], depth = d[D.depth],
+        scans = d[D.scans], daily = true }
+end
+local function WeeklyPoint(w)
+    local start = Store.WeekStart(w[1])
+    local sold = w[W.sold] and w[W.soldDays] and w[W.soldDays] > 0 and w[W.sold] / w[W.soldDays] or nil
+    return { t = (start + 3.5) * 86400, low = w[W.low], high = w[W.high], usual = w[W.usual], qty = w[W.qty],
+        gone = sold, sold = sold, depth = w[W.depth], scans = w[W.scans], daily = true, weekly = true }
+end
+
+-- Points of a period: { t, low, mkt, qty, gone, new, ... }; per scan up to 7 days (tracked items),
+-- per day before, per week before the daily records.
+function H.Series(id, span)
     local e = P.Entry(id)
     local out = {}
     if not e then return out end
     local now = time()
-    if span and span <= KEEP_SCANS then
-        for _, pt in ipairs(e.h or {}) do
-            if now - pt[1] <= span then
-                out[#out + 1] = { t = pt[1], low = pt[2] ~= 0 and pt[2] or nil, qty = pt[3] }
+    local from = span and (now - span) or nil
+    local pts = (span and span <= Store.KEEP_SCANS) and Store.Points(e, from) or {}
+    local firstPt = pts[1] and pts[1][1] or math.huge
+    local days = Store.Days(e, from and math.floor(from / 86400) or nil, true)
+    local firstDay = days[1] and days[1][1] * 86400 or math.huge
+    for _, w in ipairs(Store.Weeks(e)) do
+        local p = WeeklyPoint(w)
+        if (not from or p.t >= from) and Store.WeekStart(w[1] + 1) * 86400 <= firstDay then out[#out + 1] = p end
+    end
+    for _, d in ipairs(days) do
+        local p = DailyPoint(d)
+        -- the day of the first scan point and later: shown per scan
+        if d[1] * 86400 + 86400 <= firstPt and (not from or p.t >= from) then out[#out + 1] = p end
+    end
+    for _, pt in ipairs(pts) do
+        out[#out + 1] = { t = pt[1], low = pt[2], mkt = pt[3], qty = pt[4], gone = pt[5], new = pt[6], depth = pt[7] }
+    end
+    -- Untracked item on a short range: today's scans, one point each.
+    if #pts == 0 and span and span <= Store.KEEP_SCANS and e.o then
+        local base = #out
+        for _, smp in ipairs(Store.Samples(e.o)) do
+            if not from or smp[1] >= from then
+                out[#out + 1] = { t = smp[1], low = smp[2], qty = smp[3], depth = smp[4] }
             end
         end
-    end
-    if #out == 0 then
-        local from = span and math.floor((now - span) / 86400) or -math.huge
-        for _, pt in ipairs(e.d or {}) do
-            if pt[1] >= from then out[#out + 1] = { t = pt[1] * 86400 + 43200, low = pt[2], qty = pt[3], daily = true } end
+        -- the open day's record is replaced by its scans
+        if #out > base and out[base] and out[base].daily and math.floor(out[base].t / 86400) == e.o[1] then
+            table.remove(out, base)
         end
     end
     return out
 end
 
--- Points of a period: { t, low, mkt, qty, gone, new }; per scan up to 7 days, per day beyond.
-function H.Series(id, span)
-    local h = Root()[id]
-    if not h then return FromPrices(id, span) end
-    local out = {}
-    local now = time()
-    local function Daily(before)
-        local from = span and math.floor((now - span) / 86400) or -math.huge
-        for _, s in ipairs(h.d) do
-            local f = Split(s)
-            local t = f[1] and f[1] * 86400 + 43200
-            if f[1] and f[1] >= from and (not before or t < before) and (not span or now - t <= span) then
-                out[#out + 1] = { t = t, low = f[2], mkt = (f[4] or 0) > 0 and f[3] and f[3] / f[4] or nil,
-                    qty = f[5], gone = f[6], new = f[7], scans = f[8], daily = true }
-            end
-        end
-    end
-    if span and span <= KEEP_SCANS then
-        -- Points per scan; before the first one, the daily summaries (item tracked recently).
-        local first = h.s[1] and Split(h.s[1])[1]
-        Daily(first or now + 1)
-        for _, s in ipairs(h.s) do
-            local f = Split(s)
-            if f[1] and now - f[1] <= span then
-                out[#out + 1] = { t = f[1], low = f[2], mkt = f[3], qty = f[4], gone = f[5], new = f[6] }
-            end
-        end
-    else
-        Daily(nil)
-    end
-    return out
-end
-
--- Summary for the header: last point, point from 24 h ago, scans today.
+-- Summary for the header: last point, price 24 h ago, scans today.
 function H.Summary(id)
-    local h = Root()[id]
-    if not h then
-        -- from the daily lows kept by prices
-        local e = P.Entry(id)
-        if not e or not e.d or #e.d == 0 then return nil end
-        local today = math.floor(time() / 86400)
-        local ago
-        for _, pt in ipairs(e.d) do if pt[1] < today then ago = pt[2] end end
-        return { t = e.t, low = e.cur, ago = ago, today = 0 }
+    local e = P.Entry(id)
+    if not e then return nil end
+    local now = time()
+    local today = math.floor(now / 86400)
+    local last, ago
+    local list = {}
+    for _, pt in ipairs(Store.Points(e, now - 3 * 86400)) do list[#list + 1] = { pt[1], pt[2], pt[3], pt[4] } end
+    if #list == 0 then
+        for _, smp in ipairs(Store.Samples(e.o)) do list[#list + 1] = { smp[1], smp[2], nil, smp[3] } end
     end
-    local now, last, ago, today = time(), nil, nil, 0
-    local day = math.floor(now / 86400)
-    for _, s in ipairs(h.s) do
-        local f = Split(s)
-        if f[1] then
-            if f[2] then last = f end
-            if f[2] and f[1] <= now - 86400 then ago = f end
-            if math.floor(f[1] / 86400) == day then today = today + 1 end
-        end
+    for _, p in ipairs(list) do
+        if p[2] then last = p end
+        if p[2] and p[1] <= now - 86400 then ago = p end
     end
     if not ago then
-        for _, s in ipairs(h.d) do
-            local f = Split(s)
-            if f[1] and f[1] < day and f[2] then ago = { f[1] * 86400 + 43200, f[2] } end
+        for _, d in ipairs(Store.Days(e, today - 7)) do
+            if d[1] < today and d[D.low] then ago = { d[1] * 86400 + 43200, d[D.usual] or d[D.low] } end
         end
     end
-    return { t = last and last[1], low = last and last[2], mkt = last and last[3], qty = last and last[4],
-        ago = ago and ago[2], today = today }
+    local scansToday = (e.o and e.o[1] == today) and #Store.Samples(e.o) or 0
+    return { t = last and last[1] or e.t, low = last and last[2] or e.cur, mkt = last and last[3],
+        qty = last and last[4] or e.qty, ago = ago and ago[2], today = scansToday }
 end
 
 -- ------------------------------------------------------------ window
@@ -457,14 +259,34 @@ local function Build()
         GameTooltip:ClearAllPoints()
         local right = c.x > plot:GetWidth() * 0.6
         GameTooltip:SetPoint(right and "TOPRIGHT" or "TOPLEFT", plot, "TOPLEFT", c.x + (right and -12 or 12), -6)
-        GameTooltip:AddLine(date(pt.daily and "%d/%m/%Y" or "%d/%m %H:%M", pt.t), 0.75, 0.72, 0.66)
+        local when = pt.weekly and (Tr("Week of %s")):format(date("%d/%m/%Y", math.floor(pt.t - 3.5 * 86400)))
+            or date(pt.daily and "%d/%m/%Y" or "%d/%m %H:%M", math.floor(pt.t))
+        GameTooltip:AddLine(when, 0.75, 0.72, 0.66)
         local function M(v) return v and ns.FormatMoney(v, { iconSize = 11 }) or "—" end
         GameTooltip:AddDoubleLine(Tr("Lowest listing"), M(pt.low), C.gold[1], C.gold[2], C.gold[3], 1, 1, 1)
         GameTooltip:AddDoubleLine(Tr("Market price"), M(pt.mkt), BLUE[1], BLUE[2], BLUE[3], 1, 1, 1)
         GameTooltip:AddDoubleLine(Tr("Listed"), pt.qty and tostring(pt.qty) or "—", 0.7, 0.7, 0.7, 1, 1, 1)
-        GameTooltip:AddDoubleLine(Tr("Units gone"), pt.gone and tostring(pt.gone) or "—", C.pos[1], C.pos[2], C.pos[3], 1, 1, 1)
-        GameTooltip:AddDoubleLine(Tr("Units listed"), pt.new and tostring(pt.new) or "—", PINK[1], PINK[2], PINK[3], 1, 1, 1)
-        if pt.daily and pt.scans then GameTooltip:AddLine((Tr("%d scans that day")):format(pt.scans), 0.6, 0.6, 0.6) end
+        if pt.usual and pt.daily then
+            GameTooltip:AddDoubleLine(Tr("Usual price"), M(pt.usual), 0.93, 0.90, 0.84, 1, 1, 1)
+        end
+        if pt.high and pt.daily and pt.high ~= pt.low then
+            GameTooltip:AddDoubleLine(Tr("Highest lowest listing"), M(pt.high), 0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        local function Count(v) return v and tostring(math.floor(v + 0.5)) or "—" end
+        GameTooltip:AddDoubleLine(Tr("Listed"), Count(pt.qty), 0.7, 0.7, 0.7, 1, 1, 1)
+        if pt.depth then
+            GameTooltip:AddDoubleLine(Tr("Within 10% of the lowest"), Count(pt.depth), 0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        if pt.weekly then
+            GameTooltip:AddDoubleLine(Tr("Sold per day (estimate)"), Count(pt.sold), C.pos[1], C.pos[2], C.pos[3], 1, 1, 1)
+        else
+            GameTooltip:AddDoubleLine(Tr("Units gone"), Count(pt.gone), C.pos[1], C.pos[2], C.pos[3], 1, 1, 1)
+            GameTooltip:AddDoubleLine(Tr("Units listed"), Count(pt.new), PINK[1], PINK[2], PINK[3], 1, 1, 1)
+        end
+        if pt.daily and pt.scans then
+            GameTooltip:AddLine((pt.weekly and Tr("%d scans that week") or Tr("%d scans that day")):format(pt.scans), 0.6, 0.6, 0.6)
+            if not pt.weekly and pt.scans < 2 then GameTooltip:AddLine(Tr("Only one scan: units gone unknown"), 0.6, 0.6, 0.6) end
+        end
         GameTooltip:Show()
     end)
 
@@ -750,7 +572,3 @@ ns.On("PRICES_CHANGED", function() if H.frame and H.frame:IsShown() then H.dirty
 -- Automatic tracking of opened items (tried then removed): erase what it may have left.
 ns.On("DB_READY", function() if ns.db then ns.db.histTrack = nil end end)
 
--- Profiling (/ipg perf): heavy functions called outside timed events.
-if ns.Profile then
-    H.Note = ns.Profile.Wrap("History:Note", H.Note)
-end
