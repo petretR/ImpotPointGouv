@@ -466,6 +466,25 @@ Check("price history: a full scan that misses an item records it as sold out", f
     Assert(P._RecordUnseen(tiny) == 0, "an incomplete scan marks nothing")
 end)
 
+Check("price history: every profession item is tracked, other items are not", function()
+    local any
+    for _, t in pairs(ns.Data.allRecipes) do
+        if t[7] and t[7] > 0 and #t >= 9 then any = t; break end
+    end
+    Assert(any, "a recipe with a recipe item and materials")
+    Assert(P.IsTracked(any[1]) and P.TrackReason(any[1]) == "profession", "crafted product")
+    Assert(P.IsTracked(any[7]), "recipe item")
+    Assert(P.IsTracked(any[9]), "material")
+    Assert(not P.IsTracked(990001) and P.TrackReason(990001) == nil, "an unrelated item")
+    local mat = any[9]
+    P.Record(mat, 300, 12, true, { [300] = 12 })
+    Advance(1800); P.Record(mat, 310, 8, true, { [310] = 8 })
+    Assert(#Store.Points(P.Entry(mat), time() - 3600) == 2, "per-scan points for a material")
+    local n = 0
+    for _ in pairs(ns.Data.allRecipes) do n = n + 1 end
+    Assert(n > 1000, "recipe data loaded")
+end)
+
 Check("price history: data saved under an empty realm merges", function()
     local now = time()
     local today = math.floor(now / DAY)

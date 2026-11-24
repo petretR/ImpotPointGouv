@@ -62,9 +62,51 @@ end
 local Store = ns.Store
 
 -- Tracked: kept in detail (one point per scan for 7 days, daily records for 6 months).
--- For now, items in a list; every other item keeps 30 days of daily records.
+-- Every profession item (what any recipe makes, its recipe item and its materials, for every profession,
+-- known or not), plus the items in a list. Every other item keeps 30 days of daily records, then weeks.
+local professionItems
+local function ProfessionItems()
+    if professionItems then return professionItems end
+    local set = {}
+    local function Add(id) if id and id > 0 then set[id] = true end end
+    -- { product, profession, orange, yellow, grey, made, recipe item, estimated, mat1, n1, mat2, n2, ... }
+    for _, t in pairs((ns.Data and ns.Data.allRecipes) or {}) do
+        Add(t[1]); Add(t[7])
+        for i = 9, #t, 2 do Add(t[i]) end
+    end
+    -- Crafted items of the lists data (Forever-only recipes included) and their recipe items.
+    for id, it in pairs((ns.Data and ns.Data.items) or {}) do
+        if it.p then Add(id); Add(it.rec) end
+    end
+    professionItems = set
+    return set
+end
+-- Recipes learned from your profession windows: may hold crafts the data above does not know yet.
+local learned, learnedAt
+local function LearnedItems()
+    local now = time()
+    if learned and now - learnedAt < 60 then return learned end
+    local set = {}
+    for _, recipes in pairs(ns.db.recipes or {}) do
+        for _, r in pairs(recipes) do
+            if r.p then set[r.p] = true end
+            for _, rg in ipairs(r.r or {}) do if rg[1] then set[rg[1]] = true end end
+        end
+    end
+    learned, learnedAt = set, now
+    return set
+end
 function P.IsTracked(id)
+    if not id then return false end
+    if ProfessionItems()[id] or LearnedItems()[id] then return true end
     return ns.Lists and ns.Lists.IsWatched and ns.Lists.IsWatched(id) or false
+end
+-- Why an item is tracked (for the interface): "profession", "list" or nil.
+function P.TrackReason(id)
+    if not id then return nil end
+    if ProfessionItems()[id] or LearnedItems()[id] then return "profession" end
+    if ns.Lists and ns.Lists.IsWatched and ns.Lists.IsWatched(id) then return "list" end
+    return nil
 end
 
 -- full = true: the item's complete listing (scan) -> reliable quantity, a sample of the day.
