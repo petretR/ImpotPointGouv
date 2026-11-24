@@ -6,7 +6,7 @@
 --                   counts from the start of the day. One sample per scan that saw the item's whole listing.
 --   lq, lst         quantity and time of the last sample of the previous day (to count sales across midnight)
 --   d               daily records, oldest first:  "day,low,high,usual,qty,sold,scans,depth,mkt,gone,new;..."
---   w               weekly records, oldest first: "week,low,high,usual,qty,sold,soldDays,scans,depth;..."
+--   w               weekly records, oldest first: "week,low,usual,qty,sold,soldDays,depth;..."
 --   s               per-scan points of tracked items, oldest first: "t,low,mkt,qty,gone,new,depth;..."
 --   lad, lhi, lat   the previous scan's price ladder (tracked items), to count units gone and added
 --
@@ -17,7 +17,9 @@
 -- bait listing); qty = median quantity listed; depth = median of the units listed within 10 % of the lowest
 -- price; sold = units that disappeared between consecutive scans (yesterday's last scan included), unknown
 -- (empty) when the day had fewer than 2 scans; mkt / gone / new: from the per-scan points (tracked items).
+-- Past 30 days a daily record keeps only day, low, usual, qty and sold (tracked items keep 6 months of them).
 -- A daily record older than the daily window joins its week, once the whole week is out of the window.
+-- Weekly record: min low, median of the daily usual, qty and depth, sold summed over soldDays known days.
 local _, ns = ...
 local S = {}
 ns.Store = S
@@ -36,11 +38,10 @@ S.DEPTH_BAND = 1.10           -- depth: units listed up to 10 % above the lowest
 
 -- Field positions.
 local D_DAY, D_LOW, D_HIGH, D_USUAL, D_QTY, D_SOLD, D_SCANS, D_DEPTH, D_MKT, D_GONE, D_NEW = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
-local W_WEEK, W_LOW, W_HIGH, W_USUAL, W_QTY, W_SOLD, W_SOLDDAYS, W_SCANS, W_DEPTH = 1, 2, 3, 4, 5, 6, 7, 8, 9
+local W_WEEK, W_LOW, W_USUAL, W_QTY, W_SOLD, W_SOLDDAYS, W_DEPTH = 1, 2, 3, 4, 5, 6, 7
 S.D = { day = D_DAY, low = D_LOW, high = D_HIGH, usual = D_USUAL, qty = D_QTY, sold = D_SOLD, scans = D_SCANS,
     depth = D_DEPTH, mkt = D_MKT, gone = D_GONE, new = D_NEW }
-S.W = { week = W_WEEK, low = W_LOW, high = W_HIGH, usual = W_USUAL, qty = W_QTY, sold = W_SOLD, soldDays = W_SOLDDAYS,
-    scans = W_SCANS, depth = W_DEPTH }
+S.W = { week = W_WEEK, low = W_LOW, usual = W_USUAL, qty = W_QTY, sold = W_SOLD, soldDays = W_SOLDDAYS, depth = W_DEPTH }
 
 local floor = math.floor
 local function Day(t) return floor(t / 86400) end
@@ -80,7 +81,7 @@ S.Enc, S.Dec = Enc, Dec
 
 -- Kinds of records: number of fields, prices stored relative to the low.
 local DAYS = { n = 11, rel = { 3, 4, 9 } }   -- high, usual, market
-local WEEKS = { n = 9, rel = { 3, 4 } }      -- high, usual
+local WEEKS = { n = 7, rel = { 3 } }         -- usual
 local POINTS = { n = 7, rel = { 3 } }        -- market
 local SAMPLES = { n = 4, rel = {} }
 S.DAYS, S.WEEKS, S.POINTS, S.SAMPLES = DAYS, WEEKS, POINTS, SAMPLES
@@ -373,22 +374,18 @@ S.DayRecord = DayRecord
 local function WeekRecord(week, days)
     local r = { week }
     local usual, qty, dep = {}, {}, {}
-    local sold, soldDays, scans = 0, 0, 0
+    local sold, soldDays = 0, 0
     for _, d in ipairs(days) do
         if d[D_LOW] then r[W_LOW] = r[W_LOW] and math.min(r[W_LOW], d[D_LOW]) or d[D_LOW] end
-        local hi = d[D_HIGH] or d[D_LOW]
-        if hi then r[W_HIGH] = r[W_HIGH] and math.max(r[W_HIGH], hi) or hi end
         local u = d[D_USUAL] or d[D_LOW]
         if u then usual[#usual + 1] = u end
         if d[D_QTY] then qty[#qty + 1] = d[D_QTY] end
         if d[D_DEPTH] then dep[#dep + 1] = d[D_DEPTH] end
         local sd = d[D_SOLD] or d[D_GONE]
         if sd then sold, soldDays = sold + sd, soldDays + 1 end
-        scans = scans + (d[D_SCANS] or 0)
     end
     r[W_USUAL], r[W_QTY], r[W_DEPTH] = Median(usual), Median(qty), Median(dep)
     if soldDays > 0 then r[W_SOLD], r[W_SOLDDAYS] = sold, soldDays end
-    r[W_SCANS] = scans
     return r
 end
 
@@ -406,15 +403,15 @@ function S.Prune(e, tracked, today)
         if #keep < #pts then e.s = #keep > 0 and Pack(keep, POINTS) or nil end
     end
     if e.d and tracked then
-        -- Past 30 days, a tracked day keeps its Sold but no longer the units gone / added.
+        -- Past 30 days, a day keeps only low, usual, qty and sold (sold falls back on the units gone).
         local days = Records(e.d, nil, DAYS)
         local cut, changed = today - S.KEEP_DAYS, false
         local copy = {}
         for i, d in ipairs(days) do
-            if d[1] < cut and (d[D_GONE] or d[D_NEW]) then
-                local c = {}
-                for k = 1, D_MKT do c[k] = d[k] end
-                if not c[D_SOLD] then c[D_SOLD] = d[D_GONE] end
+            if d[1] < cut and (d[D_HIGH] or d[D_SCANS] or d[D_DEPTH] or d[D_MKT] or d[D_GONE] or d[D_NEW]) then
+                local c = { d[1] }
+                c[D_LOW], c[D_USUAL], c[D_QTY] = d[D_LOW], d[D_USUAL], d[D_QTY]
+                c[D_SOLD] = d[D_SOLD] or d[D_GONE]
                 d, changed = c, true
             end
             copy[i] = d
@@ -607,7 +604,7 @@ function S.MergeEntry(dst, src, tracked, today)
     if src.o and src.o[1] < today then S.Close(src, tracked, today) end
     local more = function(n) return function(r, x) return (r[n] or 0) > (x[n] or 0) end end
     dst.d = MergeLists(Records(dst.d, nil, DAYS), Records(src.d, nil, DAYS), DAYS, more(D_SCANS))
-    dst.w = MergeLists(Records(dst.w, nil, WEEKS), Records(src.w, nil, WEEKS), WEEKS, more(W_SCANS))
+    dst.w = MergeLists(Records(dst.w, nil, WEEKS), Records(src.w, nil, WEEKS), WEEKS, more(W_SOLDDAYS))
     dst.s = MergeLists(Records(dst.s, nil, POINTS), Records(src.s, nil, POINTS), POINTS, function() return false end)
     if src.o then
         if not dst.o then dst.o = src.o

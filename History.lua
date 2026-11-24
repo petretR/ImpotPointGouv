@@ -27,8 +27,8 @@ end
 local function WeeklyPoint(w)
     local start = Store.WeekStart(w[1])
     local sold = w[W.sold] and w[W.soldDays] and w[W.soldDays] > 0 and w[W.sold] / w[W.soldDays] or nil
-    return { t = (start + 3.5) * 86400, low = w[W.low], high = w[W.high], usual = w[W.usual], qty = w[W.qty],
-        gone = sold, sold = sold, depth = w[W.depth], scans = w[W.scans], daily = true, weekly = true }
+    return { t = (start + 3.5) * 86400, low = w[W.low], usual = w[W.usual], qty = w[W.qty],
+        gone = sold, sold = sold, depth = w[W.depth], daily = true, weekly = true }
 end
 
 -- Points of a period: { t, low, mkt, qty, gone, new, ... }; per scan up to 7 days (tracked items),
@@ -284,7 +284,7 @@ local function Build()
             GameTooltip:AddDoubleLine(Tr("Units listed"), Count(pt.new), PINK[1], PINK[2], PINK[3], 1, 1, 1)
         end
         if pt.daily and pt.scans then
-            GameTooltip:AddLine((pt.weekly and Tr("%d scans that week") or Tr("%d scans that day")):format(pt.scans), 0.6, 0.6, 0.6)
+            GameTooltip:AddLine((Tr("%d scans that day")):format(pt.scans), 0.6, 0.6, 0.6)
             if not pt.weekly and pt.scans < 2 then GameTooltip:AddLine(Tr("Only one scan: units gone unknown"), 0.6, 0.6, 0.6) end
         end
         GameTooltip:Show()
