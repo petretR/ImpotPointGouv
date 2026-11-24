@@ -10,7 +10,7 @@ local UNSTABLE_ICON = "|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:13:13:0
 local MERCHANT_ICON = "|TInterface\\GossipFrame\\VendorGossipIcon:11:11:0:0|t"
 local LU = {}
 ns.ListsUI = LU
-local EYE_ICON = "Interface\\Icons\\Spell_Holy_MindVision"
+local EYE_ICON = "Interface\\Icons\\INV_Misc_Eye_01"
 LU.EYE_ICON = EYE_ICON
 
 -- Eye of a row: bright when the item is watched, faint otherwise.
