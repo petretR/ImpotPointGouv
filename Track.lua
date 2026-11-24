@@ -302,39 +302,36 @@ function TR.PostAdvice(name, id)
     local vs = (id and ns.Prices.VendorSell(id)) or 0
     local mv = id and TR.AHValue(id)
     local edge = mv and (math.floor(mv * AH_CUT) - vs) or nil
-    if vs and vs > 0 and (h.streak >= 3 or (edge and h.lost >= edge)) then adv.vendor = vs end
+    if vs and vs > 0 and (h.streak >= 3 or (edge and h.lost >= edge)) then adv.vendor, adv.edge = vs, edge end
     return adv
 end
 
+-- Returns three texts: what happened, the advice (short), and why (one sentence).
 function TR.AdviceText(adv)
     if not adv then return nil end
-    local parts = { (Tr("expired %d× in a row")):format(adv.streak) }
-    if adv.lost > 0 then parts[#parts + 1] = ns.FormatMoney(adv.lost, { iconSize = 10 }) .. Tr(" deposits lost") end
-    local what
-    if adv.vendor then what = "vendor it (" .. ns.FormatMoney(adv.vendor, { iconSize = 10 }) .. ")"
-    elseif adv.pauseUntil then local left = adv.pauseUntil - time()
-        what = left >= 86400 * 1.5 and (Tr("don't repost for %d days")):format(math.floor(left / 86400 + 0.5))
-            or (Tr("don't repost for %dh")):format(math.max(1, math.floor(left / 3600 + 0.5)))
-    else what = "post 1 at a time" end
-    return table.concat(parts, " · "), what
-end
-
--- Items in your bags not to repost (for the chat line when the AH opens and for vendor selling).
-function TR.StuckInBags()
-    local out, seen = {}, {}
-    if not C_Container then return out end
-    for bag = 0, LastBag() do
-        for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID and not info.isBound and not seen[info.itemID] then
-                seen[info.itemID] = true
-                local name = (info.hyperlink and info.hyperlink:match("%[(.-)%]")) or ns.GetItemInfo(info.itemID)
-                local adv = TR.PostAdvice(name, info.itemID)
-                if adv and (adv.pauseUntil or adv.vendor) then out[#out + 1] = { id = info.itemID, name = name, adv = adv } end
-            end
+    local function M(v) return ns.FormatMoney(v, { iconSize = 10 }) end
+    local why = (Tr("Expired %d× in a row")):format(adv.streak)
+    if adv.lost > 0 then why = why .. "  ·  " .. (Tr("%s of deposits lost")):format(M(adv.lost)) end
+    local what, reason
+    if adv.vendor then
+        what = (Tr("Sell it to a vendor (%s)")):format(M(adv.vendor))
+        if adv.streak >= 3 then
+            reason = Tr("It does not sell at the AH at this price.")
+        elseif adv.edge and adv.edge > 0 then
+            reason = (Tr("The AH pays only %s more than a vendor, less than the deposits already lost.")):format(M(adv.edge))
+        else
+            reason = Tr("The AH does not pay more than a vendor once its cut is taken.")
         end
+    elseif adv.pauseUntil then
+        local left = adv.pauseUntil - time()
+        what = left >= 86400 * 1.5 and (Tr("Wait %d days before posting it again")):format(math.floor(left / 86400 + 0.5))
+            or (Tr("Wait %dh before posting it again")):format(math.max(1, math.floor(left / 3600 + 0.5)))
+        reason = Tr("Two listings in a row came back: the market needs time to absorb it.")
+    else
+        what = Tr("Post only 1 next time")
+        reason = Tr("If it expires again, only one deposit is lost.")
     end
-    return out
+    return why, what, reason
 end
 
 -- ------------------------------------------------------------ tooltips (vendor and AH)
@@ -349,9 +346,11 @@ local function TooltipHint(tt, data)
     local name = (link and link:match("%[(.-)%]")) or ns.GetItemInfo(data.id)
     local adv = TR.PostAdvice(name, data.id)
     if adv then
-        local why, what = TR.AdviceText(adv)
-        tt:AddLine("|cffe0a83dIPG|r  " .. why, 0.93, 0.55, 0.32)
-        tt:AddLine("      " .. what, 0.93, 0.55, 0.32)
+        local why, what, reason = TR.AdviceText(adv)
+        tt:AddLine(" ")
+        tt:AddLine("|cffe0a83dIPG|r  " .. what, 0.93, 0.55, 0.32)
+        tt:AddLine(why, 0.7, 0.7, 0.7)
+        tt:AddLine(reason, 0.6, 0.6, 0.6, true)
         tt:Show()
         return
     end
@@ -398,7 +397,7 @@ end
 -- ------------------------------------------------------------ events
 local f = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(f, "Track") end
-for _, ev in ipairs({ "AUCTION_HOUSE_SHOW", "MERCHANT_SHOW", "MERCHANT_CLOSED", "BAG_UPDATE_DELAYED", "CHAT_MSG_LOOT",
+for _, ev in ipairs({ "MERCHANT_SHOW", "MERCHANT_CLOSED", "BAG_UPDATE_DELAYED", "CHAT_MSG_LOOT",
                       "QUEST_COMPLETE", "QUEST_TURNED_IN", "PLAYER_ENTERING_WORLD" }) do
     pcall(f.RegisterEvent, f, ev)
 end
@@ -419,17 +418,6 @@ f:SetScript("OnEvent", function(_, event, ...)
         end
         if C_Timer then C_Timer.NewTicker(60, Tick) end
         ns.On("TX_ADDED", OnTx)
-    elseif event == "AUCTION_HOUSE_SHOW" then
-        C_Timer.After(2, function()
-            local stuck = TR.StuckInBags()
-            if #stuck == 0 then return end
-            local names = {}
-            for i = 1, math.min(5, #stuck) do
-                local e = stuck[i]
-                names[#names + 1] = (Tr("%s (%d× expired%s)")):format(e.name, e.adv.streak, e.adv.vendor and ", vendor it" or "")
-            end
-            ns.Print(Tr("|cffe08a52don't repost:|r ") .. table.concat(names, ", ") .. (#stuck > 5 and (" +%d"):format(#stuck - 5) or ""))
-        end)
     elseif event == "MERCHANT_SHOW" then
         merchantOpen = true; visit = nil
         cache = Snapshot()

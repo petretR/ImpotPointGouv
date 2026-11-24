@@ -329,6 +329,17 @@ Check("queue profitable: first batch sized on the market, then adapted to real s
     ns.db.settings.adapt[rec.pid] = nil
 end)
 
+Check("repost advice explains itself (tooltip, not chat)", function()
+    local TR = ns.Track
+    local why, what, reason = TR.AdviceText({ streak = 1, lost = 300, vendor = 2500, edge = 200 })
+    Assert(why and what and reason, "three texts")
+    Assert(what:find("2500", 1, true) or what:find("25", 1, true), "advice shows the vendor price: " .. what)
+    Assert(reason:find("200", 1, true) or reason:find("2", 1, true), "reason shows the AH edge: " .. reason)
+    local _, w2, r2 = TR.AdviceText({ streak = 1, lost = 0 })
+    Assert(w2 and r2, "first expiry: advice and reason")
+    Assert(TR.StuckInBags == nil, "no more chat line when the AH opens")
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end
