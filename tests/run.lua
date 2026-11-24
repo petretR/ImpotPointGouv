@@ -436,6 +436,9 @@ Check("price history: sizes stay bounded (scans, days, weeks)", function()
     Assert(#Store.Records(e.d, nil, Store.DAYS) <= Store.KEEP_DAYS_TRACKED + 7, "tracked: about 6 months of days, got " .. #Store.Records(e.d, nil, Store.DAYS))
     Assert(#Store.Records(u.d, nil, Store.DAYS) <= Store.KEEP_DAYS + 7, "untracked: about 30 days, got " .. #Store.Records(u.d, nil, Store.DAYS))
     Assert(not u.s, "untracked: no per-scan points")
+    local old = Store.Records(e.d, nil, Store.DAYS)[1]
+    Assert(old[Store.D.usual] and old[Store.D.qty] and old[Store.D.sold], "an old tracked day keeps usual, qty and sold")
+    Assert(not old[Store.D.high] and not old[Store.D.scans] and not old[Store.D.mkt], "and drops the rest")
     local wk = Store.Records(u.w, nil, Store.WEEKS)
     -- one year back from today: about 48 weeks before the 30 daily days
     Assert(#wk >= 46 and #wk <= Store.KEEP_WEEKS, "weekly records: up to one year, got " .. #wk)
@@ -464,6 +467,25 @@ Check("price history: a full scan that misses an item records it as sold out", f
     local tiny = { [950002] = acc[950002] }
     Advance(1800)
     Assert(P._RecordUnseen(tiny) == 0, "an incomplete scan marks nothing")
+end)
+
+Check("price history: every profession item is tracked, other items are not", function()
+    local any
+    for _, t in pairs(ns.Data.allRecipes) do
+        if t[7] and t[7] > 0 and #t >= 9 then any = t; break end
+    end
+    Assert(any, "a recipe with a recipe item and materials")
+    Assert(P.IsTracked(any[1]) and P.TrackReason(any[1]) == "profession", "crafted product")
+    Assert(P.IsTracked(any[7]), "recipe item")
+    Assert(P.IsTracked(any[9]), "material")
+    Assert(not P.IsTracked(990001) and P.TrackReason(990001) == nil, "an unrelated item")
+    local mat = any[9]
+    P.Record(mat, 300, 12, true, { [300] = 12 })
+    Advance(1800); P.Record(mat, 310, 8, true, { [310] = 8 })
+    Assert(#Store.Points(P.Entry(mat), time() - 3600) == 2, "per-scan points for a material")
+    local n = 0
+    for _ in pairs(ns.Data.allRecipes) do n = n + 1 end
+    Assert(n > 1000, "recipe data loaded")
 end)
 
 Check("price history: data saved under an empty realm merges", function()

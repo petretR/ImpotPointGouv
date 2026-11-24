@@ -684,7 +684,6 @@ ns.AddLocale("frFR", {
 
     -- History.lua
     ["%d scans that day"] = "%d scans ce jour-là",
-    ["%d scans that week"] = "%d scans cette semaine-là",
     ["1 day"] = "1 jour",
     ["1 month"] = "1 mois",
     ["1 week"] = "1 semaine",
