@@ -184,6 +184,23 @@ local function Build()
     f.price = T.Text(f, 22, { bold = true }); f.price:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -4)
     f.change = T.Text(f, 12); f.change:SetPoint("TOPLEFT", f.price, "BOTTOMLEFT", 0, -3)
     f.last = T.Text(f, 11, { color = C.faint }); f.last:SetPoint("TOPLEFT", f.change, "BOTTOMLEFT", 0, -3)
+    -- Watched or not (eye), and why; click toggles it.
+    f.watch = CreateFrame("Button", nil, f); f.watch:SetSize(240, 14)
+    f.watch:SetPoint("TOPLEFT", f.last, "BOTTOMLEFT", 0, -2)
+    f.watch.eye = f.watch:CreateTexture(nil, "ARTWORK"); f.watch.eye:SetSize(12, 12); f.watch.eye:SetPoint("LEFT")
+    f.watch.eye:SetTexture(ns.ListsUI and ns.ListsUI.EYE_ICON or "Interface\\Icons\\Spell_Holy_MindVision")
+    f.watch.eye:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    f.watch.text = T.Text(f.watch, 11, { color = C.muted }); f.watch.text:SetPoint("LEFT", f.watch.eye, "RIGHT", 5, 0)
+    f.watch:SetScript("OnClick", function(self)
+        if not H.id then return end
+        P.ToggleWatch(H.id); H.Refresh()
+        if GameTooltip:IsOwned(self) then self:GetScript("OnEnter")(self) end
+    end)
+    f.watch:SetScript("OnEnter", function(self)
+        if not H.id then return end
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT"); P.WatchTooltip(H.id); GameTooltip:Show()
+    end)
+    f.watch:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Key numbers (from the price card): difference to vendor or usual price, 4 days, 1st scan, supply.
     f.tiles = {}
@@ -489,6 +506,11 @@ function H.Refresh()
     end
     local lastT = (sm and sm.t) or (e and e.t)
     f.last:SetText((Tr("Last scan %s · %d scans today")):format(lastT and P.Ago(time() - lastT) or Tr("never"), sm and sm.today or 0))
+    local watched = P.IsWatched(id)
+    f.watch.eye:SetDesaturated(not watched); f.watch.eye:SetVertexColor(1, 1, 1, watched and 1 or 0.3)
+    local tr = P.TrackReason(id)
+    f.watch.text:SetText((watched and Tr("Watched") or Tr("Not watched")) .. "  ·  "
+        .. (tr and Tr("detailed history") or Tr("daily history")))
     local key = ns.db.settings.histRange or "1w"
     local span
     for _, r in ipairs(RANGES) do
@@ -551,7 +573,8 @@ function H.Show(id)
 end
 
 -- /ipg item <link | id | name>
-function H.Command(arg)
+-- Item from a link, an id or a (part of a) name; nil if none.
+function H.FindItem(arg)
     arg = arg or ""
     local id = tonumber(arg) or tonumber(arg:match("item:(%d+)"))
     if not id and arg ~= "" then
@@ -565,10 +588,16 @@ function H.Command(arg)
         end
         id = id or partial
     end
+    return id
+end
+
+function H.Command(arg)
+    local id = H.FindItem(arg)
     if id then H.Show(id) else ns.Print(Tr("usage: /ipg item <item link, id or name>")) end
 end
 
 ns.On("PRICES_CHANGED", function() if H.frame and H.frame:IsShown() then H.dirty = true end end)
+ns.On("WATCH_CHANGED", function() if H.frame and H.frame:IsShown() then H.dirty = true end end)
 -- Automatic tracking of opened items (tried then removed): erase what it may have left.
 ns.On("DB_READY", function() if ns.db then ns.db.histTrack = nil end end)
 

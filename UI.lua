@@ -567,10 +567,54 @@ local function BuildSettings(page)
         function(v) st().shareAuctionator = v end, "Each item scanned here also updates Auctionator's price, so its tooltip stays in sync.")
     Head(2, "Data")
     local setupB = T.Button(cols[2], Tr("Setup guide"), 140, 28, function() ns.Setup.Show() end)
-    setupB:SetPoint("TOPLEFT", 16, y[2]); y[2] = y[2] - 38
+    setupB:SetPoint("TOPLEFT", 16, y[2])
     local reset = T.Button(cols[2], Tr("Reset all data"), 140, 28, function() StaticPopup_Show("IMPOTPOINTGOUV_RESET") end)
-    reset:SetPoint("TOPLEFT", 16, y[2])
+    reset:SetPoint("LEFT", setupB, "RIGHT", 8, 0)
     reset.text:SetTextColor(unpack(C.neg))
+    y[2] = y[2] - 42
+
+    -- Watched items: what "Scan" searches between full scans, per profession. Single items: eye icon in Lists.
+    Head(2, "Scan between full scans")
+    local P = ns.Prices
+    local count = T.Text(cols[2], 11, { color = C.muted, wrap = true }); count:SetPoint("TOPLEFT", 16, y[2] + 8)
+    count:SetPoint("RIGHT", -16, 0)
+    y[2] = y[2] - 22
+    local MAX_PROF = 5
+    local profRows = {}
+    for i = 1, MAX_PROF do
+        local yy = y[2] - (i - 1) * 28
+        local row = { label = T.Text(cols[2], 12) }
+        row.label:SetPoint("TOPLEFT", 16, yy - 4); row.label:SetWidth(170); row.label:SetWordWrap(false)
+        row.mats = T.Button(cols[2], Tr("Materials"), 92, 22, function()
+            if row.prof then P.SetWatchProf(row.prof, "mats", not P.WatchProf(row.prof).mats); page:Refresh() end
+        end, "pill")
+        row.mats:SetPoint("TOPRIGHT", -16, yy)
+        row.crafts = T.Button(cols[2], Tr("Crafts"), 76, 22, function()
+            if row.prof then P.SetWatchProf(row.prof, "crafts", not P.WatchProf(row.prof).crafts); page:Refresh() end
+        end, "pill")
+        row.crafts:SetPoint("RIGHT", row.mats, "LEFT", -6, 0)
+        profRows[i] = row
+    end
+    local more = T.Text(cols[2], 11, { color = C.faint }); more:SetPoint("TOPLEFT", 16, y[2] - MAX_PROF * 28)
+    page.items[#page.items + 1] = function()
+        local profs = {}
+        for prof in pairs(ns.db.recipes or {}) do profs[#profs + 1] = prof end
+        table.sort(profs)
+        for i, row in ipairs(profRows) do
+            local prof = profs[i]
+            row.prof = prof
+            row.label:SetShown(prof ~= nil); row.crafts:SetShown(prof ~= nil); row.mats:SetShown(prof ~= nil)
+            if prof then
+                local cfg = P.WatchProf(prof)
+                row.label:SetText(prof)
+                row.crafts:SetSelected(cfg.crafts); row.mats:SetSelected(cfg.mats)
+            end
+        end
+        more:SetText(#profs > MAX_PROF and (Tr("+%d more professions: use the eye icon in Lists")):format(#profs - MAX_PROF) or
+            (#profs == 0 and Tr("Open your profession windows so the addon learns your recipes.") or ""))
+        local n = #P.WatchList()
+        count:SetText((Tr("%d items watched (about %d s per scan). Single items: eye icon in Lists.")):format(n, math.ceil(n / 20 * 3)))
+    end
 
     function page:Refresh() for _, f in ipairs(self.items) do f() end end
 end
@@ -803,6 +847,16 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
     msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     local itemArg = msg:match("^item%s+(.+)$")
     if itemArg or msg == "item" then ns.History.Command(itemArg); return end
+    local watchCmd, watchArg = msg:match("^(%a+)%s+(.+)$")
+    if watchCmd == "watch" or watchCmd == "unwatch" then
+        local id = ns.History.FindItem(watchArg)
+        if not id then ns.Print(Tr("usage: /ipg watch <item link, id or name>  ·  /ipg unwatch <item>")); return end
+        ns.Prices.SetWatch(id, watchCmd == "watch")
+        local why = ns.Prices.WatchText(id)
+        ns.Print((ns.Prices.IsWatched(id) and Tr("%s is watched") or Tr("%s is not watched")):format(ns.Prices.Name(id))
+            .. (why and (" (" .. why .. ")") or "") .. ".")
+        return
+    end
     if msg == "tx" or msg == "transactions" then UI.Toggle("tx")
     elseif msg == "persos" or msg == "chars" then UI.Toggle("chars")
     elseif msg == "vendor" then

@@ -6,6 +6,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 ## [Unreleased]
 
 ### Added
+- Watched items: an eye at the end of each Lists row (and in the price history window) shows whether "Scan" searches the item between two full scans. Click it to watch or stop watching one item; hover to see why ("Leatherworking material", "you turned it on"). Settings → "Scan between full scans" turns crafts and materials on or off per profession (both on by default). `/ipg watch <item>` and `/ipg unwatch <item>` do the same from chat. Watched items also keep a detailed price history.
 - Mail: "Collect expired" button next to Collect gold, to take back the items of expired and cancelled auctions (sales and other mail stay).
 - Mail: send part of a stack. Click the quantity of a checked item to type it, or use Shift with − / +; the addon splits the stack into a free bag slot when you send.
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.

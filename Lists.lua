@@ -564,11 +564,12 @@ function LS.Build()
     return groups
 end
 
--- Item present in a list: its price history is kept.
-function LS.IsWatched(id)
+-- Item present in a list: its price history is kept in detail.
+function LS.InList(id)
     if not LS.watch or LS.dirty then LS.Build() end
     return LS.watch[id] or false
 end
+LS.IsWatched = LS.InList -- older name
 
 function LS.Groups()
     if not LS.groups or LS.dirty then LS.Build() end

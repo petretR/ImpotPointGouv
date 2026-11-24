@@ -419,7 +419,7 @@ end)
 
 Check("price history: sizes stay bounded (scans, days, weeks)", function()
     local id = 905
-    ns.Lists.IsWatched = (function(f) return function(x) return x == id or f(x) end end)(ns.Lists.IsWatched)
+    ns.Lists.InList = (function(f) return function(x) return x == id or f(x) end end)(ns.Lists.InList)
     Assert(P.IsTracked(id), "tracked through its list")
     local untracked = 906
     for _ = 1, 420 do
@@ -486,6 +486,43 @@ Check("price history: every profession item is tracked, other items are not", fu
     local n = 0
     for _ in pairs(ns.Data.allRecipes) do n = n + 1 end
     Assert(n > 1000, "recipe data loaded")
+end)
+
+Check("watched items: per profession by default, per item by hand", function()
+    local saved = ns.db.recipes
+    ns.db.recipes = { Leatherworking = {
+        ["Light Armor Kit"] = { p = 2304, m = 1, r = { { 2318, 1 } } },
+        ["Rugged Leather"] = { p = 8170, m = 1, r = { { 4304, 5 }, { 2320, 1 } } },
+    } }
+    ns.db.vendor[2320] = 10
+    ns.db.watch = nil
+    Advance(60) -- the default set is cached 30 s
+    Assert(P.IsWatched(2304) and P.WatchReason(2304) == "craft", "craft watched by default")
+    Assert(P.IsWatched(2318) and P.WatchReason(2318) == "mat", "material watched by default")
+    Assert(not P.IsWatched(2320), "vendor material not watched")
+    Assert(P.WatchText(2318):find("Leatherworking"), "reason names the profession")
+    P.SetWatchProf("Leatherworking", "mats", false)
+    Assert(not P.IsWatched(2318) and P.IsWatched(2304), "materials off, crafts still on")
+    P.SetWatch(2318, true)
+    Assert(P.IsWatched(2318) and P.WatchReason(2318) == "on", "turned on by hand")
+    P.SetWatchProf("Leatherworking", "mats", true)
+    P.SetWatch(2318, true)
+    Assert(ns.db.watch.items[2318] == nil, "a choice equal to the default is forgotten")
+    P.ToggleWatch(2304)
+    Assert(not P.IsWatched(2304) and P.WatchReason(2304) == "off", "turned off by hand")
+    P.SetWatch(990002, true)
+    Assert(P.IsTracked(990002) and P.TrackReason(990002) == "watched", "watched implies tracked")
+    local names = {}
+    for _, q in ipairs(P._ScanTargets()) do names[q.id] = true end
+    Assert(names[2318] and names[8170] and names[990002] and not names[2304] and not names[2320], "scan targets follow the watch")
+    SlashCmdList.IMPOTPOINTGOUV("unwatch item:990002")
+    Assert(not P.IsWatched(990002), "/ipg unwatch")
+    SlashCmdList.IMPOTPOINTGOUV("watch 990002")
+    Assert(P.IsWatched(990002), "/ipg watch")
+    ns.UI.Toggle("settings"); ns.UI.Toggle("lists")
+    ns.History.Show(2318)
+    ns.db.recipes = saved
+    ns.db.watch = nil
 end)
 
 Check("price history: data saved under an empty realm merges", function()

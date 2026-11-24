@@ -10,6 +10,15 @@ local UNSTABLE_ICON = "|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:13:13:0
 local MERCHANT_ICON = "|TInterface\\GossipFrame\\VendorGossipIcon:11:11:0:0|t"
 local LU = {}
 ns.ListsUI = LU
+local EYE_ICON = "Interface\\Icons\\Spell_Holy_MindVision"
+LU.EYE_ICON = EYE_ICON
+
+-- Eye of a row: bright when the item is watched, faint otherwise.
+function LU.DrawEye(eye, id)
+    local on = ns.Prices.IsWatched(id)
+    eye.tex:SetDesaturated(not on)
+    eye.tex:SetVertexColor(1, 1, 1, on and 1 or 0.22)
+end
 
 local ROWS = 14
 local ROW_H = 26
@@ -426,7 +435,7 @@ function LU.BuildPage(page)
     page.listFrame = list
     local cols = {
         { "Item", "LEFT", 38 }, { "Now", "RIGHT", -402 }, { "Usual", "RIGHT", -330 }, { "7 days", "LEFT", -316, true },
-        { "Sold/day", "RIGHT", -176 }, { "Listed", "RIGHT", -120 }, { "Have", "RIGHT", -82 }, { "", "RIGHT", -8 },
+        { "Sold/day", "RIGHT", -176 }, { "Listed", "RIGHT", -120 }, { "Have", "RIGHT", -82 }, { "", "RIGHT", -30 },
     }
     page.heads, page.headLabels = {}, {}
     for k, h in ipairs(cols) do
@@ -505,9 +514,28 @@ function LU.BuildPage(page)
         r.sales = T.Text(r, 12, { justify = "RIGHT" }); r.sales:SetPoint("RIGHT", -170, 0)
         r.listed = T.Text(r, 12, { justify = "RIGHT", color = C.muted }); r.listed:SetPoint("RIGHT", -114, 0)
         r.have = T.Text(r, 12, { justify = "RIGHT" }); r.have:SetPoint("RIGHT", -76, 0)
-        r.tag = T.Text(r, 11, { bold = true, justify = "RIGHT" }); r.tag:SetPoint("RIGHT", -10, 0)
-        r.buy = T.Button(r, Tr("Buy"), 60, 20, function() if r.row then LS.Buy(r.row.id) end end, "primary")
-        r.buy:SetPoint("RIGHT", -4, 0)
+        r.tag = T.Text(r, 11, { bold = true, justify = "RIGHT" }); r.tag:SetPoint("RIGHT", -30, 0)
+        r.buy = T.Button(r, Tr("Buy"), 52, 20, function() if r.row then LS.Buy(r.row.id) end end, "primary")
+        r.buy:SetPoint("RIGHT", -26, 0)
+        -- Eye: watched (searched between full scans) or not. Click toggles it.
+        r.eye = CreateFrame("Button", nil, r)
+        r.eye:SetSize(16, 16); r.eye:SetPoint("RIGHT", -4, 0)
+        r.eye.tex = r.eye:CreateTexture(nil, "ARTWORK"); r.eye.tex:SetAllPoints()
+        r.eye.tex:SetTexture(EYE_ICON); r.eye.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        r.eye:SetScript("OnClick", function()
+            if not r.row or not r.row.id then return end
+            P.ToggleWatch(r.row.id)
+            LU.DrawEye(r.eye, r.row.id)
+            if GameTooltip:IsOwned(r.eye) then r.eye:GetScript("OnEnter")(r.eye) end
+        end)
+        r.eye:SetScript("OnEnter", function(self)
+            if not r.row or not r.row.id then return end
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+            GameTooltip:AddLine(P.Name(r.row.id), 1, 1, 1)
+            P.WatchTooltip(r.row.id)
+            GameTooltip:Show()
+        end)
+        r.eye:SetScript("OnLeave", function() GameTooltip:Hide() end)
         r:SetScript("OnEnter", function(self)
             self.hl:SetColor({ 1, 1, 1, 0.04 })
             local row = self.row
@@ -738,6 +766,7 @@ function LU.BuildPage(page)
                 ah = { Tr("AH"), C.gold }, vendor = { Tr("Vendor"), { 0.45, 0.68, 0.95, 1 } } }
             local isRouteRow = row and (row.route or row.alt) and true or false
             for _, w in ipairs({ r.name, r.now, r.usual, r.vol, r.sales, r.listed, r.have }) do w:SetShown(not isRouteRow) end
+            r.eye:Hide()
             if rawget(r, "rt") then r.rt.SetShown(not not isRouteRow) end
             if isRouteRow then
                 DrawRouteRow(r, row, self.offset + i, self)
@@ -829,6 +858,7 @@ function LU.BuildPage(page)
                     for k = 1, 7 do r.bars[k]:Hide() end
                     r.buy:Hide(); r.tag:Show(); r.tag:SetText(MERCHANT_ICON); r.tag:SetTextColor(1, 1, 1)
                 end
+                if not row.merchant then LU.DrawEye(r.eye, id); r.eye:Show() end
                 r:SetAlpha(row.dim and 0.45 or 1)
                 r:Show()
             else
@@ -1079,6 +1109,7 @@ LU.Soon = Soon
 ns.On("LISTS_CHANGED", Soon)
 ns.On("PRICES_CHANGED", Soon)
 ns.On("LIST_SCAN", Soon)
+ns.On("WATCH_CHANGED", Soon)
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "ListsUI") end
 for _, e in ipairs({ "GET_ITEM_INFO_RECEIVED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "BAG_UPDATE_DELAYED" }) do pcall(ev.RegisterEvent, ev, e) end

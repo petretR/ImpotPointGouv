@@ -96,17 +96,129 @@ local function LearnedItems()
     learned, learnedAt = set, now
     return set
 end
+local function InList(id) return ns.Lists and ns.Lists.InList and ns.Lists.InList(id) or false end
 function P.IsTracked(id)
     if not id then return false end
     if ProfessionItems()[id] or LearnedItems()[id] then return true end
-    return ns.Lists and ns.Lists.IsWatched and ns.Lists.IsWatched(id) or false
+    return InList(id) or P.IsWatched(id)
 end
--- Why an item is tracked (for the interface): "profession", "list" or nil.
+-- Why an item is tracked (for the interface): "profession", "list", "watched" or nil.
 function P.TrackReason(id)
     if not id then return nil end
     if ProfessionItems()[id] or LearnedItems()[id] then return "profession" end
-    if ns.Lists and ns.Lists.IsWatched and ns.Lists.IsWatched(id) then return "list" end
+    if InList(id) then return "list" end
+    if P.IsWatched(id) then return "watched" end
     return nil
+end
+
+-- ------------------------------------------------------------ watched items
+-- Watched: searched one by one by "Scan" between two full scans (the game allows a full scan every
+-- 15 min; targeted searches take a few seconds per 20 items, so this set stays small).
+-- Default, per profession (Settings): the crafts and the materials of your known recipes.
+-- Per item (eye icon): on or off, whatever the default. Watched items are also tracked.
+--   ns.db.watch = { items = { [itemID] = true | false }, prof = { [profession] = { crafts = bool, mats = bool } } }
+local function WatchDB()
+    ns.db.watch = ns.db.watch or {}
+    local w = ns.db.watch
+    w.items = w.items or {}
+    w.prof = w.prof or {}
+    return w
+end
+function P.WatchProf(prof)
+    local c = WatchDB().prof[prof] or {}
+    return { crafts = c.crafts ~= false, mats = c.mats ~= false }
+end
+local defaultWatch, defaultAt
+function P.SetWatchProf(prof, key, on)
+    local w = WatchDB()
+    w.prof[prof] = w.prof[prof] or {}
+    w.prof[prof][key] = on and true or false
+    defaultWatch = nil
+    ns.Fire("WATCH_CHANGED")
+end
+-- Default set: [id] = { profession, "craft" | "mat" | "de" }.
+local function DefaultWatch()
+    local now = time()
+    if defaultWatch and now - defaultAt < 30 then return defaultWatch end
+    local set, anyMats = {}, false
+    for prof, recipes in pairs(ns.db.recipes or {}) do
+        local cfg = P.WatchProf(prof)
+        anyMats = anyMats or cfg.mats
+        for _, r in pairs(recipes) do
+            if cfg.crafts and r.p then set[r.p] = { prof, "craft" } end
+            if cfg.mats then
+                for _, rg in ipairs(r.r or {}) do
+                    local id = rg[1]
+                    if id and not set[id] and not ns.db.vendor[id] then set[id] = { prof, "mat" } end
+                end
+            end
+        end
+    end
+    -- Disenchanting materials: with the materials of any profession.
+    if anyMats then
+        for _, id in ipairs(P.DE_MATS or {}) do if not set[id] then set[id] = { nil, "de" } end end
+    end
+    defaultWatch, defaultAt = set, now
+    return set
+end
+function P.IsWatched(id)
+    if not id then return false end
+    local o = WatchDB().items[id]
+    if o ~= nil then return o end
+    return DefaultWatch()[id] ~= nil
+end
+-- Why: "on" (turned on by hand), "off" (turned off by hand), "craft" / "mat" / "de" (+ profession), or nil.
+function P.WatchReason(id)
+    local o = id and WatchDB().items[id]
+    if o == true then return "on" end
+    if o == false then return "off", DefaultWatch()[id] and DefaultWatch()[id][1] end
+    local d = id and DefaultWatch()[id]
+    if d then return d[2], d[1] end
+    return nil
+end
+-- on: true / false. A choice equal to the default is forgotten (the item follows its profession again).
+function P.SetWatch(id, on)
+    if not id then return end
+    local w = WatchDB()
+    local default = DefaultWatch()[id] ~= nil
+    if (on and true or false) == default then w.items[id] = nil else w.items[id] = on and true or false end
+    ns.Fire("WATCH_CHANGED")
+end
+function P.ToggleWatch(id) P.SetWatch(id, not P.IsWatched(id)) end
+-- Every watched item.
+function P.WatchList()
+    local out, w = {}, WatchDB()
+    for id in pairs(DefaultWatch()) do if w.items[id] ~= false then out[#out + 1] = id end end
+    for id, on in pairs(w.items) do if on == true and not DefaultWatch()[id] then out[#out + 1] = id end end
+    return out
+end
+-- Words for the interface: "Leatherworking material", "turned on by you"...
+function P.WatchText(id)
+    local why, prof = P.WatchReason(id)
+    if why == "on" then return Tr("you turned it on") end
+    if why == "off" then return Tr("you turned it off") end
+    if why == "craft" then return (Tr("%s craft")):format(prof or "?") end
+    if why == "mat" then return (Tr("%s material")):format(prof or "?") end
+    if why == "de" then return Tr("disenchanting material") end
+    return nil
+end
+-- Eye tooltip: watched / tracked, why, and what a click does.
+function P.WatchTooltip(id)
+    local watched = P.IsWatched(id)
+    local why = P.WatchText(id)
+    if watched then
+        GameTooltip:AddLine(Tr("Watched") .. (why and ("  |cff8a877f(" .. why .. ")|r") or ""), 0.36, 0.82, 0.45)
+        GameTooltip:AddLine(Tr("Scanned between full scans, when you click Scan at the AH."), 0.7, 0.7, 0.7, true)
+    else
+        GameTooltip:AddLine(Tr("Not watched") .. (why and ("  |cff8a877f(" .. why .. ")|r") or ""), 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(Tr("Updated by full scans only."), 0.7, 0.7, 0.7, true)
+    end
+    local tr = P.TrackReason(id)
+    if tr == "profession" then GameTooltip:AddLine(Tr("Price history kept in detail: profession item."), 0.7, 0.7, 0.7, true)
+    elseif tr == "list" then GameTooltip:AddLine(Tr("Price history kept in detail: in one of your lists."), 0.7, 0.7, 0.7, true)
+    elseif tr == "watched" then GameTooltip:AddLine(Tr("Price history kept in detail while it is watched."), 0.7, 0.7, 0.7, true)
+    else GameTooltip:AddLine(Tr("Price history: one summary per day for 30 days, then per week."), 0.7, 0.7, 0.7, true) end
+    GameTooltip:AddLine(watched and Tr("Click: stop watching") or Tr("Click: watch it"), 0.88, 0.66, 0.24)
 end
 
 -- full = true: the item's complete listing (scan) -> reliable quantity, a sample of the day.
@@ -444,24 +556,17 @@ end
 P.Status = Status
 function P.Bar() return bar end
 
+-- Items searched one by one between full scans: the watched ones whose name is known.
 local function ScanTargets()
-    local ids, list = {}, {}
-    for _, recipes in pairs(ns.db.recipes) do
-        for _, r in pairs(recipes) do
-            if r.p then ids[r.p] = true end
-            for _, rg in ipairs(r.r or {}) do
-                if not ns.db.vendor[rg[1]] then ids[rg[1]] = true end
-            end
-        end
-    end
-    for _, id in ipairs(P.DE_MATS) do ids[id] = true end
-    for id in pairs(ids) do
+    local list = {}
+    for _, id in ipairs(P.WatchList()) do
         local name = ns.db.items[id] or ns.GetItemInfo(id)
         if name then list[#list + 1] = { id = id, name = name } end
     end
     table.sort(list, function(a, b) return a.name < b.name end)
     return list
 end
+P._ScanTargets = ScanTargets
 
 local SendNext, FinishScan
 
@@ -726,15 +831,12 @@ end
 -- For each stackable material of your recipes: every listing, price by price (commodity search).
 -- Works at any time, unlike the full scan limited to once per 15 min.
 local function DepthIds()
-    local ids, list = {}, {}
-    for _, recipes in pairs(ns.db.recipes) do
-        for _, r in pairs(recipes) do
-            for _, rg in ipairs(r.r or {}) do
-                local id = rg[1]
-                if id and not ids[id] and not ns.db.vendor[id] and ns.IsCommodity(id) then ids[id] = true; list[#list + 1] = id end
-            end
-        end
+    local list = {}
+    for _, id in ipairs(P.WatchList()) do
+        local why = P.WatchReason(id)
+        if (why == "mat" or why == "de" or why == "on") and not ns.db.vendor[id] and ns.IsCommodity(id) then list[#list + 1] = id end
     end
+    table.sort(list)
     return list
 end
 
@@ -937,7 +1039,7 @@ local function BuildBar()
     icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(22, 22); icon:SetPoint("TOPLEFT", 10, -8)
     bar.scan = T.Button(bar, Tr("Scan"), 96, 26, function() P.Scan() end)
     bar.scan:SetPoint("LEFT", icon, "RIGHT", 8, 0)
-    bar.scan.tooltip = Tr("Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes: in between, it scans only your professions' reagents and crafts.")
+    bar.scan.tooltip = Tr("Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes: in between, it scans only your watched items (eye icon in Lists; per profession in Settings).")
     -- Status line under the buttons: what just happened, or what the addon is preparing.
     bar.status = T.Text(bar, 11, { color = C.muted })
     bar.status:SetPoint("BOTTOMLEFT", 40, 8)
