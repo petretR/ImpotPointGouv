@@ -436,6 +436,9 @@ Check("price history: sizes stay bounded (scans, days, weeks)", function()
     Assert(#Store.Records(e.d, nil, Store.DAYS) <= Store.KEEP_DAYS_TRACKED + 7, "tracked: about 6 months of days, got " .. #Store.Records(e.d, nil, Store.DAYS))
     Assert(#Store.Records(u.d, nil, Store.DAYS) <= Store.KEEP_DAYS + 7, "untracked: about 30 days, got " .. #Store.Records(u.d, nil, Store.DAYS))
     Assert(not u.s, "untracked: no per-scan points")
+    local old = Store.Records(e.d, nil, Store.DAYS)[1]
+    Assert(old[Store.D.usual] and old[Store.D.qty] and old[Store.D.sold], "an old tracked day keeps usual, qty and sold")
+    Assert(not old[Store.D.high] and not old[Store.D.scans] and not old[Store.D.mkt], "and drops the rest")
     local wk = Store.Records(u.w, nil, Store.WEEKS)
     -- one year back from today: about 48 weeks before the 30 daily days
     Assert(#wk >= 46 and #wk <= Store.KEEP_WEEKS, "weekly records: up to one year, got " .. #wk)
