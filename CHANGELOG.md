@@ -12,6 +12,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 
 ### Changed
 - Price history: new storage. Every item now keeps a daily summary for 30 days (lowest, usual and highest price, quantity listed, units within 10 % of the lowest, estimated units sold), then one per week for a year. Items in your lists keep every scan for 7 days and a daily summary for 6 months. Your existing history is converted once at the first login (a full game restart is needed after updating).
+- Price history: every profession item is now kept in detail (every scan for 7 days, a daily summary for 6 months): what any recipe makes, its recipe item and its materials, for every profession, plus items in your lists.
 - Sold/day now shows for items in no list after a day with two scans or more, so most leveling-route steps get one. A full scan that no longer sees an item counts its units as gone.
 - Usual and market prices use the median of each day's lowest prices instead of the day's last reading, so one cheap listing moves them less.
 - Price history window: hover shows the usual price, the highest of the day's lowest prices and the units within 10 % of the lowest; long ranges show weekly points.
