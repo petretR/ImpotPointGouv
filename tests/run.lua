@@ -501,6 +501,34 @@ Check("price history: data saved under an empty realm merges", function()
     Assert(a.cur == 12 and a.o, "newest current price and open day")
 end)
 
+Check("Scan always asks for a full scan, and takes a late answer", function()
+    local P = ns.Prices
+    local saved = C_AuctionHouse
+    local calls = { replicate = 0, browse = 0 }
+    C_AuctionHouse = {
+        SendBrowseQuery = function() calls.browse = calls.browse + 1 end,
+        ReplicateItems = function() calls.replicate = calls.replicate + 1 end,
+        GetNumReplicateItems = function() return 1 end,
+        GetReplicateItemInfo = function()
+            return "Item 778001", nil, 5, nil, nil, nil, nil, nil, nil, 5000, nil, nil, nil, nil, nil, nil, 778001
+        end,
+    }
+    local st = ns.db.scan[ns.Realm()] or {}
+    ns.db.scan[ns.Realm()] = st
+    st.lastFull = nil
+    P.Scan()
+    Assert(calls.replicate == 1 and calls.browse == 0, "Scan sent a full scan request, nothing else")
+    RunTimers(301) -- the server never answers: the addon stops waiting after 5 min
+    Assert(not P.Scanning(), "stopped waiting after 5 min")
+    Assert(calls.browse == 0, "no profession scan as a fallback")
+    Fire("REPLICATE_ITEM_LIST_UPDATE") -- the answer comes late
+    RunTimers(3)
+    local e = P.Entry(778001)
+    Assert(e and e.cur == 1000, "late answer recorded (1000 per unit)")
+    Assert(st.lastFull, "late answer counts as a full scan")
+    C_AuctionHouse = saved
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end
