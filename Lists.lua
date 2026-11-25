@@ -620,9 +620,13 @@ function LS.Verdict(e, st)
     end
     local cur = st.cur
     if not cur or (st.qty or 0) == 0 then return "farm", "none listed right now" end
-    local enough = (st.n or 0) >= 4
+    -- Enough history: 4 price points spread over 5 days of the last week or more.
+    local enough = (st.n or 0) >= 4 and (st.days or 0) >= 5
     local max = LS.BuyMax(st)
     if enough and max and cur <= max then return "buy", "well under its usual price" end
+    if max and cur <= max then
+        return nil, (Tr("cheap today, but only %d days of prices this week: wait for more scans")):format(st.days or 0)
+    end
     if enough and st.high and cur >= st.high and cur >= st.med * 1.1 and LS.Have(e.id) > 0 then
         return "sell", "above its usual price and you have some"
     end

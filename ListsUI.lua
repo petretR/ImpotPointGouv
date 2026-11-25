@@ -618,7 +618,7 @@ function LU.BuildPage(page)
                 for k = 1, math.min(10, #names) do GameTooltip:AddDoubleLine("  " .. names[k][1], "×" .. LS.FmtQty(names[k][2]), 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
                 if #names > 10 then GameTooltip:AddLine(("  +%d"):format(#names - 10), 0.6, 0.6, 0.6) end
             end
-            if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6)
+            if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6, true)
             elseif not row.verdict and st and st.med then
                 GameTooltip:AddLine(Tr("Normal price: not cheap enough to buy, not high enough to sell."), 0.6, 0.6, 0.6, true)
             end

@@ -262,6 +262,9 @@ ns.AddLocale("frFR", {
     ["Scan stopped."] = "Scan arrêté.",
     ["Scan"] = "Scan",
     ["Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes."] = "Scanne tout l'hôtel des ventes (prix de tout + onglet Marché). Le jeu l'autorise toutes les 15 minutes.",
+    ["Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes: in between, it scans only your professions' reagents and crafts."] = "Scanne tout l'hôtel des ventes (prix de tout + onglet Marché). Le jeu l'autorise toutes les 15 minutes : entre deux, seuls les composants et crafts de tes métiers sont scannés.",
+    ["The game requires one click per search: click Continue."] = "Le jeu exige un clic par recherche : clique sur Continuer.",
+    ["usual"] = "habituel",
 
     -- Craft.lua
     ["  ·  recipes read: "] = "  ·  recettes lues : ",
@@ -584,6 +587,7 @@ ns.AddLocale("frFR", {
     ["Bought %d× %s for %s."] = "Acheté %d× %s pour %s.",
     ["Buy %d× %s for %s (%s each, limit %s)? Click Confirm."] = "Acheter %d× %s pour %s (%s l'unité, limite %s) ? Clique sur Confirmer.",
     ["Caster"] = "Caster",
+    ["cheap today, but only %d days of prices this week: wait for more scans"] = "pas cher aujourd'hui, mais seulement %d jours de prix cette semaine : attends d'autres scans",
     ["Checking live listings of %s under %s…"] = "Vérification des annonces de %s sous %s…",
     ["Cloaks, trinkets, relics"] = "Capes, bijoux, reliques",
     ["CONSUMES & ENCHANTS"] = "CONSOS ET ENCHANTEMENTS",
@@ -706,7 +710,6 @@ ns.AddLocale("frFR", {
     ["Used in:"] = "Utilisé dans :",
     ["Usual price (7 days)"] = "Prix habituel (7 jours)",
     ["Usual"] = "Habituel",
-    ["usual"] = "habituel",
     ["Value what you craft at its AH price minus the 5% cut (liquid markets only)."] = "Valorise ce que tu craftes à son prix HV moins les 5 % de l'HV (marchés liquides seulement).",
     ["Value what you craft at its merchant price: guaranteed, no limit."] = "Valorise ce que tu craftes à son prix marchand : garanti, sans limite.",
     ["Value what you craft at what disenchanting it gives (green, blue and purple gear only)."] = "Valorise ce que tu craftes à ce que donne son désenchantement (équipement vert, bleu et violet seulement).",

@@ -198,6 +198,16 @@ StatsRaw = function(id, e)
         end
     end
     local st = { cur = e.cur, t = e.t, qty = e.qty, n = #vals }
+    -- Days of the last week with at least one scan: a "usual" price from 2 or 3 days says little.
+    local seen, ndays = {}, 0
+    for _, d in ipairs(days) do
+        if DayValue(d) and not seen[d[1]] then seen[d[1]] = true; ndays = ndays + 1 end
+    end
+    for _, pt in ipairs(pts) do
+        local k = math.floor(pt[1] / 86400)
+        if not seen[k] then seen[k] = true; ndays = ndays + 1 end
+    end
+    st.days = ndays
     if #vals > 0 then
         table.sort(vals)
         st.med, st.low, st.high = Pct(vals, 0.5), Pct(vals, 0.2), Pct(vals, 0.8)
