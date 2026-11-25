@@ -529,6 +529,51 @@ Check("Scan always asks for a full scan, and takes a late answer", function()
     C_AuctionHouse = saved
 end)
 
+Check("full scan waits for item data, logs its size and flags a partial answer", function()
+    local P = ns.Prices
+    local saved, savedItem = C_AuctionHouse, C_Item.DoesItemExistByID
+    local st = ns.db.scan[ns.Realm()] or {}
+    ns.db.scan[ns.Realm()] = st
+    -- 3 listings: one ready, one whose item the client loads 1 s later, one ghost (item gone).
+    local loaded = false
+    local rows = {
+        [0] = { "Item 779001", 20, 400, 779001, true },
+        [1] = { "Item 779002", 5, 1000, 779002, false },
+        [2] = { nil, 1, 100, 779999, true },
+    }
+    C_Item.DoesItemExistByID = function(id) return id ~= 779999 end
+    C_AuctionHouse = {
+        SendBrowseQuery = function() end,
+        ReplicateItems = function() end,
+        GetNumReplicateItems = function() return 3 end,
+        GetReplicateItemInfo = function(k)
+            local r = rows[k]
+            local ready = r[5] or loaded
+            return r[1], nil, ready and r[2] or nil, nil, nil, nil, nil, nil, nil, ready and r[3] or nil,
+                nil, nil, nil, nil, nil, nil, r[4], ready
+        end,
+    }
+    st.lastFull, st.log = nil, nil
+    P.Scan()
+    Fire("REPLICATE_ITEM_LIST_UPDATE")
+    C_Timer.After(3, function() loaded = true end)
+    RunTimers(10)
+    Assert(not P.Scanning(), "scan finished")
+    local e = P.Entry(779002)
+    Assert(e and e.cur == 200 and e.qty == 5, "listing read once its item loaded (5 at 200)")
+    local log = st.log[#st.log]
+    Assert(log.auctions == 3 and log.read == 2 and log.ghosts == 1 and log.missing == 0, "scan size logged")
+    Assert(not log.partial, "first scans are not judged")
+    -- Usual size ~100 auctions: an answer of 3 is flagged partial and does not mark the rest as sold out.
+    st.log = { { auctions = 100, read = 100 }, { auctions = 110, read = 110 }, { auctions = 90, read = 90 } }
+    Advance(16 * 60)
+    P.Scan()
+    Fire("REPLICATE_ITEM_LIST_UPDATE")
+    RunTimers(10)
+    Assert(st.log[#st.log].partial, "partial answer flagged")
+    C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

@@ -519,29 +519,98 @@ local function ModernOnBrowse()
     end
 end
 
+-- Scan size log: one line per full scan, to spot a partial answer from the server.
+local LOG_KEEP = 20
+local function ScanLog()
+    local st = ns.db.scan[Realm()] or {}
+    ns.db.scan[Realm()] = st
+    st.log = st.log or {}
+    return st, st.log
+end
+
+-- Usual number of auctions: median of the last complete scans (nil if fewer than 2).
+local function UsualAuctions(log)
+    local v = {}
+    for k = #log, 1, -1 do
+        if not log[k].partial then v[#v + 1] = log[k].auctions end
+        if #v >= 5 then break end
+    end
+    if #v < 2 then return nil end
+    table.sort(v)
+    return v[math.floor((#v + 1) / 2)]
+end
+P._UsualAuctions = UsualAuctions
+
+local ITEM_WAIT = 30 -- seconds to wait for the game to load listings it did not have item data for
+
+-- Full scan (modern AH). The game sends every listing, but the ones whose item the client has not
+-- loaded yet come back without quantity or price ("hasAllInfo" false), more so right after login:
+-- those are asked for and read again until they arrive, like Auctionator does, instead of being
+-- dropped. Then the scan size is logged and compared with the usual one.
 local function ModernProcessFull()
     if not IsModern() then return end
     local n = AHM.GetNumReplicateItems and AHM.GetNumReplicateItems() or 0
+    local stats = { auctions = n, read = 0, ghosts = 0, units = 0 }
+    local pending = {}
+    local function Read(k)
+        local name, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemId, hasAll = AHM.GetReplicateItemInfo(k)
+        if not itemId or (C_Item and C_Item.DoesItemExistByID and not C_Item.DoesItemExistByID(itemId)) then
+            return "ghost"
+        end
+        if hasAll == false or not count then
+            if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemId) end
+            return "wait"
+        end
+        Accumulate(scan.acc, name, count, buyout or 0, itemId)
+        stats.read, stats.units = stats.read + 1, stats.units + count
+        return "ok"
+    end
+    local function Finish()
+        local nItems = 0
+        for _ in pairs(scan.acc) do nItems = nItems + 1 end
+        stats.t, stats.items, stats.missing = time(), nItems, #pending
+        local st, log = ScanLog()
+        local usual = UsualAuctions(log)
+        stats.partial = (n > 0 and #pending > n * 0.02) or (usual and n < usual * 0.6) or nil
+        log[#log + 1] = stats
+        while #log > LOG_KEEP do table.remove(log, 1) end
+        for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
+        -- A partial scan would mark half the AH as sold out: only a complete one records what it did not see.
+        if not stats.partial then RecordUnseen(scan.acc) end
+        if ns.Market then ns.Market.OnFullScan(scan.acc) end
+        st.lastFull = time()
+        if stats.partial then
+            FinishScan((Tr("Full scan looks partial: %d auctions read (usually ~%d). Prices seen are kept; scan again in 15 min.")):format(
+                stats.read, usual or n))
+        else
+            FinishScan((Tr("Full scan done: %d auctions, %d items.")):format(stats.read, nItems))
+        end
+    end
+    local waited = 0
+    local function Retry()
+        if not scan or scan.mode ~= "full" then return end
+        local still = {}
+        for _, k in ipairs(pending) do
+            local r = Read(k)
+            if r == "wait" then still[#still + 1] = k elseif r == "ghost" then stats.ghosts = stats.ghosts + 1 end
+        end
+        pending = still
+        if #pending == 0 or waited >= ITEM_WAIT then Finish(); return end
+        Status((Tr("Full scan: loading %d items the game did not know yet…")):format(#pending))
+        waited = waited + 0.5
+        C_Timer.After(0.5, Retry)
+    end
     local i = 0
     local function Chunk()
         if not scan or scan.mode ~= "full" then return end
         local last = math.min(n - 1, i + 499)
         for k = i, last do
-            local name, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemId = AHM.GetReplicateItemInfo(k)
-            Accumulate(scan.acc, name, count or 1, buyout or 0, itemId)
+            local r = Read(k)
+            if r == "wait" then pending[#pending + 1] = k elseif r == "ghost" then stats.ghosts = stats.ghosts + 1 end
         end
         i = last + 1
         Status((Tr("Full scan: reading %d / %d auctions…")):format(math.min(i, n), n))
-        if i < n then
-            C_Timer.After(0.02, Chunk)
-        else
-            for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
-            RecordUnseen(scan.acc)
-            if ns.Market then ns.Market.OnFullScan(scan.acc) end
-            ns.db.scan[Realm()] = ns.db.scan[Realm()] or {}
-            ns.db.scan[Realm()].lastFull = time()
-            FinishScan()
-        end
+        if i < n then C_Timer.After(0.02, Chunk) else Retry() end
     end
     Chunk()
 end
@@ -700,6 +769,12 @@ local function BuildBar()
     for _ in pairs(DB()) do n = n + 1 end
     local last = ns.db.scan[Realm()] and ns.db.scan[Realm()].lastFull
     local txt = (Tr("%d prices known%s")):format(n, last and ("  ·  full scan " .. P.Ago(time() - last)) or "")
+    local log = ns.db.scan[Realm()] and ns.db.scan[Realm()].log
+    local ls = log and log[#log]
+    if ls then
+        txt = txt .. "  ·  " .. (ls.partial and "|cffe08a52" or "") .. (Tr("%d auctions")):format(ls.read or 0)
+            .. (ls.partial and (" (" .. Tr("partial") .. ")|r") or "")
+    end
     -- The market needs a full scan every session: remind it.
     if not last or time() - last > 2 * 3600 then txt = txt .. Tr("  ·  |cffe0a83dclick Scan (Market tab needs one per session)|r") end
     bar.status:SetText(txt)

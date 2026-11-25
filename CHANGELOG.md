@@ -16,6 +16,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Sold/day now shows for items in no list after a day with two scans or more, so most leveling-route steps get one. A full scan that no longer sees an item counts its units as gone.
 - Usual and market prices use the median of each day's lowest prices instead of the day's last reading, so one cheap listing moves them less.
 - Price history window: hover shows the usual price, the highest of the day's lowest prices and the units within 10 % of the lowest; long ranges show weekly points.
+- AH: a full scan no longer drops the listings whose item the game had not loaded yet (they came back without quantity or price, mostly right after login): it waits for them, like Auctionator. Each scan logs how many auctions it read; one far below the usual size is flagged partial in the AH bar and does not mark unseen items as sold out.
 - AH: the Scan button always runs a full scan. It no longer falls back to a scan of your professions' items when the server does not answer; it waits up to 5 min, and an answer that comes later is still recorded.
 - Queue profitable: only recipes earning at least 2s per craft by default (setting). A new craft starts with one stack at most, sized on what the AH sells per day; a batch that sells out within 2 h doubles the next one, one that mostly comes back is halved, and a single item never goes above 5 stacks.
 - Lists: By recipe / Flat list moved next to the Auctionator button.
