@@ -576,8 +576,11 @@ local function ModernProcessFull()
         while #log > LOG_KEEP do table.remove(log, 1) end
         for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
         -- A partial scan would mark half the AH as sold out: only a complete one records what it did not see.
-        if not stats.partial then RecordUnseen(scan.acc) end
-        if ns.Market then ns.Market.OnFullScan(scan.acc) end
+        -- Same for the Market tab: it would count every item missing from the answer as sold.
+        if not stats.partial then
+            RecordUnseen(scan.acc)
+            if ns.Market then ns.Market.OnFullScan(scan.acc) end
+        end
         st.lastFull = time()
         if stats.partial then
             FinishScan((Tr("Full scan looks partial: %d auctions read (usually ~%d). Prices seen are kept; scan again in 15 min.")):format(

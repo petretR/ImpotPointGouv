@@ -566,11 +566,15 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     Assert(not log.partial, "first scans are not judged")
     -- Usual size ~100 auctions: an answer of 3 is flagged partial and does not mark the rest as sold out.
     st.log = { { auctions = 100, read = 100 }, { auctions = 110, read = 110 }, { auctions = 90, read = 90 } }
+    local onFull, marketCalls = ns.Market.OnFullScan, 0
+    ns.Market.OnFullScan = function() marketCalls = marketCalls + 1 end
     Advance(16 * 60)
     P.Scan()
     Fire("REPLICATE_ITEM_LIST_UPDATE")
     RunTimers(10)
+    ns.Market.OnFullScan = onFull
     Assert(st.log[#st.log].partial, "partial answer flagged")
+    Assert(marketCalls == 0, "a partial scan does not feed the Market tab's sales")
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
 end)
 
