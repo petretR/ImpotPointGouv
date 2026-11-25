@@ -24,7 +24,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
 
 ### Removed
-- AH: the Buy reagents, Post and Cancel undercut buttons next to Scan, and the "Selling at the AH" settings that went with them. Buying and posting stay with the AH or Auctionator; the addon keeps the shopping list and the prices.
+- AH: the Buy reagents, Post and Cancel undercut buttons next to Scan, and the "Selling at the AH" settings that went with them. Buying and posting stay with the AH or Auctionator; the addon keeps the shopping list and the prices. The AH bar shrinks to one compact row: the Scan button and its status line.
 
 ### Fixed
 - Mail: sending part of a stack for two different items at once now splits them one after the other, so the game does not refuse the second split.
