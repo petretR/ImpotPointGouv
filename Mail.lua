@@ -720,6 +720,13 @@ function M.BuildSend(f)
     p.qReag.tooltip = Tr("Selects the reagents your crafter is missing for the queue, and sets your crafter as recipient.")
     p.qClear = T.Button(p, Tr("Clear"), 70, 24, function() wipe(basket); M.DrawSend() end)
     p.qClear:SetPoint("TOPLEFT", pad, -244)
+    -- Mail rules: fills the basket with what your rules send, for one recipient at a time.
+    p.qRules = T.Button(p, Tr("By rules"), 104, 24, function() M.FillByRules() end, "primary")
+    p.qRules:SetPoint("LEFT", p.qClear, "RIGHT", 6, 0)
+    p.qRules.tooltip = Tr("Selects what your mail rules send from this character, for the recipient with the most items. Check the list, then Send.")
+    p.qEdit = T.Button(p, Tr("Rules…"), 70, 24, function() M.ShowRules() end)
+    p.qEdit:SetPoint("LEFT", p.qRules, "RIGHT", 6, 0)
+    p.qEdit.tooltip = Tr("What goes to which character, and how many to keep here.")
 
     p.summary = T.Text(p, 12, { color = C.text, wrap = true, justify = "LEFT" })
     p.summary:SetPoint("TOPLEFT", pad, -282); p.summary:SetWidth(250)
@@ -1025,6 +1032,11 @@ function DrawSendInner()
     -- Fill bar of the current mail.
     p.bar:SetWidth(math.max(1, p.barBg:GetWidth() * (att == 0 and 0 or inLast / MAX)))
     p.bar:SetShown(att > 0)
+    if p.qRules and ns.MailRules then
+        local to, _, nr = ns.MailRules.Next(ns.Ledger.CharKey())
+        p.qRules.text:SetText(nr > 0 and (Tr("By rules (%d)")):format(nr) or Tr("By rules"))
+        p.qRules:SetDisabled(not to)
+    end
     local busy = ns.Routine and ns.Routine.IsSending()
     p.go.text:SetText(busy and "Sending…" or ((p.to:GetText() or "") ~= "" and ("Send to " .. p.to:GetText()) or "Send"))
     p.go:SetDisabled(busy or (stacks == 0 and money == 0) or (p.to:GetText() or "") == "")
@@ -1088,6 +1100,148 @@ function M.AdoptAttachments()
     return n
 end
 M._basket = basket
+-- ------------------------------------------------------------ mail rules
+function M.FillByRules()
+    local RT, p = ns.Routine, frame and frame.send
+    if not (RT and p and ns.MailRules) then return end
+    local to, items = ns.MailRules.Next(ns.Ledger.CharKey())
+    if not to then p.status:SetText(Tr("Nothing here matches your rules.")); M.DrawSend(); return end
+    wipe(basket)
+    for id, q in pairs(items) do basket[id] = q end
+    p.to:SetText(RT.CharName(to) or "")
+    p.status:SetText(Tr("Selected by your rules: check the list, then Send."))
+    M.DrawSend()
+end
+
+local editor
+local function CharChoices()
+    local out = {}
+    for k, c in pairs(ns.db.chars or {}) do
+        out[#out + 1] = { key = k, name = (ns.Routine and ns.Routine.CharName(k)) or c.full or c.name or k }
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
+local function Popup(anchor, entries)
+    if ns.ListsUI and ns.ListsUI.Popup then ns.ListsUI.Popup(anchor, entries) end
+end
+
+local function DrawRules()
+    local e = editor
+    if not e then return end
+    local MR = ns.MailRules
+    local list = MR.List()
+    for i, row in ipairs(e.rows) do
+        local rule = list[i]
+        row.i = i
+        if rule then
+            local who = ns.Routine and ns.Routine.CharName(rule.to) or "?"
+            row.text:SetText(("%s  |cff8a877f→|r  %s%s"):format(MR.Label(rule.what), who,
+                (rule.keep or 0) > 0 and ("  |cff8a877f" .. (Tr("· keep %d")):format(rule.keep) .. "|r") or ""))
+            row.text:SetAlpha(rule.off and 0.4 or 1)
+            row.onoff.text:SetText(rule.off and Tr("Off") or Tr("On"))
+            row.onoff:SetSelected(not rule.off)
+            row.up:SetDisabled(i == 1); row.down:SetDisabled(i == #list)
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    e.empty:SetShown(#list == 0)
+    -- New rule form
+    local f = e.form
+    f.what.text:SetText(f.choice and MR.Label(f.choice) or Tr("What…"))
+    local who
+    for _, c in ipairs(CharChoices()) do if c.key == f.to then who = c.name end end
+    f.to.text:SetText(who or Tr("To…"))
+    local n = 0
+    if f.choice then
+        for id in pairs(MR.Bags()) do if MR.Matches(f.choice, id) then n = n + 1 end end
+    end
+    f.count:SetText(f.choice and (Tr("matches %d item%s in these bags")):format(n, n == 1 and "" or "s") or "")
+    f.add:SetDisabled(not (f.choice and f.to) or #list >= #e.rows)
+    if frame and frame.send and frame.send:IsShown() then M.DrawSend() end
+end
+
+function M.ShowRules()
+    local p = frame and frame.send
+    if not p then return end
+    if not editor then
+        local e = CreateFrame("Frame", nil, p)
+        e:SetAllPoints(); e:SetFrameLevel((p:GetFrameLevel() or 1) + 20); e:EnableMouse(true)
+        T.Surface(e, C.window, 12)
+        local title = T.Text(e, 14, { bold = true, text = Tr("Mail rules") }); title:SetPoint("TOPLEFT", 18, -16)
+        local hint = T.Text(e, 11, { color = C.faint, wrap = true, justify = "LEFT",
+            text = Tr("Each rule sends a kind of item to one of your characters. The first rule that matches an item wins; a character never mails itself. \"By rules\" then selects them for you.") })
+        hint:SetPoint("TOPLEFT", 18, -38); hint:SetPoint("RIGHT", -18, 0)
+        e.rows = {}
+        for i = 1, 8 do
+            local r = CreateFrame("Frame", nil, e)
+            r:SetHeight(28); r:SetPoint("TOPLEFT", 14, -78 - (i - 1) * 30); r:SetPoint("TOPRIGHT", -14, -78 - (i - 1) * 30)
+            T.Rounded(r, { 1, 1, 1, 0.03 }, 6, "BACKGROUND")
+            r.text = T.Text(r, 12); r.text:SetPoint("LEFT", 10, 0); r.text:SetPoint("RIGHT", -190, 0)
+            r.del = T.Button(r, "✕", 26, 22, function() ns.MailRules.Remove(r.i); DrawRules() end)
+            r.del:SetPoint("RIGHT", -4, 0)
+            r.down = T.Button(r, "↓", 26, 22, function() ns.MailRules.Move(r.i, 1); DrawRules() end)
+            r.down:SetPoint("RIGHT", r.del, "LEFT", -4, 0)
+            r.up = T.Button(r, "↑", 26, 22, function() ns.MailRules.Move(r.i, -1); DrawRules() end)
+            r.up:SetPoint("RIGHT", r.down, "LEFT", -4, 0)
+            r.onoff = T.Button(r, "", 56, 22, function()
+                local rule = ns.MailRules.List()[r.i]; if rule then rule.off = not rule.off or nil end; DrawRules()
+            end, "pill")
+            r.onoff:SetPoint("RIGHT", r.up, "LEFT", -8, 0)
+            e.rows[i] = r
+        end
+        e.empty = T.Text(e, 12, { color = C.faint, text = Tr("No rule yet: add one below.") })
+        e.empty:SetPoint("TOP", 0, -110)
+        -- New rule: what, to whom, how many to keep.
+        local f = CreateFrame("Frame", nil, e)
+        f:SetPoint("BOTTOMLEFT", 14, 60); f:SetPoint("BOTTOMRIGHT", -14, 60); f:SetHeight(64)
+        T.Rounded(f, { 1, 1, 1, 0.05 }, 8, "BACKGROUND")
+        local nt = T.Text(f, 12, { bold = true, text = Tr("New rule") }); nt:SetPoint("TOPLEFT", 10, -8)
+        f.what = T.Button(f, "", 170, 24, function(self)
+            local entries = {}
+            for _, t in ipairs(ns.MailRules.TYPES) do
+                entries[#entries + 1] = { t[1], function() f.choice = { kind = "type", class = t[2], sub = t[3] }; DrawRules() end }
+            end
+            entries[#entries + 1] = { Tr("Items I crafted"), function() f.choice = { kind = "crafted" }; DrawRules() end, color = C.gold }
+            for li, l in ipairs(ns.db.lists or {}) do
+                entries[#entries + 1] = { (Tr("List: %s")):format(l.name), function() f.choice = { kind = "list", list = li }; DrawRules() end }
+            end
+            Popup(self, entries)
+        end)
+        f.what:SetPoint("BOTTOMLEFT", 10, 10)
+        f.what.tooltip = Tr("A kind of item, your crafts, one of your lists. Or drop an item from your bags here.")
+        f.what:SetScript("OnReceiveDrag", function()
+            local kind, id = GetCursorInfo()
+            if kind == "item" and id then f.choice = { kind = "item", id = id }; ClearCursor(); DrawRules() end
+        end)
+        f.to = T.Button(f, "", 150, 24, function(self)
+            local entries = {}
+            for _, c in ipairs(CharChoices()) do
+                entries[#entries + 1] = { c.name, function() f.to = c.key; DrawRules() end }
+            end
+            Popup(self, entries)
+        end)
+        f.to:SetPoint("LEFT", f.what, "RIGHT", 6, 0)
+        local kl = T.Text(f, 11, { color = C.muted, text = Tr("keep") }); kl:SetPoint("LEFT", f.to, "RIGHT", 10, 0)
+        f.keep = MakeBox(f, 46); f.keep:SetPoint("LEFT", kl, "RIGHT", 6, 0); f.keep:SetNumeric(true); f.keep:SetText("0")
+        f.add = T.Button(f, Tr("Add"), 64, 24, function()
+            ns.MailRules.Add(f.choice, f.to, tonumber(f.keep:GetText() or "") or 0)
+            f.choice = nil; f.keep:SetText("0"); DrawRules()
+        end, "primary")
+        f.add:SetPoint("LEFT", f.keep, "RIGHT", 10, 0)
+        f.count = T.Text(f, 11, { color = C.faint }); f.count:SetPoint("TOPRIGHT", -10, -9)
+        e.form = f
+        local done = T.Button(e, Tr("Done"), 120, 30, function() e:Hide(); M.DrawSend() end, "primary")
+        done:SetPoint("BOTTOM", 0, 16)
+        editor = e
+    end
+    editor:Show()
+    DrawRules()
+end
+M._DrawRules = function() DrawRules() end
 
 -- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")

@@ -213,6 +213,8 @@ local function Popup(anchor, entries)
     pop:Show()
 end
 
+LU.Popup = Popup
+
 StaticPopupDialogs["IMPOTPOINTGOUV_NEWLIST"] = {
     text = Tr("Name of the new list:"), button1 = OKAY or "OK", button2 = CANCEL or "Cancel",
     hasEditBox = true, maxLetters = 40, timeout = 0, whileDead = true, hideOnEscape = true,

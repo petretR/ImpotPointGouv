@@ -655,6 +655,47 @@ Check("mail: items attached to the game's send form move into the basket", funct
     bags[0] = {}
 end)
 
+Check("mail rules: what goes where, keep, first match, never to yourself", function()
+    local MR = ns.MailRules
+    local inst = C_Item.GetItemInfoInstant
+    -- 782001 leather, 782002 food, 782003 leather too.
+    local types = { [782001] = { 7, 6 }, [782002] = { 0, 5 }, [782003] = { 7, 6 } }
+    C_Item.GetItemInfoInstant = function(id) local t = types[id] or { 15, 0 }; return id, "", "", "", "icon", t[1], t[2] end
+    ns.db.mailRules = {}
+    MR.Add({ kind = "item", id = 782003 }, "Player-bank", 10)          -- this leather: keep 10
+    MR.Add({ kind = "type", class = 7, sub = 6 }, "Player-bank", 0)    -- all leather to the bank
+    MR.Add({ kind = "type", class = 0, sub = 5 }, "Player-cook", 0)    -- food to the cook
+    local plan, why = MR.Plan({ [782001] = 40, [782002] = 12, [782003] = 25, [782009] = 5 }, "Player-alt")
+    Assert(plan["Player-bank"][782001] == 40, "all leather to the bank")
+    Assert(plan["Player-bank"][782003] == 15 and why[782003] == 1, "first rule wins: keeps 10")
+    Assert(plan["Player-cook"][782002] == 12, "food to the cook")
+    Assert(not (plan["Player-bank"][782009] or plan["Player-cook"][782009]), "unmatched item stays")
+    local mine = MR.Plan({ [782001] = 40 }, "Player-bank")
+    Assert(next(mine) == nil, "the bank never mails itself")
+    ns.db.mailRules[2].off = true
+    Assert(not (MR.Plan({ [782001] = 40 }, "Player-alt")["Player-bank"]), "a rule turned off does nothing")
+    MR.Move(3, -1)
+    Assert(ns.db.mailRules[2].what.kind == "type" and ns.db.mailRules[2].what.class == 0, "rules reorder")
+    MR.Remove(1)
+    Assert(#ns.db.mailRules == 2, "rule removed")
+    -- The Send tab: "By rules" fills the basket for the bank, and the editor opens.
+    bags[0] = { [1] = { itemID = 782001, stackCount = 20 } }
+    ns.db.mailRules = {}
+    MR.Add({ kind = "type", class = 7, sub = 6 }, "Player-bank", 0)
+    ns.db.chars["Player-bank"] = ns.db.chars["Player-bank"] or { name = "Bankchar" }
+    Fire("MAIL_SHOW"); ns.Mail.ShowOverlay(); ns.Mail.SetTab("send")
+    ns.Mail.FillByRules()
+    Assert(ns.Mail._basket[782001] == 20, "basket filled by the rules")
+    ns.Mail.ShowRules()
+    ns.Mail._DrawRules()
+    for k in pairs(ns.Mail._basket) do ns.Mail._basket[k] = nil end
+    ns.db.chars["Player-bank"] = nil
+    bags[0] = {}
+    Fire("MAIL_CLOSED")
+    ns.db.mailRules = nil
+    C_Item.GetItemInfoInstant = inst
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

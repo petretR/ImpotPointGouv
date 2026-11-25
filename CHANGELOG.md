@@ -7,6 +7,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 
 ### Added
 - Settings: Master Chef rank (WoW Forever Legacy talent, 0 to 5). Cooking margins, Queue profitable and the Cooking leveling route count its extra results on average (+10 % per rank).
+- Mail: rules, like TSM's mailing operations. A rule sends a kind of item (Leather, Herb, Food & Drink, Flask… the game's item types), the items you crafted, one of your lists or one item to one of your characters, keeping a number on the sender. In the Send tab, "By rules" selects everything that matches for the recipient with the most items; check and Send. "Rules…" opens the editor (first matching rule wins, a character never mails itself).
 - Mail: "Collect expired" button next to Collect gold, to take back the items of expired and cancelled auctions (sales and other mail stay).
 - Mail: send part of a stack. Click the quantity of a checked item to type it, or use Shift with − / +; the addon splits the stack into a free bag slot when you send.
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
