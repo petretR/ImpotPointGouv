@@ -302,39 +302,27 @@ function TR.PostAdvice(name, id)
     local vs = (id and ns.Prices.VendorSell(id)) or 0
     local mv = id and TR.AHValue(id)
     local edge = mv and (math.floor(mv * AH_CUT) - vs) or nil
-    if vs and vs > 0 and (h.streak >= 3 or (edge and h.lost >= edge)) then adv.vendor = vs end
+    if vs and vs > 0 and (h.streak >= 3 or (edge and h.lost >= edge)) then adv.vendor, adv.edge = vs, edge end
     return adv
 end
 
+-- The advice in one short line: what happened and what to do.
 function TR.AdviceText(adv)
     if not adv then return nil end
-    local parts = { (Tr("expired %d× in a row")):format(adv.streak) }
-    if adv.lost > 0 then parts[#parts + 1] = ns.FormatMoney(adv.lost, { iconSize = 10 }) .. Tr(" deposits lost") end
-    local what
-    if adv.vendor then what = "vendor it (" .. ns.FormatMoney(adv.vendor, { iconSize = 10 }) .. ")"
-    elseif adv.pauseUntil then local left = adv.pauseUntil - time()
-        what = left >= 86400 * 1.5 and (Tr("don't repost for %d days")):format(math.floor(left / 86400 + 0.5))
-            or (Tr("don't repost for %dh")):format(math.max(1, math.floor(left / 3600 + 0.5)))
-    else what = "post 1 at a time" end
-    return table.concat(parts, " · "), what
-end
-
--- Items in your bags not to repost (for the chat line when the AH opens and for vendor selling).
-function TR.StuckInBags()
-    local out, seen = {}, {}
-    if not C_Container then return out end
-    for bag = 0, LastBag() do
-        for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID and not info.isBound and not seen[info.itemID] then
-                seen[info.itemID] = true
-                local name = (info.hyperlink and info.hyperlink:match("%[(.-)%]")) or ns.GetItemInfo(info.itemID)
-                local adv = TR.PostAdvice(name, info.itemID)
-                if adv and (adv.pauseUntil or adv.vendor) then out[#out + 1] = { id = info.itemID, name = name, adv = adv } end
-            end
+    local function M(v) return ns.FormatMoney(v, { iconSize = 10 }) end
+    if adv.vendor then
+        if adv.streak >= 3 then
+            return (Tr("Expired %d× in a row: sell it to a vendor (%s).")):format(adv.streak, M(adv.vendor))
         end
+        return (Tr("Expired %d×: a vendor pays %s, the AH only %s more.")):format(adv.streak, M(adv.vendor),
+            M(math.max(0, adv.edge or 0)))
+    elseif adv.pauseUntil then
+        local left = adv.pauseUntil - time()
+        local wait = left >= 86400 * 1.5 and (Tr("%d days")):format(math.floor(left / 86400 + 0.5))
+            or (Tr("%dh")):format(math.max(1, math.floor(left / 3600 + 0.5)))
+        return (Tr("Expired %d× in a row: wait %s before posting it again.")):format(adv.streak, wait)
     end
-    return out
+    return Tr("Expired once: post only 1 next time.")
 end
 
 -- ------------------------------------------------------------ tooltips (vendor and AH)
@@ -349,9 +337,7 @@ local function TooltipHint(tt, data)
     local name = (link and link:match("%[(.-)%]")) or ns.GetItemInfo(data.id)
     local adv = TR.PostAdvice(name, data.id)
     if adv then
-        local why, what = TR.AdviceText(adv)
-        tt:AddLine("|cffe0a83dIPG|r  " .. why, 0.93, 0.55, 0.32)
-        tt:AddLine("      " .. what, 0.93, 0.55, 0.32)
+        tt:AddLine("|cffe0a83dIPG|r  " .. TR.AdviceText(adv), 0.93, 0.55, 0.32, true)
         tt:Show()
         return
     end
@@ -364,6 +350,35 @@ local function TooltipHint(tt, data)
         tt:Show()
     end
 end
+
+-- ------------------------------------------------------------ Auctionator's Selling tab
+-- When you post an item that keeps expiring, Auctionator's own "Post anyway?" confirmation (the one it shows
+-- when a vendor pays more) also says to wait or to vendor it. Only for "wait" and "vendor it".
+-- Auctionator keeps its methods on the frame (mixin copied at creation): the frame's method is wrapped once.
+local function PostWarning(sale)
+    local info = sale and sale.itemInfo
+    if not info or not info.itemLink or ns.db.settings.vendorHints == false then return nil end
+    local name = info.itemLink:match("%[(.-)%]") or info.itemName
+    local adv = TR.PostAdvice(name, info.itemID)
+    if not adv or not (adv.pauseUntil or adv.vendor) then return nil end
+    return "|cffe0a83dImpotPointGouv|r\n" .. TR.AdviceText(adv) .. "\n\n" .. Tr("Post anyway?")
+end
+TR._PostWarning = PostWarning
+
+local function HookAuctionator()
+    local sell = AuctionHouseFrame and AuctionHouseFrame.AuctionatorSellingFrame
+    local sale = sell and sell.SaleItemFrame
+    if not sale or sale.ipgHooked or type(sale.GetConfirmationMessage) ~= "function" then return end
+    sale.ipgHooked = true
+    local orig = sale.GetConfirmationMessage
+    sale.GetConfirmationMessage = function(self, ...)
+        local msg = orig(self, ...)
+        if msg then return msg end
+        local ok, warn = pcall(PostWarning, self)
+        return ok and warn or nil
+    end
+end
+TR._HookAuctionator = HookAuctionator
 
 -- ------------------------------------------------------------ quick report (/ipg sold)
 function TR.Report(days)
@@ -420,16 +435,8 @@ f:SetScript("OnEvent", function(_, event, ...)
         if C_Timer then C_Timer.NewTicker(60, Tick) end
         ns.On("TX_ADDED", OnTx)
     elseif event == "AUCTION_HOUSE_SHOW" then
-        C_Timer.After(2, function()
-            local stuck = TR.StuckInBags()
-            if #stuck == 0 then return end
-            local names = {}
-            for i = 1, math.min(5, #stuck) do
-                local e = stuck[i]
-                names[#names + 1] = (Tr("%s (%d× expired%s)")):format(e.name, e.adv.streak, e.adv.vendor and ", vendor it" or "")
-            end
-            ns.Print(Tr("|cffe08a52don't repost:|r ") .. table.concat(names, ", ") .. (#stuck > 5 and (" +%d"):format(#stuck - 5) or ""))
-        end)
+        -- Auctionator builds its tabs when the AH opens.
+        if C_Timer then C_Timer.After(1, HookAuctionator) else HookAuctionator() end
     elseif event == "MERCHANT_SHOW" then
         merchantOpen = true; visit = nil
         cache = Snapshot()

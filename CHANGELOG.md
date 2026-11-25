@@ -11,6 +11,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
 
 ### Changed
+- Repost advice moved out of the chat. When you post an item that keeps expiring, Auctionator's "Post anyway?" confirmation (the one it shows when a vendor pays more) now also says to wait ("Expired 2× in a row: wait 2 days before posting it again") or to vendor it. The item tooltip at the AH and at vendors shows the same advice in one line.
 - Price history: new storage. Every item now keeps a daily summary for 30 days (lowest, usual and highest price, quantity listed, units within 10 % of the lowest, estimated units sold), then one per week for a year. Items in your lists keep every scan for 7 days and a daily summary for 6 months. Your existing history is converted once at the first login (a full game restart is needed after updating).
 - Price history: every profession item is now kept in detail (every scan for 7 days, a daily summary for 6 months): what any recipe makes, its recipe item and its materials, for every profession, plus items in your lists.
 - Sold/day now shows for items in no list after a day with two scans or more, so most leveling-route steps get one. A full scan that no longer sees an item counts its units as gone.
