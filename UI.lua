@@ -554,11 +554,6 @@ local function BuildSettings(page)
         function(v) R().ignoreWhiteGear = v end, "White gear rarely sells at the AH.")
 
     Head(2, "Selling at the AH")
-    local DUR = { "Short", "Medium", "Long" }
-    Stepper(2, "Auction duration", function() return ns.Sell and ns.Sell.Rules().postDuration or 3 end,
-        function(v) R().postDuration = math.max(1, math.min(3, v)) end, 1, function(v) return Tr(DUR[v] or "?") end)
-    Stepper(2, "Max items per post (gear, bags)", function() return ns.Sell and ns.Sell.Rules().postCap or 10 end,
-        Clamp("postCap", 1, 100), 1, plain, "Stackable items are always posted as one stack.")
     Stepper(2, "Stock target cap", function() return R().maxQty end, Clamp("maxQty", 1, 1000), 10, plain,
         "Highest stock the adaptive target can reach for an item that sells well.")
     Toggle(2, "Warn when vendoring AH-worthy loot", function() return st().vendorHints ~= false end,

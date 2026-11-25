@@ -36,7 +36,6 @@ Setup.lua
 Market.lua
 Stock.lua
 Preview.lua
-Sell.lua
 Track.lua
 Data.lua
 DataRecipes.lua

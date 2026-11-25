@@ -100,7 +100,6 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Market.lua` | Market tab (what sells, flips, vendor crafts) |
 | `Stock.lua` | Stock tab: everything you own and its value |
 | `History.lua` | Price history window: one point per scan, daily summaries, key numbers |
-| `Sell.lua` | AH posting and cancelling |
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
 | `Routine.lua`, `Next.lua`, `Preview.lua` | Routine window, next-action key, checklist before batch actions |
 | `Mail.lua` | Mailbox (Inbox / Send tabs) |

@@ -561,7 +561,7 @@ function Q.Plan(owner)
             if row.src == "vendor" then
                 local vb = P.VendorBuy(id)
                 local ah = P.AHValue(id)
-                if vb and ah and ah < vb and not (Q.skipBuy and Q.skipBuy[id]) then row.src, row.cheaper = "ah", vb - ah end
+                if vb and ah and ah < vb then row.src, row.cheaper = "ah", vb - ah end
             end
             row.buy = math.max(0, qty - mine - alts)
         end
@@ -702,163 +702,6 @@ function Q.CraftNext()
     end
     Q.SetStatus((Tr("Crafting %s ×%d…")):format(c.name, count))
 end
-
--- ------------------------------------------------------------ AH purchases (stackable goods)
-local buy
-
-local function ExpectedUnit(id) return P.AHValue(id) end
-
-function Q.BuyNext()
-    local AH = C_AuctionHouse
-    if not AH or not AH.StartCommoditiesPurchase then
-        P.Status(Tr("Buying from the queue needs the modern auction house."))
-        return
-    end
-    if buy and buy.stage == "confirm" then
-        local b = buy
-        b.stage = "wait"
-        P.Status((Tr("Buying %d× %s…")):format(b.qty, b.name))
-        Q.UpdateBuyButton()
-        AH.ConfirmCommoditiesPurchase(b.id, b.qty)
-        return
-    end
-    if buy then return end
-    local plan = Q.Plan()
-    for _, row in ipairs(plan.shop) do
-        if row.src == "ah" and row.buy > 0 and not (Q.skipBuy and Q.skipBuy[row.id]) then
-            if not ns.IsCommodity(row.id) then
-                Q.skipBuy = Q.skipBuy or {}
-                Q.skipBuy[row.id] = true
-                P.Status((Tr("%s isn't stackable: buy it from the Buy tab.")):format(row.name))
-                Q.UpdateBuyButton()
-                return
-            end
-            local mx = Q.MaxPrice(row.id)
-            if mx and AH.SendSearchQuery and AH.MakeItemKey and AH.GetCommoditySearchResultInfo then
-                -- Maximum price known: first check how many are left at that price, and only buy those.
-                buy = { id = row.id, qty = row.buy, name = row.name, stage = "depth", max = mx }
-                P.Status((Tr("Checking how many %s are listed at %s or less…")):format(row.name, ns.FormatMoney(mx, { iconSize = 10 })))
-                Q.UpdateBuyButton()
-                AH.SendSearchQuery(AH.MakeItemKey(row.id), { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }, false)
-                local my = buy
-                C_Timer.After(5, function() if buy == my and buy.stage == "depth" then Q.CancelBuy("No answer from the AH, click again.") end end)
-                return
-            end
-            buy = { id = row.id, qty = row.buy, name = row.name, stage = "price" }
-            P.Status((Tr("Getting the price for %d× %s…")):format(row.buy, row.name))
-            Q.UpdateBuyButton()
-            AH.StartCommoditiesPurchase(row.id, row.buy)
-            return
-        end
-    end
-    P.Status(Tr("Nothing left to buy at the AH for this queue."))
-end
-
--- Search result: quantity available at your maximum price or less.
-function Q.OnDepth(itemID)
-    if not buy or buy.stage ~= "depth" or itemID ~= buy.id then return end
-    local AH = C_AuctionHouse
-    local cheap = 0
-    for k = 1, (AH.GetNumCommoditySearchResults(itemID) or 0) do
-        local r = AH.GetCommoditySearchResultInfo(itemID, k)
-        if r and r.unitPrice then
-            if r.unitPrice > buy.max then break end
-            if not ((r.numOwnerItems or 0) > 0) then cheap = cheap + (r.quantity or 0) end
-        end
-    end
-    if cheap == 0 then
-        Q.skipBuy = Q.skipBuy or {}; Q.skipBuy[buy.id] = true
-        Q.CancelBuy((Tr("No %s left at %s or less. Scan, then Auto-fill to recalculate.")):format(buy.name,
-            ns.FormatMoney(buy.max, { iconSize = 10 })))
-        return
-    end
-    local qty = math.min(buy.qty, cheap)
-    buy.partial = qty < buy.qty
-    buy.qty, buy.stage = qty, "price"
-    P.Status((Tr("Getting the price for %d× %s%s…")):format(qty, buy.name, buy.partial and " (all that's left at your max)" or ""))
-    Q.UpdateBuyButton()
-    AH.StartCommoditiesPurchase(buy.id, qty)
-end
-
-function Q.OnPrice(unit, total)
-    if not buy or buy.stage ~= "price" then return end
-    local bid = buy.id
-    -- Anti-scam safeguards: never more than a vendor, never far above the usual price.
-    local vb, est = P.VendorBuy(buy.id)
-    if vb and unit and unit > vb then
-        Q.CancelBuy((Tr("%s is sold by vendors for %s%s: not bought at the AH (%s each).")):format(buy.name,
-            ns.FormatMoney(vb, { iconSize = 10 }), est and " (est.)" or "", ns.FormatMoney(unit, { iconSize = 10 })))
-        Q.skipBuy = Q.skipBuy or {}; Q.skipBuy[bid] = true
-        return
-    end
-    local usual = P.Market(buy.id)
-    local mx0 = Q.MaxPrice(buy.id)
-    local even = Q.BreakEven(bid)
-    if unit and even and unit > even then
-        Q.CancelBuy((Tr("%s: %s each, you'd LOSE money above %s. Not bought.")):format(buy.name,
-            ns.FormatMoney(unit, { iconSize = 10 }), ns.FormatMoney(even, { iconSize = 10 })))
-        Q.skipBuy = Q.skipBuy or {}; Q.skipBuy[bid] = true
-        return
-    end
-    if unit and ((mx0 and unit > mx0) or (usual and unit > usual * 2)) then
-        Q.CancelBuy((Tr("%s: %s each is %s, not bought. Buy fewer by hand if you still want it.")):format(buy.name,
-            ns.FormatMoney(unit, { iconSize = 10 }), mx0 and unit > mx0 and ("above your max " .. ns.FormatMoney(mx0, { iconSize = 10 }))
-            or ("over twice the usual " .. ns.FormatMoney(usual, { iconSize = 10 }))))
-        Q.skipBuy = Q.skipBuy or {}; Q.skipBuy[bid] = true
-        return
-    end
-    buy.unit, buy.total, buy.stage = unit, total, "confirm"
-    local exp = ExpectedUnit(buy.id)
-    local warn = ""
-    local mx = Q.MaxPrice(buy.id)
-    if mx and unit and unit > mx then
-        warn = (Tr("  |cffed5c52above your max %s: not profitable anymore!|r")):format(ns.FormatMoney(mx, { iconSize = 10 }))
-    elseif exp and unit and unit > exp * 1.5 then
-        warn = (Tr("  |cffed5c52%d%% above usual!|r")):format(math.floor((unit / exp - 1) * 100))
-    end
-    P.Status((Tr("Buy %d× %s for %s (%s each)? Click Confirm.%s")):format(buy.qty, buy.name,
-        ns.FormatMoney(total, { iconSize = 10 }), ns.FormatMoney(unit, { iconSize = 10 }), warn))
-    Q.UpdateBuyButton()
-end
-
-function Q.CancelBuy(msg)
-    if buy and buy.stage == "confirm" and C_AuctionHouse and C_AuctionHouse.CancelCommoditiesPurchase then
-        pcall(C_AuctionHouse.CancelCommoditiesPurchase)
-    end
-    buy = nil
-    if msg then P.Status(msg) end
-    Q.UpdateBuyButton()
-end
-
-local buyButton
-function Q.UpdateBuyButton()
-    if not buyButton then return end
-    local n, first = 0, nil
-    for _, row in ipairs(Q.Plan().shop) do
-        if row.src == "ah" and row.buy > 0 and not (Q.skipBuy and Q.skipBuy[row.id]) then
-            n = n + 1; first = first or row
-        end
-    end
-    if buy and buy.stage == "confirm" then
-        buyButton.text:SetText(Tr("Confirm ") .. buy.qty .. "× " .. buy.name)
-    elseif buy then
-        buyButton.text:SetText(buy.stage == "depth" and "Checking…" or "…")
-    else
-        -- What the next click buys, in plain words.
-        buyButton.text:SetText(first and (Tr("Buy %d× %s")):format(first.buy, first.name) or "No reagent to buy here")
-    end
-    buyButton.tooltip = (Tr("%d reagent%s to buy. You confirm the total price; never above the vendor price or your profitable max.")):format(n, n == 1 and "" or "s")
-    buyButton:SetDisabled(n == 0 and not buy)
-end
-
-ns.On("AH_BAR_READY", function(bar)
-    if buyButton then return end
-    buyButton = T.Button(bar, Tr("Buy reagents"), 220, 26, function() Q.BuyNext() end)
-    buyButton:SetPoint("LEFT", bar.scan or bar, bar.scan and "RIGHT" or "LEFT", 6, 0)
-    bar.buyButton = buyButton
-    bar:SetWidth(790)
-    Q.UpdateBuyButton()
-end)
 
 -- ------------------------------------------------------------ vendor purchases
 local vendorButton
@@ -1203,7 +1046,6 @@ end
 function Q.HideView() if view then view:Hide() end end
 
 function Q.Refresh()
-    Q.UpdateBuyButton()
     UpdateVendorButton()
     if ns.Routine and ns.Routine.Refresh then ns.Routine.Refresh() end
     if ns.Next then C_Timer.After(0.2, ns.Next.Arm) end
@@ -1297,9 +1139,7 @@ end
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Queue") end
 for _, e in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_FAILED",
-    "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE", "COMMODITY_PURCHASE_SUCCEEDED",
-    "COMMODITY_PURCHASE_FAILED", "AUCTION_HOUSE_CLOSED", "MERCHANT_SHOW", "MERCHANT_UPDATE",
-    "COMMODITY_SEARCH_RESULTS_UPDATED" }) do
+    "MERCHANT_SHOW", "MERCHANT_UPDATE" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 ev:SetScript("OnEvent", function(_, event, a1, a2)
@@ -1319,25 +1159,6 @@ ev:SetScript("OnEvent", function(_, event, a1, a2)
         end
     elseif event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED" then
         if a1 == "player" and pendingCraft then pendingCraft = nil; C_Timer.After(0.3, Q.Refresh) end
-    elseif event == "COMMODITY_SEARCH_RESULTS_UPDATED" then
-        Q.OnDepth(a1)
-    elseif event == "COMMODITY_PRICE_UPDATED" then
-        Q.OnPrice(a1, a2)
-    elseif event == "COMMODITY_PRICE_UNAVAILABLE" then
-        Q.CancelBuy("That reagent isn't available on the AH right now.")
-    elseif event == "COMMODITY_PURCHASE_SUCCEEDED" then
-        local b = buy
-        buy = nil
-        if b then
-            P.Status((Tr("Bought %d× %s.%s")):format(b.qty, b.name,
-                b.partial and " That's all at your max price: click Auto-fill to resize the queue." or ""))
-        end
-        C_Timer.After(0.5, Q.Refresh)
-    elseif event == "COMMODITY_PURCHASE_FAILED" then
-        Q.CancelBuy("Purchase failed (price changed or not enough gold). Click again to retry.")
-    elseif event == "AUCTION_HOUSE_CLOSED" then
-        if buy then Q.CancelBuy() end
-        Q.skipBuy = nil
     elseif event == "MERCHANT_SHOW" then
         -- Automatic purchase of the queue's vendor materials (can be turned off: /ipg vendor).
         if ns.db.settings.autoVendorBuy == true then
