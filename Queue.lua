@@ -397,7 +397,7 @@ function Q.AutoQueue(allProfs)
     local profs = allProfs and Q.MyProfessions() or { CR.ProfName() }
     local me = UnitGUID("player")
     local db = DB()
-    local added, skipped, pending, noDemand, tests = 0, 0, 0, 0, 0
+    local added, skipped, pending, noDemand, tests, unprofitable = 0, 0, 0, 0, 0, 0
     local cands = {}
     for _, prof in ipairs(profs) do
         for k, e in pairs(db) do if e.auto and e.prof == prof and e.owner == me then db[k] = nil end end
@@ -414,6 +414,10 @@ function Q.AutoQueue(allProfs)
                 if runs > 0 and not (db[k] and not db[k].auto) then
                     cands[#cands + 1] = { k = k, prof = prof, name = rec.name, runs = runs, cost = ev.cost or 0, perDay = math.huge }
                 end
+            elseif not rec.enchant and ev.profit and not ev.infoPending and not ev.unsold and not ev.whiteGear
+                and not profitable and not Q.IsMaterial(rec.pid) then
+                -- Reagents count at their market price: under the minimum, selling them as they are pays about as much.
+                unprofitable = unprofitable + 1
             elseif not rec.enchant and ev.profit and not ev.unsold and not ev.whiteGear and not ev.infoPending
                 and not Q.IsMaterial(rec.pid)
                 and ev.profit >= rules.minProfit and (ev.margin or 0) * 100 >= rules.minMargin then
@@ -476,7 +480,8 @@ function Q.AutoQueue(allProfs)
         cut and (Tr(" · capped by budget (%s)")):format(ns.FormatMoney(math.max(0, budget), { iconSize = 10 })) or "",
         (skipped > 0 and (Tr(" · %d skipped (flooded market)")):format(skipped) or "")
             .. (noDemand > 0 and (Tr(" · %d skipped (nobody buys them)")):format(noDemand) or "")
-            .. (tests > 0 and (Tr(" · %d test craft%s (demand unknown)")):format(tests, tests == 1 and "" or "s") or ""),
+            .. (tests > 0 and (Tr(" · %d test craft%s (demand unknown)")):format(tests, tests == 1 and "" or "s") or "")
+            .. (unprofitable > 0 and (Tr(" · %d below your minimum profit or margin")):format(unprofitable) or ""),
         pending > 0 and (Tr(" · %d still loading, click again in a second")):format(pending) or "")
     -- Crafts for the vendor: "×30 while Linen Cloth ≤ 24c".
     local vendorLines = {}

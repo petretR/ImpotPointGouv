@@ -576,6 +576,8 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     Assert(st.log[#st.log].partial, "partial answer flagged")
     Assert(marketCalls == 0, "a partial scan does not feed the Market tab's sales")
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
+end)
+
 Check("queue profitable: demand decides, not the margin alone", function()
     local Q, P = ns.Queue, ns.Prices
     local rules = ns.Craft.Rules()

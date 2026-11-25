@@ -102,7 +102,6 @@ ns.AddLocale("frFR", {
     ["Setup: %d step%s left (menu > Setup guide)"] = "Configuration : %d étape%s restante(s) (menu > Guide de configuration)",
     ["Share of your total gold the craft queue can spend on reagents."] = "Part de ton or total que la file de craft peut dépenser en composants.",
     ["Share scan prices with Auctionator"] = "Partager les prix scannés avec Auctionator",
-    ["Short"] = "Courte",
     ["Skip markets with more stock than"] = "Ignorer les marchés avec plus de stock que",
     ["Spend at most"] = "Dépenser au plus",
     ["Stock target cap"] = "Plafond du stock visé",
@@ -250,11 +249,10 @@ ns.AddLocale("frFR", {
     ["    loses money above"] = "    perte au-dessus de",
     ["  %s (buy %d)"] = "  %s (acheter %d)",
     ["  |cff615f5c· test|r"] = "  |cff615f5c· test|r",
-    ["  |cffed5c52%d%% above usual!|r"] = "  |cffed5c52%d%% au-dessus de l'habituel !|r",
-    ["  |cffed5c52above your max %s: not profitable anymore!|r"] = "  |cffed5c52au-dessus de ton max %s : plus rentable !|r",
     [" (crafts; disenchants when the Disenchant window is open)"] = " (crafte ; désenchante quand la fenêtre de désenchantement est ouverte)",
     [" from your alts."] = " depuis tes alts.",
     [" min"] = " min",
+    [" · %d below your minimum profit or margin"] = " · %d sous ton profit ou ta marge minimum",
     [" · %d skipped (flooded market)"] = " · %d ignoré(s) (marché saturé)",
     [" · %d skipped (nobody buys them)"] = " · %d ignoré(s) (personne n'en achète)",
     [" · %d still loading, click again in a second"] = " · %d encore en chargement, reclique dans une seconde",
@@ -692,4 +690,9 @@ ns.AddLocale("frFR", {
     ["Week of %s"] = "Semaine du %s",
     ["Within 10% of the lowest"] = "À moins de 10 % du moins cher",
     ["~%s sold/day"] = "~%s vendus/jour",
+
+    -- Unused
+    ["  |cffed5c52%d%% above usual!|r"] = "  |cffed5c52%d%% au-dessus de l'habituel !|r",
+    ["  |cffed5c52above your max %s: not profitable anymore!|r"] = "  |cffed5c52au-dessus de ton max %s : plus rentable !|r",
+    ["Short"] = "Courte",
 })
