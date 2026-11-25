@@ -265,7 +265,6 @@ local function Build()
         local function M(v) return v and ns.FormatMoney(v, { iconSize = 11 }) or "—" end
         GameTooltip:AddDoubleLine(Tr("Lowest listing"), M(pt.low), C.gold[1], C.gold[2], C.gold[3], 1, 1, 1)
         GameTooltip:AddDoubleLine(Tr("Market price"), M(pt.mkt), BLUE[1], BLUE[2], BLUE[3], 1, 1, 1)
-        GameTooltip:AddDoubleLine(Tr("Listed"), pt.qty and tostring(pt.qty) or "—", 0.7, 0.7, 0.7, 1, 1, 1)
         if pt.usual and pt.daily then
             GameTooltip:AddDoubleLine(Tr("Usual price"), M(pt.usual), 0.93, 0.90, 0.84, 1, 1, 1)
         end
