@@ -641,6 +641,20 @@ Check("Master Chef rank adds cooking results on average", function()
     Assert(ns.Lists.YieldOf(cook) == base, "rank 0: unchanged")
 end)
 
+Check("mail: items attached to the game's send form move into the basket", function()
+    local M = ns.Mail
+    bags[0] = { [1] = { itemID = 781001, stackCount = 7 } }
+    C_Container.PickupContainerItem(0, 1)
+    ClickSendMailItemButton(1)
+    Assert(attachments[1], "attached through the game's form")
+    for k in pairs(M._basket) do M._basket[k] = nil end
+    Assert(M.AdoptAttachments() == 1, "one attachment adopted")
+    Assert(M._basket[781001] == 7, "in the basket with its count")
+    Assert(next(attachments) == nil and bags[0][1] and bags[0][1].itemID == 781001, "form cleared, item back in the bag")
+    M._basket[781001] = nil
+    bags[0] = {}
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

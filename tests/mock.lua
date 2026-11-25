@@ -157,7 +157,15 @@ ClickSendMailItemButton = function(i)
         cursor = nil
     end
 end
-ClearSendMail = function() attachments = {} end
+-- Clearing the form puts the attached items back where they came from.
+ClearSendMail = function()
+    for _, a in pairs(attachments) do if a.from then bags[a.from[1]][a.from[2]] = a end end
+    attachments = {}
+end
+GetSendMailItem = function(i)
+    local a = attachments[i]
+    if a then return "Item " .. a.itemID, a.itemID, "icon", a.stackCount end
+end
 SetSendMailMoney = function() end
 SendMail = function(to)
     sentMails[#sentMails + 1] = { to = to, items = attachments }

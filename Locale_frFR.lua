@@ -144,7 +144,7 @@ ns.AddLocale("frFR", {
     ["Cancelled"] = "Annulé",
     ["Checking for mails the server was slow to hand over…"] = "Recherche des courriers que le serveur a tardé à livrer…",
     ["Clear"] = "Vider",
-    ["click to add / remove · − / + or type the quantity"] = "clic pour ajouter / retirer · − / + ou tape la quantité",
+    ["click to add · right-click to remove · − / + or type the quantity"] = "clic pour ajouter · clic droit pour retirer · − / + ou tape la quantité",
     ["Click to type how many to send"] = "Clic pour taper la quantité à envoyer",
     ["Click: collect this mail"] = "Clic : récupérer ce courrier",
     ["Collect all"] = "Tout récupérer",
