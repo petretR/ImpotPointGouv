@@ -99,6 +99,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Prices.lua` | AH scans, price history and stats (usual price, low/high, volatility, sales/day) |
 | `Market.lua` | Market tab (what sells, flips, vendor crafts) |
 | `Stock.lua` | Stock tab: everything you own and its value |
+| `Origins.lua` | Where sold items came from (farmed, bought, crafted), rebuilt from the logs |
 | `History.lua` | Price history window: one point per scan, daily summaries, key numbers |
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
 | `Routine.lua`, `Next.lua`, `Preview.lua` | Routine window, next-action key, checklist before batch actions |

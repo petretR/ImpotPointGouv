@@ -8,6 +8,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 ### Added
 - Settings: Master Chef rank (WoW Forever Legacy talent, 0 to 5). Cooking margins, Queue profitable and the Cooking leveling route count its extra results on average (+10 % per rank).
 - Mail: rules, like TSM's mailing operations. A rule sends a kind of item (Leather, Herb, Food & Drink, Flask… the game's item types), the items you crafted, one of your lists or one item to one of your characters, keeping a number on the sender. In the Send tab, "By rules" selects everything that matches for the recipient with the most items; check and Send. "Rules…" opens the editor (first matching rule wins, a character never mails itself).
+- Overview: the Sales card splits your AH sales by origin: farmed or looted, trading profit (resold minus what you paid) and crafted; hover for the detail. Rebuilt from the logs already kept (oldest units sold first, mail between your characters keeps the origin, a craft uses up its reagents); items owned before tracking count as farmed.
 - Mail: "Collect expired" button next to Collect gold, to take back the items of expired and cancelled auctions (sales and other mail stay).
 - Mail: send part of a stack. Click the quantity of a checked item to type it, or use Shift with − / +; the addon splits the stack into a free bag slot when you send.
 - Lists: the Cooking list filters foods by buff (Strength, Agility, Stamina, Intellect, Spirit, AP, SP, HP, Misc), read from each food's tooltip so Forever's own foods are covered.
@@ -32,6 +33,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 
 ### Fixed
 - Mail: an item right-clicked from the bags while the mailbox is open went into the game's hidden send form, where you could not see or remove it. It now shows checked in the Send tab like the others; right-click a row to remove it.
+- AH purchases by buyout were sometimes logged under the wrong item (the last one searched, e.g. the item Auctionator looked up while you posted). The item now comes from the listing you bought.
 - Mail: sending part of a stack for two different items at once now splits them one after the other, so the game does not refuse the second split.
 - Mail: the "Collect only" buttons no longer try to take items when your bags are full (they waited 4 s on each mail); they take the gold and stop.
 - Overview: the Stock value card now matches the Stock tab. It updates when your bags change and when the game loads item prices it did not have yet.
