@@ -2,6 +2,15 @@
 
 Two people work on this addon. Everything in the repository is written in English: code comments, commit messages, pull requests, the changelog and docs. Player-facing strings are English in the code and translated in `Locale_frFR.lua`.
 
+## Design principles
+
+- **Generic.** The addon serves any player on any realm. No rule, list or default is written for one player's characters, professions or farms: it reads them from the game (professions, known recipes, characters) and lets the player choose.
+- **Clear to a newcomer.** Someone who has never opened the addon understands each screen without a guide: one main action per screen, plain words, a one-line hint where a choice is needed, and tooltips for the details.
+- **Clean and modern.** Follow the existing theme (`Theme.lua`): few colours, aligned columns, no clutter. Prefer removing a button to adding one.
+- **Sensible defaults.** Everything works with no setup; settings refine, they are not required.
+- **Decide, don't click.** The addon tells you what to buy, craft, send and sell; buying and posting stay with the AH or Auctionator.
+- **Honest numbers.** Never present an estimate as a fact: show where a figure comes from (scan, own sales, market) and when data is too thin to judge.
+
 ## Branches and pull requests
 
 - `main` is always releasable. Nobody pushes to it directly: every change goes through a pull request, and the other person reviews it before it is merged.
