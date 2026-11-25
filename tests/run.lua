@@ -629,6 +629,18 @@ Check("repost advice: one line in the tooltip, and in Auctionator's post confirm
     _G.AuctionHouseFrame = nil
 end)
 
+Check("Master Chef rank adds cooking results on average", function()
+    local cook
+    for _, t in pairs(ns.Data.allRecipes) do if t[2] == 6 and t[1] and t[1] ~= 0 then cook = t[1]; break end end
+    Assert(cook, "a cooking product in the data")
+    local base = ns.Lists.YieldOf(cook)
+    ns.db.settings.masterChef = 5
+    Assert(math.abs(ns.Lists.YieldOf(cook) - base * 1.5) < 1e-6, "rank 5: x1.5")
+    Assert(ns.YieldBonus(2840) == 1, "not a cooking product: unchanged")
+    ns.db.settings.masterChef = nil
+    Assert(ns.Lists.YieldOf(cook) == base, "rank 0: unchanged")
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

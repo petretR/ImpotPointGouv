@@ -61,6 +61,7 @@ ns.AddLocale("frFR", {
     ["Disenchant"] = "Désenchanter",
     ["Double when sold out within"] = "Doubler si tout part en moins de",
     ["Each item scanned here also updates Auctionator's price, so its tooltip stays in sync."] = "Chaque objet scanné ici met aussi à jour le prix d'Auctionator : son infobulle reste synchronisée.",
+    ["Each rank gives cooking recipes a 10 % chance of one more result: margins and leveling routes count it on average."] = "Chaque rang donne aux recettes de cuisine 10 % de chance d'un résultat en plus : les marges et les routes de leveling en tiennent compte en moyenne.",
     ["everything you hold"] = "tout ce que tu possèdes",
     ["First batch at most"] = "Premier lot, au plus",
     ["First batch of a new craft: at most this many, and a small share of what the AH sells per day."] = "Premier lot d'un nouveau craft : au plus cette quantité, et une petite part de ce que l'HV vend par jour.",
@@ -74,10 +75,12 @@ ns.AddLocale("frFR", {
     ["ImpotPointGouv mailbox"] = "Boîte aux lettres ImpotPointGouv",
     ["ImpotPointGouv: erase all history (transactions, charts, characters)?\nThis cannot be undone."] = "ImpotPointGouv : effacer tout l'historique (transactions, graphiques, personnages) ?\nC'est irréversible.",
     ["Left-click: overview   ·   Right-click: menu"] = "Clic gauche : bilan   ·   Clic droit : menu",
+    ["Legacy talents"] = "Talents Legacy",
     ["Lists (watch, buy, farm)"] = "Listes (surveiller, acheter, farmer)",
     ["Lists"] = "Listes",
     ["Market (what sells)"] = "Marché (ce qui se vend)",
     ["Market"] = "Marché",
+    ["Master Chef rank"] = "Rang de Master Chef",
     ["Min margin"] = "Marge mini",
     ["Min profit per craft"] = "Profit mini par craft",
     ["Minimap button"] = "Bouton de la minicarte",
@@ -694,5 +697,7 @@ ns.AddLocale("frFR", {
     -- Unused
     ["  |cffed5c52%d%% above usual!|r"] = "  |cffed5c52%d%% au-dessus de l'habituel !|r",
     ["  |cffed5c52above your max %s: not profitable anymore!|r"] = "  |cffed5c52au-dessus de ton max %s : plus rentable !|r",
+    ["Max items per post (gear, bags)"] = "Objets max par mise en vente (équipement, sacs)",
+    ["Medium"] = "Moyenne",
     ["Short"] = "Courte",
 })
