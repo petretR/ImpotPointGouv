@@ -679,6 +679,8 @@ ns.AddLocale("frFR", {
     ["No AH patterns"] = "Sans patron HV",
     ["No price history yet: scan this list at the AH."] = "Pas encore d'historique : scanne cette liste à l'HV.",
     ["No route yet: scan the AH (full scan) so the materials get a price."] = "Pas encore de route : fais un scan complet de l'HV pour que les composants aient un prix.",
+    ["Normal price: not cheap enough to buy, not high enough to sell."] = "Prix normal : pas assez bas pour acheter, pas assez haut pour vendre.",
+    ["normal"] = "normal",
     ["Nothing matches these filters."] = "Rien ne correspond à ces filtres.",
     ["Now"] = "Actuel",
     ["Open the auction house to scan this list."] = "Ouvre l'hôtel des ventes pour scanner cette liste.",
@@ -712,6 +714,7 @@ ns.AddLocale("frFR", {
     ["Volatility"] = "Volatilité",
     ["You have"] = "Tu en as",
     ["→ Auctionator"] = "→ Auctionator",
+    ["● %d: under their usual price right now (BUY)"] = "● %d : sous leur prix habituel en ce moment (ACHETER)",
 
     -- History.lua
     ["%d scans that day"] = "%d scans ce jour-là",
