@@ -72,6 +72,7 @@ Check("leveling route reaches 300 in every profession", function()
 end)
 
 Check("every main tab opens", function()
+    ns.db.settings.marketFilter = "raw" -- the Market tab opens on its Farm view
     for _, tab in ipairs({ "bilan", "lists", "market", "stock", "tx", "chars", "settings" }) do
         ns.UI.Toggle(tab)
         Assert(ns.UI.Current() == tab, "tab " .. tab .. " did not open")
@@ -576,6 +577,40 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     Assert(st.log[#st.log].partial, "partial answer flagged")
     Assert(marketCalls == 0, "a partial scan does not feed the Market tab's sales")
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
+Check("farm view: what my professions collect, trends, gold per hour", function()
+    local F, P, S = ns.Farm, ns.Prices, ns.Store
+    local inst, stats, ahv, days = C_Item.GetItemInfoInstant, P.Stats, P.AHValue, S.Days
+    local chars, loot, zt, prices = ns.db.chars, ns.db.loot, ns.db.zt, ns.db.prices
+    local realm = ns.Realm()
+    -- 784001 leather (skinning), 784002 herb (herbalism), 784003 cloth (anyone).
+    local types = { [784001] = { 7, 6 }, [784002] = { 7, 9 }, [784003] = { 7, 5 } }
+    C_Item.GetItemInfoInstant = function(id) local t = types[id] or { 15, 0 }; return id, "", "", "", "icon", t[1], t[2] end
+    ns.db.chars = { ["Player-1"] = { name = "Skinner", profs = { { name = "Skinning", line = 393 } } } }
+    ns.db.prices = { [realm] = { [784001] = { cur = 2000, qty = 300 }, [784002] = { cur = 1500, qty = 900 }, [784003] = { cur = 50, qty = 5000 } } }
+    P.Stats = function(id) return ({ [784001] = { sales = 40, med = 2200 }, [784002] = { sales = 30, med = 1500 }, [784003] = { sales = 200, med = 50 } })[id] end
+    P.AHValue = function(id) return ns.db.prices[realm][id].cur end
+    local today = math.floor(time() / 86400)
+    S.Days = function(e)
+        local out = {}
+        for d = today - 20, today do
+            out[#out + 1] = { d, nil, nil, 1900, (d == today - 7) and (e.qty + 100) or e.qty }
+        end
+        return out
+    end
+    ns.db.loot = { { t = time(), id = 784001, n = 30, z = 1450, s = "l" } }
+    ns.db.zt = { ["Player-1"] = { [1450] = 3600 } }
+    Assert(F.Abilities().skinning and not F.Abilities().herbalism, "skinning yes, herbalism no")
+    local list = F.List(true)
+    local ids = {}
+    for _, r in ipairs(list) do ids[r.id] = r end
+    Assert(ids[784001] and ids[784003] and not ids[784002], "leather and cloth, no herb without Herbalism")
+    Assert(ids[784001].hot, "leather: price up, sells, stock down -> farm now")
+    Assert(list[1].id == 784001, "farm now first")
+    Assert(math.abs(ids[784001].gph - 30 * 2000 * 0.95) < 1, "30 skins in 1 h at 20s")
+    Assert(#F.List(false) == 3, "everything when not limited to my professions")
+    Assert(F.WowheadURL(8170):find("forever/item=8170", 1, true), "Wowhead link")
+    C_Item.GetItemInfoInstant, P.Stats, P.AHValue, S.Days = inst, stats, ahv, days
+    ns.db.chars, ns.db.loot, ns.db.zt, ns.db.prices = chars, loot, zt, prices
 end)
 
 Check("queue profitable: demand decides, not the margin alone", function()

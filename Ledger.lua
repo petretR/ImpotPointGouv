@@ -94,7 +94,7 @@ function L.ReadProfessions(c)
             local name, _, rank, maxRank, _, _, line = GetProfessionInfo(i)
             -- Herbalism, skinning, fishing: no recipes to read.
             local gather = i == fish or line == 182 or line == 393 or line == 356
-            if name then list[#list + 1] = { name = name, rank = rank, max = maxRank, gather = gather } end
+            if name then list[#list + 1] = { name = name, rank = rank, max = maxRank, gather = gather, line = line } end
         end
     end
     c.profs = list

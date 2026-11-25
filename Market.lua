@@ -491,7 +491,13 @@ function M.BuildPage(page)
         prev = b
         page.fb[d[1]] = b
     end
-    page.fb.raw.tooltip = Tr("Raw materials (cloth, leather, ore, meat & fish, herbs, elemental, enchanting): what is worth farming.")
+    page.fb.raw.tooltip = Tr("What is worth farming now: raw materials anyone can loot or your gathering professions collect, and the reagents of your recipes. Rising prices with falling stock come first.")
+    page.mineOnly = ns.db.settings.farmMineOnly ~= false
+    page.mine = T.Button(page, Tr("Only what I can farm"), 150, 26, function()
+        page.mineOnly = not page.mineOnly; ns.db.settings.farmMineOnly = page.mineOnly; page.offset = 0; page:Refresh()
+    end, "pill")
+    page.mine:SetPoint("RIGHT", prev, "LEFT", -18, 0)
+    page.mine.tooltip = Tr("Your characters' professions decide: Skinning for leather, Mining for ore, Herbalism for herbs, Enchanting for its mats; cloth, meat, fish and elemental for everyone.")
     page.fb.flip.tooltip = Tr("Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit).")
     page.fb.vcraft.tooltip = Tr("Recipes (all professions) whose result sells to a vendor for more than its materials cost at the AH. The ones you can craft now come first.")
     page.fb.vflip.tooltip = Tr("Listed below what a vendor pays for them: buy, then sell at any vendor. Risk-free while the price holds.")
@@ -530,6 +536,21 @@ function M.BuildPage(page)
             if not row then return end
             T.ItemTooltip(self, row.id)
             GameTooltip:AddLine(" ")
+            if row.score then
+                local function M(v) return ns.FormatMoney(v, { iconSize = 11 }) end
+                if row.usual then GameTooltip:AddDoubleLine(Tr("Usual price (30 days)"), M(row.usual), 0.7, 0.7, 0.7) end
+                if row.trend then GameTooltip:AddDoubleLine(Tr("Last 7 days"), ("%+d %%"):format(math.floor(row.trend * 100 + 0.5)), 0.7, 0.7, 0.7, 1, 1, 1) end
+                if row.sales then GameTooltip:AddDoubleLine(Tr("Sold per day (est.)"), ("%.1f"):format(row.sales), 0.7, 0.7, 0.7, 1, 1, 1) end
+                GameTooltip:AddDoubleLine(Tr("Listed"), tostring(row.listed) .. (row.stockMove and ("  (%+d %% in a week)"):format(math.floor(row.stockMove * 100 + 0.5)) or ""), 0.7, 0.7, 0.7, 1, 1, 1)
+                if row.gph then
+                    GameTooltip:AddDoubleLine(Tr("You made"), (Tr("%s / hour in %s")):format(M(row.gph), ns.Farm.ZoneName(row.zone)), 0.7, 0.7, 0.7, 1, 1, 1)
+                end
+                if row.known then GameTooltip:AddLine(Tr("Used by a recipe you know."), 0.88, 0.66, 0.24) end
+                if row.hot then GameTooltip:AddLine(Tr("Farm now: the price rises, it sells and the stock listed goes down."), 0.36, 0.82, 0.45, true) end
+                GameTooltip:AddLine(Tr("Click: price history · Right-click: Wowhead link"), 0.88, 0.66, 0.24)
+                GameTooltip:Show()
+                return
+            end
             if row.rec then
                 local rc = row.rec
                 GameTooltip:AddLine((rc.name or "?") .. "  |cff8a877f(" .. Tr(ns.Route.NAME_KEYS[row.prof]) .. " " .. rc.o .. ")|r", 1, 1, 1)
@@ -569,6 +590,7 @@ function M.BuildPage(page)
         -- Click: price history; Shift-click: link in chat.
         r:SetScript("OnMouseUp", function(self, button)
             local row = self.row
+            if row and button == "RightButton" then ns.Farm.ShowURL(row.id); return end
             if not row or button ~= "LeftButton" then return end
             if IsModifiedClick and IsModifiedClick("CHATLINK") then
                 local _, link = ns.GetItemInfo(row.id)
@@ -627,11 +649,20 @@ function M.BuildPage(page)
                 elseif self.filter == "flip" then
                     r.price:SetText(Money(row.cur) .. "  |cff615f5c/ " .. Money(row.market) .. "|r")
                     r.gold:SetText(ns.FormatMoney(row.gain, { sign = true, color = true, iconSize = 11, short = true }))
+                elseif self.filter == "raw" then
+                    r.price:SetText(Money(row.price))
+                    local tr = row.trend
+                    r.rate:SetText(row.sales and (row.sales >= 10 and ("%d"):format(math.floor(row.sales + 0.5)) or ("%.1f"):format(row.sales)) or "—")
+                    r.gold:SetText(tr and (("%s%+d %%|r"):format(tr >= 0.05 and "|cff5cd173" or tr <= -0.05 and "|cffed5c52" or "|cffcdc8b8", math.floor(tr * 100 + 0.5))) or "|cff615f5c—|r")
+                    r.listed:SetText(row.gph and Money(row.gph) or "|cff615f5c—|r")
+                    r.tag:SetText(row.hot and Tr("farm now") or row.what)
+                    r.tag:SetTextColor(unpack(row.hot and C.gold or C.faint))
+                    r:Show()
                 else
                     r.price:SetText(Money(row.price))
                     r.gold:SetText(Money(row.gold))
                 end
-                if self.filter ~= "vcraft" then
+                if self.filter ~= "vcraft" and self.filter ~= "raw" then
                     if self.filter ~= "vflip" then
                         r.rate:SetText(row.rate >= 10 and ("%d"):format(math.floor(row.rate + 0.5)) or ("%.1f"):format(row.rate))
                     end
@@ -669,6 +700,20 @@ function M.BuildPage(page)
             return
         end
         self.heads[5]:SetText(Tr("Listed"))
+        self.mine:SetShown(self.filter == "raw"); self.mine:SetSelected(self.mineOnly)
+        if self.filter == "raw" then
+            self.heads[2]:SetText(Tr("Price")); self.heads[3]:SetText(Tr("Sold / day"))
+            self.heads[4]:SetText(Tr("7-day trend")); self.heads[5]:SetText(Tr("You / hour"))
+            local list = ns.Farm.List(self.mineOnly)
+            self.data = list
+            local hot = 0
+            for _, r in ipairs(list) do if r.hot then hot = hot + 1 end end
+            self.sub:SetText((Tr("%d materials  ·  %d to farm now")):format(#list, hot))
+            self.empty:SetText(Tr("Nothing to show yet: do a full scan at the auction house each day, trends need a few days."))
+            self.empty:SetShown(#list == 0)
+            self:Draw()
+            return
+        end
         if vf then
             local list, t = M.Flips()
             self.data = list
