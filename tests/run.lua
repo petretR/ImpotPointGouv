@@ -576,11 +576,13 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     Assert(st.log[#st.log].partial, "partial answer flagged")
     Assert(marketCalls == 0, "a partial scan does not feed the Market tab's sales")
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
+end)
+
 Check("repost advice: one line in the tooltip, and in Auctionator's post confirmation", function()
     local TR = ns.Track
     local line = TR.AdviceText({ streak = 1, lost = 300, vendor = 2500, edge = 200 })
     Assert(type(line) == "string" and not line:find("\n"), "one line: " .. tostring(line))
-    Assert(TR.AdviceText({ streak = 1, lost = 0 }), "first expiry has advice")
+    Assert(TR.AdviceText({ streak = 1, lost = 0 }) == nil, "a single expiry says nothing")
     Assert(TR.StuckInBags == nil, "no more chat line when the AH opens")
     -- Auctionator's sale frame: its confirmation now carries the advice for an item that must wait.
     local orig = TR.PostAdvice

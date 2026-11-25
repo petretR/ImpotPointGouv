@@ -532,7 +532,6 @@ ns.AddLocale("frFR", {
     ["Expired %d× in a row: sell it to a vendor (%s)."] = "Expiré %d× de suite : à vendre au marchand (%s).",
     ["Expired %d× in a row: wait %s before posting it again."] = "Expiré %d× de suite : attendre %s avant de le remettre en vente.",
     ["Expired %d×: a vendor pays %s, the AH only %s more."] = "Expiré %d× : un marchand paie %s, l'HV seulement %s de plus.",
-    ["Expired once: post only 1 next time."] = "Expiré une fois : n'en mettre qu'un la prochaine fois.",
     ["Post anyway?"] = "Mettre en vente quand même ?",
     ["vendor sales, last %d days: %d sales, %s"] = "ventes au marchand, %d derniers jours : %d ventes, %s",
     ["vendor: %d item%s, %s"] = "marchand : %d objet%s, %s",

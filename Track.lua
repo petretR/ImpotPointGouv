@@ -287,7 +287,7 @@ local function BuildHistory()
 end
 
 -- Advice for an item: nil (nothing to report), or { streak, lost, pauseUntil?, vendor? }.
--- * 1 failure: post only 1 item (gear) / half (stackable) to risk a smaller deposit.
+-- * 1 failure: nothing to say (an auction often expires once: undercut, quiet hours).
 -- * 2 failures in a row: pause 1 day, then 2, 4… (7 days max).
 -- * 3 failures, or lost deposits > what the AH earns above the vendor: sell to the vendor.
 function TR.PostAdvice(name, id)
@@ -303,6 +303,7 @@ function TR.PostAdvice(name, id)
     local mv = id and TR.AHValue(id)
     local edge = mv and (math.floor(mv * AH_CUT) - vs) or nil
     if vs and vs > 0 and (h.streak >= 3 or (edge and h.lost >= edge)) then adv.vendor, adv.edge = vs, edge end
+    if not adv.vendor and not adv.pauseUntil then return nil end
     return adv
 end
 
@@ -322,7 +323,6 @@ function TR.AdviceText(adv)
             or (Tr("%dh")):format(math.max(1, math.floor(left / 3600 + 0.5)))
         return (Tr("Expired %d× in a row: wait %s before posting it again.")):format(adv.streak, wait)
     end
-    return Tr("Expired once: post only 1 next time.")
 end
 
 -- ------------------------------------------------------------ tooltips (vendor and AH)
