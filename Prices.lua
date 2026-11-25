@@ -784,8 +784,6 @@ local function BuildBar()
         txt = txt .. "  ·  " .. (ls.partial and "|cffe08a52" or "") .. (Tr("%d auctions")):format(ls.read or 0)
             .. (ls.partial and (" (" .. Tr("partial") .. ")|r") or "")
     end
-    -- The market needs a full scan every session: remind it.
-    if not last or time() - last > 2 * 3600 then txt = txt .. Tr("  ·  |cffe0a83dclick Scan (Market tab needs one per session)|r") end
     bar.status:SetText(txt)
     UpdateBar()
     FitBar()

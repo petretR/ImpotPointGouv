@@ -182,7 +182,6 @@ ns.AddLocale("frFR", {
     ["|cffed5c52Not enough gold.|r"] = "|cffed5c52Pas assez d'or.|r",
 
     -- Prices.lua
-    ["  ·  |cffe0a83dclick Scan (Market tab needs one per session)|r"] = "  ·  |cffe0a83dclique sur Scan (l'onglet Marché en demande un par session)|r",
     ["%d auctions"] = "%d enchères",
     ["%d min ago"] = "il y a %d min",
     ["%d prices known%s"] = "%d prix connus%s",
