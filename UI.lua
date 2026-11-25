@@ -182,7 +182,7 @@ local function BuildBilan(page)
     top:SetPoint("BOTTOMLEFT", page, "BOTTOMRIGHT", -rightW, 0)
     CardTitle(top, "Top AH sales")
     page.topRows = {}
-    for i = 1, 6 do
+    for i = 1, 5 do
         local row = CreateFrame("Frame", nil, top)
         row:SetSize(rightW - 32, 20)
         row:SetPoint("TOPLEFT", 16, -40 - (i - 1) * 21)
