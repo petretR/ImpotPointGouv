@@ -815,6 +815,12 @@ Check("vendor flip: a few copper under the vendor price is not a flip", function
     P.VendorSell = vs
     Assert(not got[781001], "7 c on 26 s is not a flip")
     Assert(got[781002] and got[781002].units == 30 and got[781002].gain == 90000, "30 units at 70 s for a 1 g vendor price")
+    -- A list saved by an older scan (1 c rule) is filtered too.
+    local db = ns.db.market and ns.db.market[ns.Realm()]
+    if db and db.flips then
+        db.flips.list[781003] = { u = 234, c = 234 * 2602, g = 234 * 7, v = 2609, l = 2602 }
+        for _, f in ipairs(M.Flips()) do Assert(f.id ~= 781003, "old 7 c flip still shown") end
+    end
 end)
 
 print(("\n%d passed, %d failed"):format(passed, failed))

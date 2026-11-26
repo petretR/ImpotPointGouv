@@ -183,7 +183,9 @@ function M.Flips()
     if not db.flips then return out, nil end
     local bought = ns.db.flipBought or {}
     for id, f in pairs(db.flips.list) do
-        if f.g >= minGain then
+        -- Same rule on a list saved by an older scan: average unit cost 10 % under the vendor price.
+        local unitOK = f.u and f.u > 0 and f.v and (f.c / f.u) <= f.v * (1 - MIN_UNIT_SHARE)
+        if f.g >= minGain and unitOK then
             out[#out + 1] = { id = id, units = f.u, cost = f.c, gain = f.g, vs = f.v, cur = f.l, rate = M.Rate(id),
                 listed = (P.Entry(id) and P.Entry(id).qty) or 0 }
         end
