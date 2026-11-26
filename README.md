@@ -97,6 +97,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Data.lua` | Built-in list data: pre-BiS crafts and consumables per spec, enchants, leveling shopping lists, cooldowns, fallback recipes |
 | `Lists.lua`, `ListsUI.lua` | Lists tab: lists, recipe trees, verdicts, deal buying, cooldown tracking |
 | `Prices.lua` | AH scans, price history and stats (usual price, low/high, volatility, sales/day) |
+| `Farm.lua` | Farm view: raw materials worth farming for your professions, trends, your gold per hour |
 | `Market.lua` | Market tab (what sells, flips, vendor crafts) |
 | `Stock.lua` | Stock tab: everything you own and its value |
 | `Origins.lua` | Where sold items came from (farmed, bought, crafted), rebuilt from the logs |

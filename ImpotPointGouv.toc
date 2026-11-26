@@ -34,6 +34,7 @@ Report.lua
 Routine.lua
 Next.lua
 Setup.lua
+Farm.lua
 Market.lua
 Stock.lua
 Origins.lua
