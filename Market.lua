@@ -123,8 +123,8 @@ end
 -- (GetItemInfo); for items not cached yet, it is requested in the background, without hovering.
 local lastAcc, waiting = nil, {}
 -- Worth the trip: each unit at least 10 % under the vendor price (a few copper on a 26 s item is
--- noise, and someone else's dump at vendor price minus 1 c), and at least 50 s for the whole flip.
-local MIN_UNIT_SHARE, MIN_FLIP_GAIN = 0.10, 5000
+-- noise, and someone else's dump at vendor price minus 1 c), and at least 5 s for the whole flip.
+local MIN_UNIT_SHARE, MIN_FLIP_GAIN = 0.10, 500
 
 local function FlipOf(id, a)
     local vs = P.VendorSell(id)
@@ -502,7 +502,7 @@ function M.BuildPage(page)
     page.mine.tooltip = Tr("Your characters' professions decide: Skinning for leather, Mining for ore, Herbalism for herbs; cloth, meat, fish and elemental for everyone.")
     page.fb.flip.tooltip = Tr("Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit).")
     page.fb.vcraft.tooltip = Tr("Recipes (all professions) whose result sells to a vendor for more than its materials cost at the AH. The ones you can craft now come first.")
-    page.fb.vflip.tooltip = Tr("Listed at least 10 % below what a vendor pays for them, 50 s or more in all: buy, then sell at any vendor. Risk-free while the price holds.")
+    page.fb.vflip.tooltip = Tr("Listed at least 10 % below what a vendor pays for them, 5 s or more in all: buy, then sell at any vendor. Risk-free while the price holds.")
 
     local list = CreateFrame("Frame", nil, page)
     T.Surface(list, C.surface, 10)
