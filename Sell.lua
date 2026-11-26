@@ -336,9 +336,8 @@ local function PostTooltip(self)
         if posted[e.id] then
             GameTooltip:AddDoubleLine(left, "posted", 0.6, 0.6, 0.6, 0.36, 0.82, 0.45)
         elseif blocked then
-            local why, what = ns.Track.AdviceText(blocked)
-            GameTooltip:AddDoubleLine(left, what, 0.6, 0.6, 0.6, 0.93, 0.55, 0.32)
-            GameTooltip:AddLine("    " .. why, 0.5, 0.5, 0.5)
+            GameTooltip:AddLine(left, 0.6, 0.6, 0.6)
+            GameTooltip:AddLine("    " .. ns.Track.AdviceText(blocked), 0.93, 0.55, 0.32, true)
         elseif price then
             GameTooltip:AddDoubleLine(left, Money(price), 0.85, 0.85, 0.85, 1, 1, 1)
         else

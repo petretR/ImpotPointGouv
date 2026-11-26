@@ -578,6 +578,28 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
 end)
 
+Check("repost advice: one line in the tooltip, and in Auctionator's post confirmation", function()
+    local TR = ns.Track
+    local line = TR.AdviceText({ streak = 1, lost = 300, vendor = 2500, edge = 200 })
+    Assert(type(line) == "string" and not line:find("\n"), "one line: " .. tostring(line))
+    Assert(TR.AdviceText({ streak = 1, lost = 0 }) == nil, "a single expiry says nothing")
+    Assert(TR.StuckInBags == nil, "no more chat line when the AH opens")
+    -- Auctionator's sale frame: its confirmation now carries the advice for an item that must wait.
+    local orig = TR.PostAdvice
+    TR.PostAdvice = function() return { streak = 2, lost = 0, pauseUntil = time() + 2 * 86400 } end
+    local sale = { itemInfo = { itemLink = "|cffffffff|Hitem:2318::|h[Light Leather]|h|r", itemID = 2318 } }
+    sale.GetConfirmationMessage = function() return nil end
+    _G.AuctionHouseFrame = { AuctionatorSellingFrame = { SaleItemFrame = sale } }
+    TR._HookAuctionator()
+    local msg = sale:GetConfirmationMessage()
+    Assert(msg and msg:find("2", 1, true), "confirmation explains the wait: " .. tostring(msg))
+    Assert(select(2, msg:gsub("\n", "")) <= 1, "two lines at most (Auctionator's dialog does not grow)")
+    TR.PostAdvice = function() return nil end
+    Assert(sale:GetConfirmationMessage() == nil, "no advice: no confirmation")
+    TR.PostAdvice = orig
+    _G.AuctionHouseFrame = nil
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end
