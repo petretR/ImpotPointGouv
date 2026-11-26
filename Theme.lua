@@ -259,3 +259,82 @@ function T.TooltipAnchor(owner)
     local top = y and UIParent:GetHeight() and y > UIParent:GetHeight() * 0.5
     return top and "ANCHOR_BOTTOM" or "ANCHOR_TOP"
 end
+
+-- ------------------------------------------------------------ Esc and dialogs without Blizzard's tables
+-- On this client, writing into Blizzard's own tables (UISpecialFrames, StaticPopupDialogs) or showing a
+-- StaticPopup from an addon taints the game's code: the Esc menu, logout and confirmations such as
+-- buying a bank tab then fail with "AddOn tried to call the protected function". So the addon closes its
+-- windows on Esc by itself, and has its own small dialog.
+local escPending = {}
+local function EscapeNow(f)
+    f:EnableKeyboard(true)
+    f:SetPropagateKeyboardInput(true)
+    f:SetScript("OnKeyDown", function(self, key)
+        if InCombatLockdown() then return end -- in combat keys always go through (the game's rule)
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false)
+            self:Hide()
+            -- Give the keyboard back once this key press is over.
+            C_Timer.After(0, function() if not InCombatLockdown() then self:SetPropagateKeyboardInput(true) end end)
+        else
+            self:SetPropagateKeyboardInput(true)
+        end
+    end)
+end
+local escWatch
+function T.CloseOnEscape(f)
+    if not InCombatLockdown() then EscapeNow(f); return end
+    escPending[#escPending + 1] = f
+    if not escWatch then
+        escWatch = CreateFrame("Frame")
+        escWatch:RegisterEvent("PLAYER_REGEN_ENABLED")
+        escWatch:SetScript("OnEvent", function()
+            for _, p in ipairs(escPending) do EscapeNow(p) end
+            wipe(escPending)
+        end)
+    end
+end
+
+-- T.Dialog{ text = "...", input = true|nil, default = "", accept = "OK", cancel = "Cancel", noCancel = true|nil, onAccept = fn(text) }
+local dialog
+function T.Dialog(o)
+    if not dialog then
+        local d = CreateFrame("Frame", "ImpotPointGouvDialog", UIParent)
+        d:SetSize(360, 150); d:SetPoint("CENTER", 0, 120)
+        d:SetFrameStrata("DIALOG"); d:SetToplevel(true); d:EnableMouse(true); d:SetClampedToScreen(true)
+        T.Surface(d, T.C.window, 12, { 1, 1, 1, 0.12 })
+        d.text = T.Text(d, 13, { justify = "CENTER", wrap = true })
+        d.text:SetPoint("TOPLEFT", 18, -18); d.text:SetPoint("TOPRIGHT", -18, -18)
+        local eb = CreateFrame("EditBox", nil, d)
+        eb:SetSize(300, 26); eb:SetPoint("TOP", d.text, "BOTTOM", 0, -12)
+        eb:SetAutoFocus(false); eb:SetFontObject(ChatFontNormal); eb:SetTextInsets(8, 8, 0, 0)
+        T.Surface(eb, T.C.surface2, 6)
+        eb:SetScript("OnEnterPressed", function() d.ok:Click() end)
+        eb:SetScript("OnEscapePressed", function() d:Hide() end)
+        d.eb = eb
+        d.ok = T.Button(d, "", 130, 30, function()
+            local fn, text = d.onAccept, d.eb:IsShown() and d.eb:GetText() or nil
+            d:Hide()
+            if fn then fn(text) end
+        end, "primary")
+        d.ok:SetPoint("BOTTOMRIGHT", d, "BOTTOM", -4, 14)
+        d.cancel = T.Button(d, "", 130, 30, function() d:Hide() end)
+        d.cancel:SetPoint("BOTTOMLEFT", d, "BOTTOM", 4, 14)
+        d:SetScript("OnHide", function() d.eb:ClearFocus() end)
+        T.CloseOnEscape(d)
+        d:Hide()
+        dialog = d
+    end
+    local d = dialog
+    d.text:SetText(o.text or "")
+    d.ok.text:SetText(o.accept or OKAY or "OK")
+    d.cancel.text:SetText(o.cancel or CANCEL or "Cancel")
+    d.cancel:SetShown(not o.noCancel)
+    d.onAccept = o.onAccept
+    d.eb:SetShown(o.input and true or false)
+    d.eb:SetText(o.default or "")
+    d:SetHeight(o.input and 150 or 120)
+    d:Show(); d:Raise()
+    if o.input then d.eb:SetFocus(); d.eb:HighlightText() end
+    return d
+end

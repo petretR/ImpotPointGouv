@@ -64,7 +64,7 @@ local function Build()
         if #chosen > 0 and win.onConfirm then win.onConfirm(chosen) end
     end, "primary")
     win.ok:SetPoint("BOTTOMRIGHT", -12, 12)
-    tinsert(UISpecialFrames, "ImpotPointGouvPreview")
+    ns.Theme.CloseOnEscape(_G["ImpotPointGouvPreview"])
     win:Hide()
 end
 

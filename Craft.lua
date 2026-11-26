@@ -1257,7 +1257,7 @@ local function ShowDiagText(text)
         eb:SetScript("OnEscapePressed", function() diagWin:Hide() end)
         sf:SetScrollChild(eb)
         diagWin.eb = eb
-        tinsert(UISpecialFrames, "ImpotPointGouvDiag")
+        ns.Theme.CloseOnEscape(_G["ImpotPointGouvDiag"])
     end
     diagWin.eb:SetText(text)
     diagWin:Show()

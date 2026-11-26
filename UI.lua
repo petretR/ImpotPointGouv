@@ -599,7 +599,10 @@ local function BuildSettings(page)
     Head(2, "Data")
     local setupB = T.Button(cols[2], Tr("Setup guide"), 140, 28, function() ns.Setup.Show() end)
     setupB:SetPoint("TOPLEFT", 16, y[2]); y[2] = y[2] - 38
-    local reset = T.Button(cols[2], Tr("Reset all data"), 140, 28, function() StaticPopup_Show("IMPOTPOINTGOUV_RESET") end)
+    local reset = T.Button(cols[2], Tr("Reset all data"), 140, 28, function()
+        T.Dialog({ text = Tr("ImpotPointGouv: erase all history (transactions, charts, characters)?\nThis cannot be undone."),
+            accept = Tr("Erase all"), onAccept = function() L.Reset(); ns.Print(Tr("history erased. The tax office starts over.")) end })
+    end)
     reset:SetPoint("TOPLEFT", 16, y[2])
     reset.text:SetTextColor(unpack(C.neg))
 
@@ -617,7 +620,7 @@ local function Build()
     frame:SetMovable(true)
     frame:EnableMouse(true)
     T.Surface(frame, C.window, 14, { 1, 1, 1, 0.09 })
-    tinsert(UISpecialFrames, "ImpotPointGouvFrame")
+    ns.Theme.CloseOnEscape(_G["ImpotPointGouvFrame"])
 
     -- Header (drag area)
     local header = CreateFrame("Frame", nil, frame)
@@ -737,13 +740,6 @@ function UI.UpdateMinimap()
     if ns.db.settings.minimap.hide then LDBIcon:Hide(ns.name) else LDBIcon:Show(ns.name) end
 end
 
-StaticPopupDialogs["IMPOTPOINTGOUV_RESET"] = {
-    text = Tr("ImpotPointGouv: erase all history (transactions, charts, characters)?\nThis cannot be undone."),
-    button1 = "Erase all", button2 = "Cancel",
-    OnAccept = function() L.Reset(); ns.Print(Tr("history erased. The tax office starts over.")) end,
-    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-}
-
 ns.On("LEDGER_READY", function()
     if UI.ready then return end
     UI.ready = true
@@ -821,7 +817,7 @@ function UI.Menu(anchor)
             if self:IsMouseOver(8, -8, -8, 8) then away = 0 else away = away + el end
             if away > 1.2 then self:Hide() end
         end)
-        tinsert(UISpecialFrames, "ImpotPointGouvMenu")
+        ns.Theme.CloseOnEscape(_G["ImpotPointGouvMenu"])
     end
     menu:ClearAllPoints()
     menu:SetPoint("TOPRIGHT", anchor or UIParent, anchor and "BOTTOMLEFT" or "CENTER", 0, 0)
