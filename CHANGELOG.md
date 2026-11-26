@@ -51,6 +51,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Market › Vendor flip: only real flips. A listing must be at least 10 % under the vendor price, and the flip worth 50 s or more; before, 1 copper under the vendor price counted, so the tab filled with gear dumped a few copper under it (7 c on a 26 s item).
 - Market › Vendor flip: only real flips. A listing must be at least 10 % under the vendor price, and the flip worth 5 s or more; before, 1 copper under the vendor price counted, so the tab filled with gear dumped a few copper under it (7 c on a 26 s item).
 - Profession window: when ForeverRecipes is loaded (it now shows its own profit in the recipe list), the addon's profit next to each recipe stays off so the two no longer overlap. `/ipg profit` turns it back on.
+- Mail: AH sales collected together (the game sometimes adds up the gold of several mails before telling the addon) were recorded as plain mail money, so they were missing from Sales and Top AH sales. Each one is recorded as a sale with its item now. Sales already recorded as mail money stay as they are.
 - Mail: sending part of a stack for two different items at once now splits them one after the other, so the game does not refuse the second split.
 - Mail: the "Collect only" buttons no longer try to take items when your bags are full (they waited 4 s on each mail); they take the gold and stop.
 - Overview: the Stock value card now matches the Stock tab. It updates when your bags change and when the game loads item prices it did not have yet.
