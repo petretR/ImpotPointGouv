@@ -153,7 +153,8 @@ end
 -- Wowhead page of an item (WoW Forever database).
 function F.WowheadURL(id) return ("https://www.wowhead.com/forever/item=%d"):format(id) end
 
-StaticPopupDialogs = StaticPopupDialogs or {}
+-- Never assign StaticPopupDialogs itself: replacing the global taints every Blizzard popup
+-- (logout, Esc menu, vendor confirmations…). Only add our entry to the existing table.
 StaticPopupDialogs["IMPOTPOINTGOUV_URL"] = {
     text = "%s", button1 = OKAY or "OK", hasEditBox = true, editBoxWidth = 320,
     timeout = 0, whileDead = true, hideOnEscape = true,

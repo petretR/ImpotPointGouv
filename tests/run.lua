@@ -662,6 +662,16 @@ Check("repost advice: one line in the tooltip, and in Auctionator's post confirm
     Assert(sale:GetConfirmationMessage() == nil, "no advice: no confirmation")
     TR.PostAdvice = orig
     _G.AuctionHouseFrame = nil
+Check("no file replaces a Blizzard global table (it would taint the game's own UI)", function()
+    for line in toc:gmatch("[^\r\n]+") do
+        local f = line:match("^%s*([^#%s][^%s]*%.lua)%s*$")
+        if f and not f:find("^libs") then
+            local src = assert(io.open((f:gsub("\\", "/")))):read("*a")
+            for _, g in ipairs({ "StaticPopupDialogs", "UISpecialFrames", "SlashCmdList", "GameTooltip" }) do
+                Assert(not src:find("\n" .. g .. "%s*=[^=]"), f .. " assigns " .. g)
+            end
+        end
+    end
 end)
 
 Check("Master Chef rank adds cooking results on average", function()
