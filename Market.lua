@@ -122,14 +122,17 @@ end
 -- Listings under the vendor price: buy then resell to the vendor. The vendor price comes from the game
 -- (GetItemInfo); for items not cached yet, it is requested in the background, without hovering.
 local lastAcc, waiting = nil, {}
-local MIN_UNIT_GAIN = 1
+-- Worth the trip: each unit at least 10 % under the vendor price (a few copper on a 26 s item is
+-- noise, and someone else's dump at vendor price minus 1 c), and at least 5 s for the whole flip.
+local MIN_UNIT_SHARE, MIN_FLIP_GAIN = 0.10, 500
 
 local function FlipOf(id, a)
     local vs = P.VendorSell(id)
     if not vs or not a or not a.b then return nil end
     local units, cost = 0, 0
+    local maxUnit = vs - math.max(1, math.floor(vs * MIN_UNIT_SHARE))
     for unit, count in pairs(a.b) do
-        if unit <= vs - MIN_UNIT_GAIN then units = units + count; cost = cost + unit * count end
+        if unit <= maxUnit then units = units + count; cost = cost + unit * count end
     end
     if units == 0 then return nil end
     return { id = id, units = units, cost = cost, gain = vs * units - cost, vs = vs, low = a.low }
@@ -176,11 +179,13 @@ end
 
 function M.Flips()
     local db = DB()
-    local out, minGain = {}, ns.Craft and ns.Craft.Rules().minProfit or 10
+    local out, minGain = {}, math.max(MIN_FLIP_GAIN, ns.Craft and ns.Craft.Rules().minProfit or 0)
     if not db.flips then return out, nil end
     local bought = ns.db.flipBought or {}
     for id, f in pairs(db.flips.list) do
-        if f.g >= minGain then
+        -- Same rule on a list saved by an older scan: average unit cost 10 % under the vendor price.
+        local unitOK = f.u and f.u > 0 and f.v and (f.c / f.u) <= f.v * (1 - MIN_UNIT_SHARE)
+        if f.g >= minGain and unitOK then
             out[#out + 1] = { id = id, units = f.u, cost = f.c, gain = f.g, vs = f.v, cur = f.l, rate = M.Rate(id),
                 listed = (P.Entry(id) and P.Entry(id).qty) or 0 }
         end
@@ -499,7 +504,7 @@ function M.BuildPage(page)
     page.mine.tooltip = Tr("Your characters' professions decide: Skinning for leather, Mining for ore, Herbalism for herbs; cloth, meat, fish and elemental for everyone.")
     page.fb.flip.tooltip = Tr("Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit).")
     page.fb.vcraft.tooltip = Tr("Recipes (all professions) whose result sells to a vendor for more than its materials cost at the AH. The ones you can craft now come first.")
-    page.fb.vflip.tooltip = Tr("Listed below what a vendor pays for them: buy, then sell at any vendor. Risk-free while the price holds.")
+    page.fb.vflip.tooltip = Tr("Listed at least 10 % below what a vendor pays for them, 5 s or more in all: buy, then sell at any vendor. Risk-free while the price holds.")
 
     local list = CreateFrame("Frame", nil, page)
     T.Surface(list, C.surface, 10)
