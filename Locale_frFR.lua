@@ -506,6 +506,8 @@ ns.AddLocale("frFR", {
     ["last scan %s ago  ·  %d flip%s  ·  buy, then Routine > Sell to vendor"] = "dernier scan il y a %s  ·  %d flip%s  ·  achète, puis Routine > Vendre au marchand",
     ["Learn it (once)"] = "L'apprendre (une fois)",
     ["Listed below what a vendor pays for them: buy, then sell at any vendor. Risk-free while the price holds."] = "En vente sous ce que paie un marchand : achète, puis revends à n'importe quel marchand. Sans risque tant que le prix tient.",
+    ["Leather"] = "Cuir",
+    ["Listed at least 10 % below what a vendor pays for them, 50 s or more in all: buy, then sell at any vendor. Risk-free while the price holds."] = "En vente au moins 10 % sous ce que paie un marchand, 50 pa ou plus au total : achète, puis revends à n'importe quel marchand. Sans risque tant que le prix tient.",
     ["Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit)."] = "En vente bien sous leur prix habituel et qui se vendent régulièrement : achète et remets en vente (après 5 % de commission et le dépôt).",
     ["Listed"] = "En vente",
     ["Looking for %s under %s…"] = "Recherche de %s sous %s…",

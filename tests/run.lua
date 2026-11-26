@@ -802,6 +802,20 @@ Check("item origins: sales split into farmed, trading and crafted", function()
     ns.db.loot, ns.db.tx = loot, tx
 end)
 
+Check("vendor flip: a few copper under the vendor price is not a flip", function()
+    local P, M = ns.Prices, ns.Market
+    local vs = P.VendorSell
+    P.VendorSell = function(id) return ({ [781001] = 2609, [781002] = 10000 })[id] end
+    M.ScanFlips({
+        [781001] = { low = 2602, b = { [2602] = 234 } },          -- 7 c under a 26 s vendor price
+        [781002] = { low = 7000, b = { [7000] = 30, [9900] = 5 } }, -- 30 % under: 30 units, 9 g in all
+    })
+    local got = {}
+    for _, f in ipairs(M.Flips()) do got[f.id] = f end
+    P.VendorSell = vs
+    Assert(not got[781001], "7 c on 26 s is not a flip")
+    Assert(got[781002] and got[781002].units == 30 and got[781002].gain == 90000, "30 units at 70 s for a 1 g vendor price")
+end)
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end
