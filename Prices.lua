@@ -444,125 +444,31 @@ end
 P.Status = Status
 function P.Bar() return bar end
 
-local function ScanTargets()
-    local ids, list = {}, {}
-    for _, recipes in pairs(ns.db.recipes) do
-        for _, r in pairs(recipes) do
-            if r.p then ids[r.p] = true end
-            for _, rg in ipairs(r.r or {}) do
-                if not ns.db.vendor[rg[1]] then ids[rg[1]] = true end
-            end
-        end
-    end
-    for _, id in ipairs(P.DE_MATS) do ids[id] = true end
-    for id in pairs(ids) do
-        local name = ns.db.items[id] or ns.GetItemInfo(id)
-        if name then list[#list + 1] = { id = id, name = name } end
-    end
-    table.sort(list, function(a, b) return a.name < b.name end)
-    return list
-end
-
-local SendNext, FinishScan
+local FinishScan
 
 local function UpdateBar()
     if not bar then return end
-    if scan and scan.mode == "items" then
-        bar.scan.text:SetText(scan.manual and "Continue" or "Stop")
-    elseif scan then
+    if scan then
         bar.scan.text:SetText(Tr("Stop"))
     else
         bar.scan.text:SetText(Tr("Scan"))
     end
 end
 
-local StartDepth
 function FinishScan(msg)
     local s = scan
     scan = nil
-    -- After the professions scan: depth (quantities per price) of the materials, item by item.
-    if s and not msg and s.mode == "items" and StartDepth and StartDepth(s) then return end
     if s and s.mode == "list" and not msg then
         msg = (Tr("%s scanned: %d / %d items found.")):format(s.label, s.got or 0, #s.ids)
     end
-    if s and s.mode == "depth" and not msg then
-        msg = (Tr("Scan done: %d prices, market depth of %d reagents.")):format(s.items or 0, s.got or 0)
-    end
-    if s and not msg then
-        if s.mode == "full" then
-            local n = 0
-            for _ in pairs(s.acc) do n = n + 1 end
-            msg = (Tr("Full scan done: %d items recorded.")):format(n)
-        else
-            msg = (Tr("Profession scan done: %d items, %d listed.")):format(#s.queue, s.found or 0)
-        end
+    if s and not msg and s.mode == "full" then
+        local n = 0
+        for _ in pairs(s.acc) do n = n + 1 end
+        msg = (Tr("Full scan done: %d items recorded.")):format(n)
     end
     Status(msg)
     UpdateBar()
     ns.Fire("PRICES_CHANGED")
-end
-
-local function FinalizeItem()
-    local q = scan.queue[scan.idx]
-    local a = scan.acc[q.id]
-    if a then
-        P.Record(q.id, a.low, a.qty, true, a.b)
-        scan.found = (scan.found or 0) + 1
-    else
-        P.Record(q.id, nil, 0, true, {})
-    end
-    scan.idx, scan.page = scan.idx + 1, 0
-end
-
--- Sends the next request (exact search, page by page).
-function SendNext(fromClick)
-    if not scan or scan.mode ~= "items" then return end
-    if scan.manual and not fromClick then return end
-    if scan.idx > #scan.queue then FinishScan(); return end
-    local canQuery = CanSendAuctionQuery()
-    if not canQuery then
-        if not scan.manual then C_Timer.After(0.25, function() SendNext(false) end) end
-        return
-    end
-    local q = scan.queue[scan.idx]
-    scan.awaiting = true
-    scan.reqId = (scan.reqId or 0) + 1
-    local req = scan.reqId
-    scan.ours = true
-    Status((Tr("Profession scan: %d / %d  ·  %s%s")):format(scan.idx, #scan.queue, q.name,
-        scan.page > 0 and (" (page " .. (scan.page + 1) .. ")") or ""))
-    QueryAuctionItems(q.name, nil, nil, scan.page, false, nil, false, true, nil)
-    -- No answer: retry once, then move to the next item.
-    C_Timer.After(5, function()
-        if scan and scan.reqId == req and scan.awaiting and not scan.manual then
-            scan.awaiting = false
-            scan.retries = (scan.retries or 0) + 1
-            if scan.retries > 1 then scan.retries = 0; FinalizeItem() end
-            SendNext(false)
-        end
-    end)
-end
-
-local function OnItemsPage()
-    local batch, total = GetNumAuctionItems("list")
-    local q = scan.queue[scan.idx]
-    for i = 1, batch do
-        local name, count, buyout, id = ReadListing(i)
-        if id == q.id or (name == q.name) then Accumulate(scan.acc, name, count, buyout, q.id) end
-    end
-    scan.awaiting = false
-    scan.retries = 0
-    if (scan.page + 1) * (NUM_AUCTION_ITEMS_PER_PAGE or 50) < (total or 0) and scan.page < 20 then
-        scan.page = scan.page + 1
-    else
-        FinalizeItem()
-    end
-    if scan.idx > #scan.queue then FinishScan(); return end
-    if scan.manual then
-        Status((Tr("%d / %d  ·  click Continue for the next search")):format(scan.idx, #scan.queue))
-    else
-        C_Timer.After(0.05, function() SendNext(false) end)
-    end
 end
 
 -- Full scan: read in batches so the game does not freeze.
@@ -603,73 +509,9 @@ local function ModernReady()
     return not AHM.IsThrottledMessageSystemReady or AHM.IsThrottledMessageSystemReady()
 end
 
-local ModernSend
-local function ModernFinalize(found, low, qty)
-    local q = scan.queue[scan.idx]
-    if found then
-        P.Record(q.id, low, qty, true)
-        scan.found = (scan.found or 0) + 1
-    elseif scan.complete then
-        P.Record(q.id, nil, 0, true)
-    end
-    scan.idx = scan.idx + 1
-    if scan.idx > #scan.queue then FinishScan(); return end
-    if scan.manual then
-        Status((Tr("%d / %d  ·  click Continue for the next search")):format(scan.idx, #scan.queue))
-    else
-        C_Timer.After(0.05, function() ModernSend(false) end)
-    end
-end
-
-function ModernSend(fromClick)
-    if not scan or scan.mode ~= "items" then return end
-    if scan.manual and not fromClick then return end
-    if scan.idx > #scan.queue then FinishScan(); return end
-    if not ModernReady() then
-        if not scan.manual then C_Timer.After(0.2, function() ModernSend(false) end) end
-        return
-    end
-    local q = scan.queue[scan.idx]
-    scan.awaiting = true
-    scan.reqId = (scan.reqId or 0) + 1
-    local req = scan.reqId
-    Status((Tr("Profession scan: %d / %d  ·  %s")):format(scan.idx, #scan.queue, q.name))
-    local sorts = {}
-    if Enum and Enum.AuctionHouseSortOrder then
-        sorts[1] = { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false }
-    end
-    local ok = pcall(AHM.SendBrowseQuery, { searchString = q.name, sorts = sorts, filters = {}, itemClassFilters = {} })
-    if not ok then
-        scan.awaiting = false
-        ModernFinalize(false)
-        return
-    end
-    C_Timer.After(6, function()
-        if scan and scan.reqId == req and scan.awaiting and not scan.manual then
-            scan.awaiting = false
-            ModernFinalize(false)
-        end
-    end)
-end
-
 local function ModernOnBrowse()
     if not IsModern() then return end
     local results = AHM.GetBrowseResults and AHM.GetBrowseResults() or {}
-    if scan and scan.mode == "items" and scan.awaiting then
-        scan.awaiting = false
-        local q = scan.queue[scan.idx]
-        local low, qty
-        for _, r in ipairs(results) do
-            local id = r.itemKey and r.itemKey.itemID
-            if id == q.id and r.minPrice and r.minPrice > 0 then
-                if not low or r.minPrice < low then low = r.minPrice end
-                qty = (qty or 0) + (r.totalQuantity or 0)
-            end
-        end
-        scan.complete = not AHM.HasFullBrowseResults or AHM.HasFullBrowseResults()
-        ModernFinalize(low ~= nil, low, qty)
-        return
-    end
     -- Search made by hand or by another addon: note the minimum prices seen.
     for _, r in ipairs(results) do
         local id = r.itemKey and r.itemKey.itemID
@@ -677,93 +519,103 @@ local function ModernOnBrowse()
     end
 end
 
+-- Scan size log: one line per full scan, to spot a partial answer from the server.
+local LOG_KEEP = 20
+local function ScanLog()
+    local st = ns.db.scan[Realm()] or {}
+    ns.db.scan[Realm()] = st
+    st.log = st.log or {}
+    return st, st.log
+end
+
+-- Usual number of auctions: median of the last complete scans (nil if fewer than 2).
+local function UsualAuctions(log)
+    local v = {}
+    for k = #log, 1, -1 do
+        if not log[k].partial then v[#v + 1] = log[k].auctions end
+        if #v >= 5 then break end
+    end
+    if #v < 2 then return nil end
+    table.sort(v)
+    return v[math.floor((#v + 1) / 2)]
+end
+P._UsualAuctions = UsualAuctions
+
+local ITEM_WAIT = 30 -- seconds to wait for the game to load listings it did not have item data for
+
+-- Full scan (modern AH). The game sends every listing, but the ones whose item the client has not
+-- loaded yet come back without quantity or price ("hasAllInfo" false), more so right after login:
+-- those are asked for and read again until they arrive, like Auctionator does, instead of being
+-- dropped. Then the scan size is logged and compared with the usual one.
 local function ModernProcessFull()
     if not IsModern() then return end
     local n = AHM.GetNumReplicateItems and AHM.GetNumReplicateItems() or 0
+    local stats = { auctions = n, read = 0, ghosts = 0, units = 0 }
+    local pending = {}
+    local function Read(k)
+        local name, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemId, hasAll = AHM.GetReplicateItemInfo(k)
+        if not itemId or (C_Item and C_Item.DoesItemExistByID and not C_Item.DoesItemExistByID(itemId)) then
+            return "ghost"
+        end
+        if hasAll == false or not count then
+            if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemId) end
+            return "wait"
+        end
+        Accumulate(scan.acc, name, count, buyout or 0, itemId)
+        stats.read, stats.units = stats.read + 1, stats.units + count
+        return "ok"
+    end
+    local function Finish()
+        local nItems = 0
+        for _ in pairs(scan.acc) do nItems = nItems + 1 end
+        stats.t, stats.items, stats.missing = time(), nItems, #pending
+        local st, log = ScanLog()
+        local usual = UsualAuctions(log)
+        stats.partial = (n > 0 and #pending > n * 0.02) or (usual and n < usual * 0.6) or nil
+        log[#log + 1] = stats
+        while #log > LOG_KEEP do table.remove(log, 1) end
+        for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
+        -- A partial scan would mark half the AH as sold out: only a complete one records what it did not see.
+        -- Same for the Market tab: it would count every item missing from the answer as sold.
+        if not stats.partial then
+            RecordUnseen(scan.acc)
+            if ns.Market then ns.Market.OnFullScan(scan.acc) end
+        end
+        st.lastFull = time()
+        if stats.partial then
+            FinishScan((Tr("Full scan looks partial: %d auctions read (usually ~%d). Prices seen are kept; scan again in 15 min.")):format(
+                stats.read, usual or n))
+        else
+            FinishScan((Tr("Full scan done: %d auctions, %d items.")):format(stats.read, nItems))
+        end
+    end
+    local waited = 0
+    local function Retry()
+        if not scan or scan.mode ~= "full" then return end
+        local still = {}
+        for _, k in ipairs(pending) do
+            local r = Read(k)
+            if r == "wait" then still[#still + 1] = k elseif r == "ghost" then stats.ghosts = stats.ghosts + 1 end
+        end
+        pending = still
+        if #pending == 0 or waited >= ITEM_WAIT then Finish(); return end
+        Status((Tr("Full scan: loading %d items the game did not know yet…")):format(#pending))
+        waited = waited + 0.5
+        C_Timer.After(0.5, Retry)
+    end
     local i = 0
     local function Chunk()
         if not scan or scan.mode ~= "full" then return end
         local last = math.min(n - 1, i + 499)
         for k = i, last do
-            local name, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemId = AHM.GetReplicateItemInfo(k)
-            Accumulate(scan.acc, name, count or 1, buyout or 0, itemId)
+            local r = Read(k)
+            if r == "wait" then pending[#pending + 1] = k elseif r == "ghost" then stats.ghosts = stats.ghosts + 1 end
         end
         i = last + 1
         Status((Tr("Full scan: reading %d / %d auctions…")):format(math.min(i, n), n))
-        if i < n then
-            C_Timer.After(0.02, Chunk)
-        else
-            for id, a in pairs(scan.acc) do P.Record(id, a.low, a.qty, true, a.b) end
-            RecordUnseen(scan.acc)
-            if ns.Market then ns.Market.OnFullScan(scan.acc) end
-            ns.db.scan[Realm()] = ns.db.scan[Realm()] or {}
-            ns.db.scan[Realm()].lastFull = time()
-            FinishScan()
-        end
+        if i < n then C_Timer.After(0.02, Chunk) else Retry() end
     end
     Chunk()
-end
-
-function P.StartItemScan()
-    if scan then
-        if scan.mode == "items" and scan.manual then
-            if IsModern() then ModernSend(true) else SendNext(true) end
-            return
-        end
-        FinishScan(Tr("Scan stopped.")); return
-    end
-    local queue = ScanTargets()
-    if #queue == 0 then
-        Status(Tr("Open your profession windows first so the addon learns your recipes."))
-        return
-    end
-    scan = { mode = "items", queue = queue, idx = 1, page = 0, acc = {} }
-    UpdateBar()
-    if IsModern() then ModernSend(true) else SendNext(true) end
-end
-
--- ------------------------------------------------------------ material depth
--- For each stackable material of your recipes: every listing, price by price (commodity search).
--- Works at any time, unlike the full scan limited to once per 15 min.
-local function DepthIds()
-    local ids, list = {}, {}
-    for _, recipes in pairs(ns.db.recipes) do
-        for _, r in pairs(recipes) do
-            for _, rg in ipairs(r.r or {}) do
-                local id = rg[1]
-                if id and not ids[id] and not ns.db.vendor[id] and ns.IsCommodity(id) then ids[id] = true; list[#list + 1] = id end
-            end
-        end
-    end
-    return list
-end
-
-local function DepthNext()
-    if not scan or scan.mode ~= "depth" then return end
-    scan.i = scan.i + 1
-    local id = scan.ids[scan.i]
-    if not id then FinishScan(); return end
-    local function Send()
-        if not scan or scan.mode ~= "depth" or scan.ids[scan.i] ~= id then return end
-        if AHM.IsThrottledMessageSystemReady and not AHM.IsThrottledMessageSystemReady() then C_Timer.After(0.2, Send); return end
-        Status((Tr("Market depth: %s (%d / %d)…")):format(P.Name(id), scan.i, #scan.ids))
-        scan.cur, scan.sent = id, GetTime()
-        AHM.SendSearchQuery(AHM.MakeItemKey(id), { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }, false)
-        -- No answer: move to the next one.
-        local my = scan.i
-        C_Timer.After(5, function() if scan and scan.mode == "depth" and scan.i == my and scan.cur == id then scan.cur = nil; DepthNext() end end)
-    end
-    Send()
-end
-
-StartDepth = function(prev)
-    if not IsModern() or not AHM.SendSearchQuery or not AHM.MakeItemKey or not AHM.GetCommoditySearchResultInfo then return false end
-    local ids = DepthIds()
-    if #ids == 0 then return false end
-    scan = { mode = "depth", ids = ids, i = 0, got = 0, items = prev and #prev.queue or 0 }
-    UpdateBar()
-    DepthNext()
-    return true
 end
 
 -- ------------------------------------------------------------ list scan (Lists tab)
@@ -839,44 +691,17 @@ local function OnCommodityResults(itemID)
         scan.got = scan.got + 1
         scan.cur = nil
         C_Timer.After(0.05, ListNext)
-        return
     end
-    if not scan or scan.mode ~= "depth" or itemID ~= scan.cur then return end
-    local n = AHM.GetNumCommoditySearchResults and AHM.GetNumCommoditySearchResults(itemID) or 0
-    local ladder, total, low = {}, 0, nil
-    for k = 1, n do
-        local r = AHM.GetCommoditySearchResultInfo(itemID, k)
-        if r and r.unitPrice and r.quantity then
-            ladder[r.unitPrice] = (ladder[r.unitPrice] or 0) + r.quantity
-            total = total + r.quantity
-            low = low and math.min(low, r.unitPrice) or r.unitPrice
-        end
-    end
-    if low then P.Record(itemID, low, total, true, ladder) end
-    if ns.Market and ns.Market.SetBook then ns.Market.SetBook(itemID, ladder) end
-    scan.got = scan.got + 1
-    scan.cur = nil
-    C_Timer.After(0.05, DepthNext)
 end
 
--- Full scan possible now? (the game allows it every 15 min)
-local function FullReady()
-    local st = ns.db.scan[Realm()] or {}
-    local since = math.min(st.lastFull and (time() - st.lastFull) or math.huge, st.fullFail and (time() - st.fullFail) or math.huge)
-    if since < 15 * 60 then return false end
-    if IsModern() then return AHM.ReplicateItems ~= nil end
-    local _, canAll = CanSendAuctionQuery()
-    return canAll and true or false
-end
+local FULL_WAIT = 300  -- seconds to wait for the server's answer to a full scan
+local lateUntil = 0    -- a full scan answer arriving after we stopped waiting is still taken until then
 
--- A single button: full scan when the game allows it (prices of everything + Market tab),
--- otherwise a scan of your professions only (materials and crafts).
+-- The Scan button: always a full scan of the auction house (the game allows one every 15 min).
+-- Clicking again while it runs stops it.
 function P.Scan()
-    if scan then
-        if scan.mode == "items" then P.StartItemScan() else FinishScan(Tr("Scan stopped.")) end
-        return
-    end
-    if FullReady() then P.StartFullScan() else P.StartItemScan() end
+    if scan then FinishScan(Tr("Scan stopped.")); return end
+    P.StartFullScan()
 end
 
 function P.StartFullScan()
@@ -892,14 +717,14 @@ function P.StartFullScan()
         UpdateBar()
         local started, my = GetTime(), scan
         AHM.ReplicateItems()
-        -- If the server refuses (cooldown running), no result arrives: give up after 60 s.
+        -- If the server refuses (cooldown running), no result arrives: stop waiting after FULL_WAIT,
+        -- but still take the answer if it comes in the next 10 minutes.
         local function Tick()
             if not scan or scan ~= my or scan.got then return end
             local el = math.floor(GetTime() - started)
-            if el >= 120 then
-                ns.db.scan[Realm()] = ns.db.scan[Realm()] or {}
-                ns.db.scan[Realm()].fullFail = time()
-                FinishScan(Tr("Full scan: no answer in 2 min (server busy or cooldown). Click Scan again: it scans your professions and their market depth."))
+            if el >= FULL_WAIT then
+                lateUntil = GetTime() + 600
+                FinishScan(Tr("Full scan: no answer from the server in 5 min (busy realm). Click Scan to try again."))
                 return
             end
             Status((Tr("Full scan: waiting for the server… %d s")):format(el))
@@ -937,7 +762,7 @@ local function BuildBar()
     icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(22, 22); icon:SetPoint("TOPLEFT", 10, -8)
     bar.scan = T.Button(bar, Tr("Scan"), 96, 26, function() P.Scan() end)
     bar.scan:SetPoint("LEFT", icon, "RIGHT", 8, 0)
-    bar.scan.tooltip = Tr("Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes: in between, it scans only your professions' reagents and crafts.")
+    bar.scan.tooltip = Tr("Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes.")
     -- Status line under the buttons: what just happened, or what the addon is preparing.
     bar.status = T.Text(bar, 11, { color = C.muted })
     bar.status:SetPoint("BOTTOMLEFT", 40, 8)
@@ -947,6 +772,12 @@ local function BuildBar()
     for _ in pairs(DB()) do n = n + 1 end
     local last = ns.db.scan[Realm()] and ns.db.scan[Realm()].lastFull
     local txt = (Tr("%d prices known%s")):format(n, last and ("  ·  full scan " .. P.Ago(time() - last)) or "")
+    local log = ns.db.scan[Realm()] and ns.db.scan[Realm()].log
+    local ls = log and log[#log]
+    if ls then
+        txt = txt .. "  ·  " .. (ls.partial and "|cffe08a52" or "") .. (Tr("%d auctions")):format(ls.read or 0)
+            .. (ls.partial and (" (" .. Tr("partial") .. ")|r") or "")
+    end
     -- The market needs a full scan every session: remind it.
     if not last or time() - last > 2 * 3600 then txt = txt .. Tr("  ·  |cffe0a83dclick Scan (Market tab needs one per session)|r") end
     bar.status:SetText(txt)
@@ -958,7 +789,7 @@ end
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Prices") end
 for _, e in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
-    "AUCTION_ITEM_LIST_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN",
+    "AUCTION_ITEM_LIST_UPDATE",
     "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", "AUCTION_HOUSE_BROWSE_RESULTS_ADDED", "REPLICATE_ITEM_LIST_UPDATE",
     "COMMODITY_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_UPDATED" }) do
     pcall(ev.RegisterEvent, ev, e)
@@ -972,14 +803,6 @@ ev:SetScript("OnEvent", function(_, event, ...)
         C_Timer.After(0, BuildBar)
     elseif event == "AUCTION_HOUSE_CLOSED" then
         if scan then FinishScan(Tr("AH closed, scan interrupted.")) end
-    elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
-        local addon = ...
-        if addon == ns.name and scan and scan.mode == "items" then
-            scan.manual = true
-            scan.awaiting = false
-            UpdateBar()
-            Status(Tr("The game requires one click per search: click Continue."))
-        end
     elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" or event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" then
         ModernOnBrowse()
     elseif event == "COMMODITY_SEARCH_RESULTS_UPDATED" then
@@ -987,6 +810,12 @@ ev:SetScript("OnEvent", function(_, event, ...)
     elseif event == "ITEM_SEARCH_RESULTS_UPDATED" then
         OnListItemResults(...)
     elseif event == "REPLICATE_ITEM_LIST_UPDATE" then
+        -- Answer that came after we stopped waiting: take it anyway.
+        if not scan and GetTime() < lateUntil then
+            lateUntil = 0
+            scan = { mode = "full", acc = {} }
+            UpdateBar()
+        end
         if scan and scan.mode == "full" then
             scan.got = true
             debounce = debounce + 1
@@ -998,12 +827,6 @@ ev:SetScript("OnEvent", function(_, event, ...)
             debounce = debounce + 1
             local my = debounce
             C_Timer.After(2, function() if my == debounce and scan and scan.mode == "full" then ProcessFull() end end)
-        elseif scan and scan.mode == "items" and scan.awaiting then
-            debounce = debounce + 1
-            local my = debounce
-            C_Timer.After(0.3, function()
-                if my == debounce and scan and scan.mode == "items" and scan.awaiting then OnItemsPage() end
-            end)
         else
             -- Search made by hand (or by another addon): note the prices seen.
             local batch = GetNumAuctionItems("list")

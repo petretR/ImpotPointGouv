@@ -501,6 +501,83 @@ Check("price history: data saved under an empty realm merges", function()
     Assert(a.cur == 12 and a.o, "newest current price and open day")
 end)
 
+Check("Scan always asks for a full scan, and takes a late answer", function()
+    local P = ns.Prices
+    local saved = C_AuctionHouse
+    local calls = { replicate = 0, browse = 0 }
+    C_AuctionHouse = {
+        SendBrowseQuery = function() calls.browse = calls.browse + 1 end,
+        ReplicateItems = function() calls.replicate = calls.replicate + 1 end,
+        GetNumReplicateItems = function() return 1 end,
+        GetReplicateItemInfo = function()
+            return "Item 778001", nil, 5, nil, nil, nil, nil, nil, nil, 5000, nil, nil, nil, nil, nil, nil, 778001
+        end,
+    }
+    local st = ns.db.scan[ns.Realm()] or {}
+    ns.db.scan[ns.Realm()] = st
+    st.lastFull = nil
+    P.Scan()
+    Assert(calls.replicate == 1 and calls.browse == 0, "Scan sent a full scan request, nothing else")
+    RunTimers(301) -- the server never answers: the addon stops waiting after 5 min
+    Assert(not P.Scanning(), "stopped waiting after 5 min")
+    Assert(calls.browse == 0, "no profession scan as a fallback")
+    Fire("REPLICATE_ITEM_LIST_UPDATE") -- the answer comes late
+    RunTimers(3)
+    local e = P.Entry(778001)
+    Assert(e and e.cur == 1000, "late answer recorded (1000 per unit)")
+    Assert(st.lastFull, "late answer counts as a full scan")
+    C_AuctionHouse = saved
+end)
+
+Check("full scan waits for item data, logs its size and flags a partial answer", function()
+    local P = ns.Prices
+    local saved, savedItem = C_AuctionHouse, C_Item.DoesItemExistByID
+    local st = ns.db.scan[ns.Realm()] or {}
+    ns.db.scan[ns.Realm()] = st
+    -- 3 listings: one ready, one whose item the client loads 1 s later, one ghost (item gone).
+    local loaded = false
+    local rows = {
+        [0] = { "Item 779001", 20, 400, 779001, true },
+        [1] = { "Item 779002", 5, 1000, 779002, false },
+        [2] = { nil, 1, 100, 779999, true },
+    }
+    C_Item.DoesItemExistByID = function(id) return id ~= 779999 end
+    C_AuctionHouse = {
+        SendBrowseQuery = function() end,
+        ReplicateItems = function() end,
+        GetNumReplicateItems = function() return 3 end,
+        GetReplicateItemInfo = function(k)
+            local r = rows[k]
+            local ready = r[5] or loaded
+            return r[1], nil, ready and r[2] or nil, nil, nil, nil, nil, nil, nil, ready and r[3] or nil,
+                nil, nil, nil, nil, nil, nil, r[4], ready
+        end,
+    }
+    st.lastFull, st.log = nil, nil
+    P.Scan()
+    Fire("REPLICATE_ITEM_LIST_UPDATE")
+    C_Timer.After(3, function() loaded = true end)
+    RunTimers(10)
+    Assert(not P.Scanning(), "scan finished")
+    local e = P.Entry(779002)
+    Assert(e and e.cur == 200 and e.qty == 5, "listing read once its item loaded (5 at 200)")
+    local log = st.log[#st.log]
+    Assert(log.auctions == 3 and log.read == 2 and log.ghosts == 1 and log.missing == 0, "scan size logged")
+    Assert(not log.partial, "first scans are not judged")
+    -- Usual size ~100 auctions: an answer of 3 is flagged partial and does not mark the rest as sold out.
+    st.log = { { auctions = 100, read = 100 }, { auctions = 110, read = 110 }, { auctions = 90, read = 90 } }
+    local onFull, marketCalls = ns.Market.OnFullScan, 0
+    ns.Market.OnFullScan = function() marketCalls = marketCalls + 1 end
+    Advance(16 * 60)
+    P.Scan()
+    Fire("REPLICATE_ITEM_LIST_UPDATE")
+    RunTimers(10)
+    ns.Market.OnFullScan = onFull
+    Assert(st.log[#st.log].partial, "partial answer flagged")
+    Assert(marketCalls == 0, "a partial scan does not feed the Market tab's sales")
+    C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end
