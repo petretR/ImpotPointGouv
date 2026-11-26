@@ -546,6 +546,11 @@ local function BuildSettings(page)
         "First batch of a new craft: at most this many, and a small share of what the AH sells per day.")
     Stepper(1, "Double when sold out within", function() return R().fastHours end, Clamp("fastHours", 1, 48), 1,
         function(v) return v .. " h" end, "When a whole batch sells this fast, the next one is twice as big.")
+    Head(2, "Demand")
+    Stepper(2, "Only crafts that sell at least", function() return R().minSales end, Clamp("minSales", 0, 100), 1,
+        function(v) return (Tr("%d / day")):format(v) end, "Units the AH buys per day (your sales or the market's). Below that, a big margin is not worth crafting.")
+    Stepper(2, "Skip markets with more stock than", function() return R().maxStockDays end, Clamp("maxStockDays", 1, 60), 1,
+        function(v) return (Tr("%d days of sales")):format(v) end, "Units listed divided by units sold per day.")
     Stepper(1, "Min margin", function() return R().minMargin end, Clamp("minMargin", 0, 500), 5, pct)
     Stepper(1, "Spend at most", function() return R().budgetPct end, Clamp("budgetPct", 5, 100), 5, pct,
         "Share of your total gold the craft queue can spend on reagents.")

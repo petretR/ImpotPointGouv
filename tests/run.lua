@@ -578,6 +578,35 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
 end)
 
+Check("queue profitable: demand decides, not the margin alone", function()
+    local Q, P = ns.Queue, ns.Prices
+    local rules = ns.Craft.Rules()
+    local stats = P.Stats
+    local function With(sales, n) P.Stats = function() return { sales = sales, n = n or 7 } end end
+    local rec = { pid = 780001, name = "Item 780001", made = 1 }
+    -- Big margin, nobody buys it: skipped.
+    With(0, 7)
+    Assert(Q.DemandVerdict(rec, { channel = "ah", profit = 50000, listed = 10 }, rules) == "nodemand", "0 sold/day: no")
+    -- No data at all and never posted: one test craft.
+    P.Stats = function() return nil end
+    Assert(Q.DemandVerdict(rec, { channel = "ah", profit = 50000, listed = 10 }, rules) == "test", "unknown demand: test")
+    -- 2 sold/day but 100 days of stock listed: flooded.
+    With(2)
+    Assert(Q.DemandVerdict(rec, { channel = "ah", profit = 5000, listed = 200 }, rules) == "flooded", "100 days of stock")
+    -- Small margin that sells a lot beats a big margin that sells little.
+    With(200)
+    local _, a = Q.DemandVerdict(rec, { channel = "ah", profit = 2000, listed = 300 }, rules)
+    With(1.5)
+    local _, b = Q.DemandVerdict(rec, { channel = "ah", profit = 10000, listed = 3 }, rules)
+    Assert(a > b, ("20s x 200/day (%d) ranks above 1g x 1.5/day (%d)"):format(a, b))
+    -- Your own sales come first.
+    P.Stats = function() return nil end
+    Assert(Q.DemandVerdict(rec, { channel = "ah", profit = 2000, listed = 5, sold7 = 14 }, rules) == "queue", "own sales: queue")
+    -- Vendor crafts are not gated by AH demand.
+    Assert(Q.DemandVerdict(rec, { channel = "vendor", profit = 300 }, rules) == "queue", "vendor craft")
+    P.Stats = stats
+end)
+
 Check("repost advice: one line in the tooltip, and in Auctionator's post confirmation", function()
     local TR = ns.Track
     local line = TR.AdviceText({ streak = 1, lost = 300, vendor = 2500, edge = 200 })

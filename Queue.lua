@@ -362,12 +362,42 @@ function Q.RichestAlt()
     return best and best:match("^[^%-]+") or nil
 end
 
+-- Units of an item the AH buys per day: your own sales of the last 7 days first, else the market's
+-- (units gone between scans). nil when the data is too thin to tell.
+function Q.Demand(rec, ev)
+    if (ev.sold7 or 0) > 0 then return ev.sold7 / 7, "own" end
+    local st = P.Stats and P.Stats(rec.pid)
+    if st and st.sales and st.sales > 0 then return st.sales, "market" end
+    if st and st.sales == 0 and (st.n or 0) >= 3 then return 0, "market" end
+    return nil
+end
+
+-- Decides what Queue profitable does with an AH craft: "queue", "test" (one craft to try an item
+-- whose demand is unknown), "nodemand" or "flooded". Also returns the expected profit per day.
+function Q.DemandVerdict(rec, ev, rules)
+    if ev.channel ~= "ah" then return "queue", ev.profit or 0 end
+    local d = Q.Demand(rec, ev)
+    if d == nil then
+        local c = Cycle(ns.db.items[rec.pid] or rec.name, time() - 14 * 86400)
+        if c.posted > 0 and c.sold == 0 then return "nodemand", 0 end
+        return "test", 0
+    end
+    if d < (rules.minSales or 1) then return "nodemand", 0 end
+    local listed = ev.listed or 0
+    if listed / d > (rules.maxStockDays or 7) and (ev.sold7 or 0) == 0 then return "flooded", 0 end
+    -- What you can expect to sell per day: your share of the market's sales, at least one unit a day
+    -- when the market sells that many (a thin market leaves room for one more seller).
+    local perUnit = (ev.profit or 0) / math.max(1, rec.made or 1)
+    local mine = math.max(d * (rules.startShare or 5) / 100, math.min(d, 1))
+    return "queue", perUnit * mine, d
+end
+
 function Q.AutoQueue(allProfs)
     local rules = CR.Rules()
     local profs = allProfs and Q.MyProfessions() or { CR.ProfName() }
     local me = UnitGUID("player")
     local db = DB()
-    local added, skipped, pending = 0, 0, 0
+    local added, skipped, pending, noDemand, tests, unprofitable = 0, 0, 0, 0, 0, 0
     local cands = {}
     for _, prof in ipairs(profs) do
         for k, e in pairs(db) do if e.auto and e.prof == prof and e.owner == me then db[k] = nil end end
@@ -382,14 +412,30 @@ function Q.AutoQueue(allProfs)
                 local runs = math.ceil(math.max(0, keepN - ns.GetItemCount(rec.pid)) / math.max(1, rec.made or 1))
                 local k = Key(prof, rec.name)
                 if runs > 0 and not (db[k] and not db[k].auto) then
-                    cands[#cands + 1] = { k = k, prof = prof, name = rec.name, runs = runs, cost = ev.cost or 0, roi = math.huge }
+                    cands[#cands + 1] = { k = k, prof = prof, name = rec.name, runs = runs, cost = ev.cost or 0, perDay = math.huge }
                 end
+            elseif not rec.enchant and ev.profit and not ev.infoPending and not ev.unsold and not ev.whiteGear
+                and not profitable and not Q.IsMaterial(rec.pid) then
+                -- Reagents count at their market price: under the minimum, selling them as they are pays about as much.
+                unprofitable = unprofitable + 1
             elseif not rec.enchant and ev.profit and not ev.unsold and not ev.whiteGear and not ev.infoPending
                 and not Q.IsMaterial(rec.pid)
                 and ev.profit >= rules.minProfit and (ev.margin or 0) * 100 >= rules.minMargin then
                 local flooded = ev.channel == "ah" and (ev.listed or 0) > rules.maxListed and (ev.sold7 or 0) == 0
-                if flooded then
+                local verdict, perDay = "queue", 0
+                if not flooded then verdict, perDay = Q.DemandVerdict(rec, ev, rules) end
+                if flooded or verdict == "flooded" then
                     skipped = skipped + 1
+                elseif verdict == "nodemand" then
+                    noDemand = noDemand + 1
+                elseif verdict == "test" then
+                    -- Unknown demand: one craft to see if it sells, kept apart from the real queue.
+                    local k = Key(prof, rec.name)
+                    if I.Stock(rec.pid) == 0 and not (db[k] and not db[k].auto) then
+                        cands[#cands + 1] = { k = k, prof = prof, name = rec.name, runs = 1, cost = ev.cost or 0,
+                            perDay = -1, test = true }
+                        tests = tests + 1
+                    end
                 else
                     local target = Q.Target(rec, ev, rules, true)
                     -- The personal reserve ("keep") adds to the target: it does not count as stock to sell.
@@ -399,7 +445,7 @@ function Q.AutoQueue(allProfs)
                     local k = Key(prof, rec.name)
                     if runs > 0 and not (db[k] and not db[k].auto) then
                         cands[#cands + 1] = { k = k, prof = prof, name = rec.name, runs = runs, cost = ev.cost or 0,
-                            roi = (ev.cost or 0) > 0 and ev.profit / ev.cost or math.huge }
+                            perDay = perDay }
                     end
                 end
             end
@@ -416,14 +462,15 @@ function Q.AutoQueue(allProfs)
             if ev and ev.cost then budget = budget - ev.cost * e.n end
         end
     end
-    table.sort(cands, function(a, b) return a.roi > b.roi end)
+    -- Best expected profit per day first (personal reserves first, one-craft tests last).
+    table.sort(cands, function(a, b) return a.perDay > b.perDay end)
     local left, cut = math.max(0, budget), false
     for _, c in ipairs(cands) do
         local n = c.runs
         if c.cost > 0 then n = math.min(n, math.floor(left / c.cost)) end
         if n < c.runs then cut = true end
         if n > 0 then
-            db[c.k] = { prof = c.prof, name = c.name, n = n, auto = true, owner = me }
+            db[c.k] = { prof = c.prof, name = c.name, n = n, auto = true, owner = me, test = c.test or nil }
             left = left - n * c.cost
             added = added + 1
         end
@@ -431,7 +478,10 @@ function Q.AutoQueue(allProfs)
     if added > 0 and not Q.IsCrafter(me) then CrafterSet()[me] = true end -- filling a queue makes you a crafter
     local msg = (Tr("%d craft%s queued%s%s%s.")):format(added, added == 1 and "" or "s",
         cut and (Tr(" · capped by budget (%s)")):format(ns.FormatMoney(math.max(0, budget), { iconSize = 10 })) or "",
-        skipped > 0 and (Tr(" · %d skipped (flooded market)")):format(skipped) or "",
+        (skipped > 0 and (Tr(" · %d skipped (flooded market)")):format(skipped) or "")
+            .. (noDemand > 0 and (Tr(" · %d skipped (nobody buys them)")):format(noDemand) or "")
+            .. (tests > 0 and (Tr(" · %d test craft%s (demand unknown)")):format(tests, tests == 1 and "" or "s") or "")
+            .. (unprofitable > 0 and (Tr(" · %d below your minimum profit or margin")):format(unprofitable) or ""),
         pending > 0 and (Tr(" · %d still loading, click again in a second")):format(pending) or "")
     -- Crafts for the vendor: "×30 while Linen Cloth ≤ 24c".
     local vendorLines = {}
@@ -1059,7 +1109,9 @@ function Q.Refresh()
         if c then
             r.entry = c
             r.icon:SetTexture(c.rec.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-            r.name:SetText(c.inter and ("|cff9ad98c" .. c.name .. Tr("|r  |cff615f5c· reagent|r")) or c.name)
+            local qe = c.key and DB()[c.key]
+            r.name:SetText(c.inter and ("|cff9ad98c" .. c.name .. Tr("|r  |cff615f5c· reagent|r"))
+                or (qe and qe.test and (c.name .. Tr("  |cff615f5c· test|r")) or c.name))
             r.name:SetWidth(c.inter and 186 or 124) -- no keep button or +/- on an intermediate
             r.keep:SetItem(not c.inter and c.rec.pid or nil)
             r.count:SetText("×" .. c.n)

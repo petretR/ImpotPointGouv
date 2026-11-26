@@ -343,6 +343,10 @@ function CR.Rules()
     if q.startShare == nil then q.startShare = 5 end      -- % of the market's estimated daily sales
     if q.fastHours == nil then q.fastHours = 2 end
     if q.maxListed == nil or q.maxListed == 500 then q.maxListed = 10000 end -- regional AH
+    -- Demand: a craft for the AH needs real sales (units per day, yours or the market's) and a market
+    -- that is not flooded (days to sell what is listed).
+    if q.minSales == nil then q.minSales = 1 end
+    if q.maxStockDays == nil then q.maxStockDays = 7 end
     if q.unsoldPosts == nil then q.unsoldPosts = 3 end
     if q.ignoreWhiteGear == nil then q.ignoreWhiteGear = true end
     if q.deposit == nil then q.deposit = 100 end           -- AH deposit per listing (copper)
