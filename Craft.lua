@@ -959,13 +959,25 @@ local function FindRecipeText(button)
     end
 end
 
+-- Profit next to each recipe of the profession list. ForeverRecipes draws its own in the same place
+-- (since its November update): then ours stays off unless you turn it on (/ipg profit).
+local function OtherAddonShowsProfit()
+    local f = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+    return f and f("ForeverRecipes") and true or false
+end
+function CR.InlineProfit()
+    local s = ns.db.settings.inlineProfit
+    if s ~= nil then return s end
+    return not OtherAddonShowsProfit()
+end
+
 local seen = {}
 DecorateList = function()
     wipe(byName)
     for _, rec in ipairs(recipes) do byName[rec.name] = rec end
     local root = api and api.Frame()
     for btn, lbl in pairs(labels) do lbl:Hide() end
-    if not root or not root:IsShown() or ns.db.settings.inlineProfit == false then return end
+    if not root or not root:IsShown() or not CR.InlineProfit() then return end
     wipe(seen)
     listLimit = root:GetLeft() and (root:GetLeft() + root:GetWidth() * 0.42) or nil
     local function Walk(frame, depth)
