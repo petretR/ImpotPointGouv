@@ -701,7 +701,7 @@ function M.BuildSend(f)
     p.sug:Hide()
     p.chips = {}
     for i = 1, 4 do
-        local b = T.Button(p, "", 122, 22, function(self) if self.name then p.to:SetText(self.name) end end)
+        local b = T.Button(p, "", 122, 22, function(self) if self.name then p.to:SetText(self.name); M.DrawSend() end end)
         b:SetPoint("TOPLEFT", pad + ((i - 1) % 2) * 128, -70 - math.floor((i - 1) / 2) * 26)
         p.chips[i] = b
     end
