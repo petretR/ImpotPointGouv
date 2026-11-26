@@ -1221,4 +1221,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2)
         C_Timer.After(0.1, UpdateVendorButton)
     end
 end)
-ns.On("INVENTORY_CHANGED", function() Q.Refresh() end)
+-- Bags change many times in a row (selling, looting, crafting): refresh once, shortly after the last one.
+local invPending
+ns.On("INVENTORY_CHANGED", function()
+    if invPending then return end
+    invPending = true
+    C_Timer.After(0.5, function() invPending = false; Q.Refresh() end)
+end)

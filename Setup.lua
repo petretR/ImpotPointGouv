@@ -60,7 +60,8 @@ function S.Steps()
             Add(false, "Log in once on " .. CharLabel(crafter), "So the addon can see its professions.")
         else
             for _, p in ipairs(c.profs) do
-                if not p.gather then
+                -- A profession just learned (skill under 5) has nothing to read yet; levelling it opens the window anyway.
+                if not p.gather and (p.rank or 0) >= 5 then
                     local seen = ns.db.profChars and ns.db.profChars[p.name] and ns.db.profChars[p.name][crafter]
                     Add(seen and true or false, (Tr("Open %s once on %s")):format(p.name, CharLabel(crafter)),
                         "Open the profession window so the addon reads your recipes.")
