@@ -822,6 +822,19 @@ Check("vendor flip: a few copper under the vendor price is not a flip", function
         for _, f in ipairs(M.Flips()) do Assert(f.id ~= 781003, "old 7 c flip still shown") end
     end
 end)
+Check("several AH sale mails paid in one gold change are each recorded as a sale", function()
+    local L = ns.Ledger
+    L.OnMoney()
+    local n0 = #ns.db.tx
+    L.Expect({ amount = 505542, k = "ah_sale", ttl = 20, info = { i = "Cured Rugged Hide", q = 2 } })
+    L.Expect({ amount = 74266, k = "ah_sale", ttl = 20, info = { i = "Black Dragonscale", q = 5 } })
+    money = money + 505542 + 74266
+    L.OnMoney()
+    local a, b = ns.db.tx[n0 + 1], ns.db.tx[n0 + 2]
+    Assert(a and b and a.k == "ah_sale" and b.k == "ah_sale", "two sales, got " .. tostring(a and a.k) .. " / " .. tostring(b and b.k))
+    Assert(a.i == "Cured Rugged Hide" and a.a == 505542 and b.i == "Black Dragonscale", "each with its item and amount")
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

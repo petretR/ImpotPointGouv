@@ -190,13 +190,16 @@ local function TakePending(delta)
 end
 
 -- Sum of expected vendor sales (in order) equal to the change, when none matches on its own.
-local function TakeVendorBatch(delta)
+local MAIL_KINDS = { ah_sale = true, ah_refund = true, mail = true }
+-- Several pending operations of one kind arriving in a single gold change (vendor sales one after the
+-- other, or several mails collected at once: the game may add up their gold before telling us).
+local function TakeBatch(delta, kinds)
     local now, sum, picks = GetTime(), 0, {}
     for _, e in ipairs(pending) do
         if e.exp >= now and e.amount == delta then return nil end
     end
     for i, e in ipairs(pending) do
-        if e.k == "vendor_sell" and e.amount and e.exp >= now then
+        if kinds[e.k] and e.amount and e.exp >= now then
             sum = sum + e.amount
             picks[#picks + 1] = i
             if sum >= delta then break end
@@ -207,6 +210,9 @@ local function TakeVendorBatch(delta)
     for j = #picks, 1, -1 do table.insert(out, 1, tremove(pending, picks[j])) end
     return out
 end
+local VENDOR_KINDS = { vendor_sell = true }
+local function TakeVendorBatch(delta) return TakeBatch(delta, VENDOR_KINDS) end
+local function TakeMailBatch(delta) return TakeBatch(delta, MAIL_KINDS) end
 
 local function Active(name) return (ctx[name] or 0) >= GetTime() end
 
@@ -246,10 +252,10 @@ function L.OnMoney()
     local delta = now - lastMoney
     lastMoney = now
     if delta == 0 then return end
-    -- Several vendor sales arriving in a single gold change: one row per item.
-    local batch = delta > 0 and TakeVendorBatch(delta)
+    -- Several vendor sales, or several mails, arriving in a single gold change: one row each.
+    local batch = delta > 0 and (TakeVendorBatch(delta) or TakeMailBatch(delta))
     if batch then
-        for _, e in ipairs(batch) do L.AddTx("vendor_sell", e.amount, e.info) end
+        for _, e in ipairs(batch) do L.AddTx(e.k, e.amount, e.info) end
         L.Snapshot(now)
         ns.Fire("LEDGER_CHANGED")
         return
