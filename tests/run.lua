@@ -593,6 +593,7 @@ Check("repost advice: one line in the tooltip, and in Auctionator's post confirm
     TR._HookAuctionator()
     local msg = sale:GetConfirmationMessage()
     Assert(msg and msg:find("2", 1, true), "confirmation explains the wait: " .. tostring(msg))
+    Assert(select(2, msg:gsub("\n", "")) <= 1, "two lines at most (Auctionator's dialog does not grow)")
     TR.PostAdvice = function() return nil end
     Assert(sale:GetConfirmationMessage() == nil, "no advice: no confirmation")
     TR.PostAdvice = orig

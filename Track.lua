@@ -361,7 +361,8 @@ local function PostWarning(sale)
     local name = info.itemLink:match("%[(.-)%]") or info.itemName
     local adv = TR.PostAdvice(name, info.itemID)
     if not adv or not (adv.pauseUntil or adv.vendor) then return nil end
-    return "|cffe0a83dImpotPointGouv|r\n" .. TR.AdviceText(adv) .. "\n\n" .. Tr("Post anyway?")
+    -- Two lines at most: Auctionator's dialog keeps its height, a longer text runs under its buttons.
+    return "|cffe0a83dImpotPointGouv:|r " .. TR.AdviceText(adv) .. "\n" .. Tr("Post anyway?")
 end
 TR._PostWarning = PostWarning
 
