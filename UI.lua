@@ -105,6 +105,24 @@ local function BuildBilan(page)
             card.accent:SetSize(3, 40)
             card.accent:SetPoint("LEFT", 0, 0)
         end
+        if i == 4 then
+            card:EnableMouse(true)
+            card:SetScript("OnEnter", function(self)
+                local og = page.origins
+                if not og or og.n == 0 then return end
+                local function M(v) return ns.FormatMoney(v, { iconSize = 11 }) end
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+                GameTooltip:AddLine(Tr("Where your AH sales came from"), 0.88, 0.66, 0.24)
+                GameTooltip:AddDoubleLine(Tr("Farmed or looted"), M(og.farmed), 1, 1, 1, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Bought, then resold"), M(og.bought), 1, 1, 1, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("   minus what you paid"), M(-og.boughtCost), 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
+                GameTooltip:AddDoubleLine(Tr("   trading profit"), M(og.trading), 1, 1, 1, 1, 1, 1)
+                GameTooltip:AddDoubleLine(Tr("Crafted"), M(og.crafted), 1, 1, 1, 1, 1, 1)
+                GameTooltip:AddLine(Tr("Oldest units are sold first. Items owned before the addon tracked them count as farmed."), 0.6, 0.6, 0.6, true)
+                GameTooltip:Show()
+            end)
+            card:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        end
         if i == 3 then
             -- Click: the Stock tab (item by item detail).
             card:EnableMouse(true)
@@ -201,6 +219,13 @@ local function BuildBilan(page)
         c[4].value:SetText(ns.FormatMoney(st.sold, { iconSize = 16 }))
         c[4].sub:SetText(st.soldCount == 0 and "no sales" or
             (st.soldCount .. (st.soldCount > 1 and " sales" or " sale") .. Tr(" (AH + vendor)")))
+        -- Where the AH sales came from (hover the card for the detail).
+        local og = ns.Origins and ns.Origins.Split(t0)
+        self.origins = og
+        if og and og.n > 0 then
+            local function M(v) return ns.FormatMoney(v, { short = true, iconSize = 10 }) end
+            c[4].sub:SetText((Tr("farmed %s · trading %s · crafted %s")):format(M(og.farmed), M(og.trading), M(og.crafted)))
+        end
 
         local mode = ns.db.settings.chartMode
         for k, b in pairs(self.modeButtons) do b:SetSelected(k == mode) end

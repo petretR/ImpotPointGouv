@@ -696,6 +696,32 @@ Check("mail rules: what goes where, keep, first match, never to yourself", funct
     C_Item.GetItemInfoInstant = inst
 end)
 
+Check("item origins: sales split into farmed, trading and crafted", function()
+    local O = ns.Origins
+    local loot, tx = ns.db.loot, ns.db.tx
+    local t = time() - 1000
+    ns.db.loot = {
+        { t = t, i = "Rugged Leather", id = 8170, n = 10, s = "l" },          -- farmed 10
+        { t = t + 5, i = "Item 783002", id = 783002, n = 2, s = "c" },         -- crafted 2
+        { t = t + 6, i = "Rugged Leather", id = 8170, n = 4, s = "p" },       -- mail pickup: ignored
+    }
+    ns.db.tx = {
+        { t = t + 1, k = "ah_buy", i = "Rugged Leather", q = 5, a = -500 },   -- bought 5 at 100
+        { t = t + 10, k = "ah_sale", i = "Rugged Leather", q = 12, a = 2400 }, -- 10 farmed + 2 bought, 200 each
+        { t = t + 11, k = "ah_sale", i = "Item 783002", q = 1, a = 900 },
+        { t = t + 12, k = "ah_sale", i = "Old Thing", q = 3, a = 300 },         -- owned before tracking
+    }
+    local s = O.SplitRaw(0)
+    Assert(math.abs(s.farmed - (2000 + 300)) < 1e-6, "10 farmed units + old stock: " .. s.farmed)
+    Assert(math.abs(s.bought - 400) < 1e-6 and s.boughtCost == 200, "2 bought units sold 400, paid 200")
+    Assert(math.abs(s.trading - 200) < 1e-6, "trading profit 200")
+    Assert(math.abs(s.crafted - 900) < 1e-6, "crafted 900")
+    Assert(s.n == 3, "three sales")
+    local held = O.Held()
+    Assert(held["Rugged Leather"].bought == 3 and held["Rugged Leather"].paid == 300, "3 bought units still held")
+    ns.db.loot, ns.db.tx = loot, tx
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

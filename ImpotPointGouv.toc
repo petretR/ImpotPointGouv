@@ -36,6 +36,7 @@ Next.lua
 Setup.lua
 Market.lua
 Stock.lua
+Origins.lua
 Preview.lua
 Track.lua
 Data.lua

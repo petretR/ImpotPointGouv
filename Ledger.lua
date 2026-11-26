@@ -432,9 +432,23 @@ local function Start()
         Hook("PostCommodity", function(loc, _, qty, unitPrice)
             L.Expect({ sign = -1, multi = true, k = "ah_deposit", ttl = 10, info = { i = LocName(loc), q = qty, unit = unitPrice } })
         end)
-        Hook("PlaceBid", function(_, bid)
+        -- Buyout of a listing: the game only gives its auction ID. The item comes from the search results
+        -- that showed that listing (not from the last search, which may be another item, e.g. the one
+        -- Auctionator looks up while you post). Unknown: the purchase keeps no item name.
+        local byAuction = {}
+        L._byAuction = byAuction
+        local f = CreateFrame("Frame")
+        pcall(f.RegisterEvent, f, "ITEM_SEARCH_RESULTS_UPDATED")
+        f:SetScript("OnEvent", function(_, _, itemKey)
+            if not (itemKey and itemKey.itemID and AHM.GetNumItemSearchResults and AHM.GetItemSearchResultInfo) then return end
+            for i = 1, (AHM.GetNumItemSearchResults(itemKey) or 0) do
+                local r = AHM.GetItemSearchResultInfo(itemKey, i)
+                if r and r.auctionID then byAuction[r.auctionID] = itemKey.itemID end
+            end
+        end)
+        Hook("PlaceBid", function(auctionID, bid)
             if bid and bid > 0 then
-                L.Expect({ amount = -bid, k = "ah_buy", ttl = 15, info = { i = NameOf(lastItemID), q = 1 } })
+                L.Expect({ amount = -bid, k = "ah_buy", ttl = 15, info = { i = NameOf(byAuction[auctionID]), q = 1 } })
             end
         end)
         Hook("ConfirmCommoditiesPurchase", function(itemID, qty)
