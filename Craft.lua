@@ -233,6 +233,7 @@ local function ReadRecipes()
         end
     end
     if api.key == "trade" and TradeListComplete() then Prune() end
+    if own then ns.Fire("RECIPES_CHANGED") end
 end
 
 -- At login: saved professions none of their characters has (seen in someone else's window).

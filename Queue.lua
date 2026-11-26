@@ -136,6 +136,7 @@ function RecipesOf(prof)
     end
     return list
 end
+Q.RecipesOf = function(prof) return RecipesOf(prof) end
 
 -- Fills the queue with profitable recipes, aiming at a target stock.
 -- allProfs = true: all the character's professions (otherwise only the open profession).
@@ -470,7 +471,8 @@ function Q.AutoQueue(allProfs)
         if c.cost > 0 then n = math.min(n, math.floor(left / c.cost)) end
         if n < c.runs then cut = true end
         if n > 0 then
-            db[c.k] = { prof = c.prof, name = c.name, n = n, auto = true, owner = me, test = c.test or nil }
+            db[c.k] = { prof = c.prof, name = c.name, n = n, auto = true, owner = me, test = c.test or nil,
+                perDay = (c.perDay > 0 and c.perDay < math.huge) and c.perDay or nil }
             left = left - n * c.cost
             added = added + 1
         end
@@ -568,7 +570,8 @@ function Q.Plan(owner)
         local rec = (owner == "*" or e.owner == owner) and RecFrom(e.prof, e.name)
         if rec then
             local ev = CR.GetEval(rec)
-            plan.crafts[#plan.crafts + 1] = { key = k, prof = e.prof, name = e.name, n = e.n, rec = rec, ev = ev, auto = e.auto, owner = e.owner }
+            plan.crafts[#plan.crafts + 1] = { key = k, prof = e.prof, name = e.name, n = e.n, rec = rec, ev = ev, auto = e.auto, owner = e.owner,
+                test = e.test, perDay = e.perDay }
             for _, rg in ipairs(rec.reagents) do if rg.id then Need(rg.id, rg.n * e.n) end end
             plan.cost = plan.cost + (ev.cost or 0) * e.n
             plan.revenue = plan.revenue + (ev.value or 0) * e.n

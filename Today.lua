@@ -1,15 +1,15 @@
--- ImpotPointGouv: "Routine" window for the daily crafter <-> bank loop.
---   Crafter: Queue all -> shopping list
---   Bank   : shopping list (ticked as you buy) -> Auctionator export -> send to the crafter
---   Crafter: craft / disenchant -> send everything to the bank
+-- ImpotPointGouv: "Today" window, the crafts worth doing right now, by profession.
+-- The same file keeps the daily helpers other windows use: sending by mail (mailbox), the Auctionator
+-- shopping list, and the vendor bar (sell what pays more at a vendor, buy the queue's reagents).
 local _, ns = ...
 local Tr = ns.L
 local T, P, Q, I = ns.Theme, ns.Prices, ns.Queue, ns.Inventory
 local C = T.C
 local RT = {}
-ns.Routine = RT
+ns.Today = RT
+ns.Routine = RT -- older name, still used by the mailbox
 
-local W, H, ROWS, QROWS = 460, 640, 7, 4
+local W, H, ROWS = 460, 520, 16
 local frame
 local mailOpen, ahOpen, merchantOpen = false, false, false
 
@@ -262,7 +262,7 @@ end
 local function StartSend(targetKey, want, what)
     if targetKey == Me() then RT.Status(Tr("That's this character: nothing to send.")); return end
     local name = CharName(targetKey)
-    if not name then RT.Status(Tr("|cffed5c52Unknown recipient: set the character name below.|r")); return end
+    if not name then RT.Status(Tr("|cffed5c52Unknown recipient: add that character on the Characters page.|r")); return end
     local stacks = BagStacks(want)
     if #stacks == 0 then RT.Status(Tr("Nothing to send: ") .. what .. Tr(" not found in your bags.")); return end
     -- Preview: you see and check what goes out.
@@ -392,10 +392,25 @@ local function VendorWant()
                         want[info.itemID] = math.max(want[info.itemID], ns.GetItemCount(info.itemID) - (ns.Keep and ns.Keep.Get(info.itemID) or 0))
                     end
                 end
+                -- Unchecked once in the vendor list: you keep it, never proposed again.
+                if RT.VendorKept()[info.itemID] then want[info.itemID] = 0 end
             end
         end
     end
     return want
+end
+if ns.Profile then VendorWant = ns.Profile.Wrap("Today:VendorWant", VendorWant) end
+-- What a vendor would take, computed once per bag change (the vendor bar, Sell and the buttons share it).
+local vendorCache
+local function VendorWantCached()
+    if not vendorCache then vendorCache = VendorWant() end
+    return vendorCache
+end
+
+-- Items you unchecked in the vendor list: kept for good (Settings > Data to forget them).
+function RT.VendorKept()
+    ns.db.settings.vendorKeep = ns.db.settings.vendorKeep or {}
+    return ns.db.settings.vendorKeep
 end
 
 local selling
@@ -405,11 +420,17 @@ function RT.SellToVendor(only)
     if #stacks == 0 then RT.Status(Tr("Nothing to sell to the vendor.")); return end
     if not only and ns.Preview then
         local rows = RowsFrom(stacks, function(id, q) return (P.VendorSell(id) or 0) * q end)
-        ns.Preview.Show(rows, { title = Tr("Sell to this vendor"), sub = Tr("Worth more here than at the AH. Uncheck what you keep."), confirm = Tr("Sell") },
+        ns.Preview.Show(rows, { title = Tr("Sell to this vendor"),
+            sub = Tr("Worth more here than at the AH. Uncheck what you keep: it won't be proposed again."),
+            confirm = Tr("Sell"), allowNone = true, noneLabel = Tr("Keep them") },
             function(chosen)
-                local set = {}
+                local set, kept = {}, 0
                 for _, r in ipairs(chosen) do set[r.id] = true end
-                RT.SellToVendor(set)
+                for _, r in ipairs(rows) do
+                    if not set[r.id] then RT.VendorKept()[r.id] = true; kept = kept + 1 end
+                end
+                if kept > 0 then RT.Status((Tr("%d item%s kept: not proposed at the vendor again (Settings > Data to undo).")):format(kept, kept == 1 and "" or "s")) end
+                if next(set) then RT.SellToVendor(set) else RT.UpdateMerchantBar(); RT.Refresh() end
             end)
         return
     end
@@ -458,12 +479,106 @@ function RT.SendCrafts()
     StartSend(bank, CraftsWant(), "crafted items / enchanting mats")
 end
 
--- Number of items each send button would send now.
-local function Pending(want)
-    local n = 0
-    for _, st in ipairs(BagStacks(want)) do n = n + st.count end
+-- ------------------------------------------------------------ Today: what is worth crafting right now
+-- One list, by profession: the recipes your characters know that are profitable at current prices and
+-- that the market actually buys (Queue's demand check). For each, who can make it and how many times
+-- with the materials they hold.
+
+-- Compact amount for the narrow columns: "1.6 g", "37 s", "8 c" (optionally signed and colored).
+local function Short(v, sign)
+    local txt = ns.FormatMoneyAxis(v or 0)
+    if sign and (v or 0) > 0 then txt = "+" .. txt end
+    if sign then txt = ((v or 0) > 0 and "|cff5cd173" or (v or 0) < 0 and "|cffed5c52" or "") .. txt .. "|r" end
+    return txt
+end
+
+local function Colored(key)
+    local name = CharName(key) or "?"
+    local c = ns.db.chars[key]
+    local r, g, b = ns.ClassColor(c and c.class)
+    return ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255), math.floor(g * 255), math.floor(b * 255), name)
+end
+
+-- Characters who know a profession.
+local function Knowers(prof)
+    local out = {}
+    for key in pairs(ns.db.profChars and ns.db.profChars[prof] or {}) do
+        if ns.db.chars[key] then out[#out + 1] = key end
+    end
+    table.sort(out)
+    return out
+end
+
+-- How many crafts a character's materials allow (bags + bank). Vendor materials never limit it.
+-- nil when every material comes from a vendor.
+local function CanMake(rec, key)
+    local n
+    for _, rg in ipairs(rec.reagents or {}) do
+        if rg.id and (rg.n or 0) > 0 and not P.IsVendorItem(rg.id) then
+            local k = math.floor(I.CharCount(key, rg.id) / rg.n)
+            n = n and math.min(n, k) or k
+        end
+    end
     return n
 end
+
+-- Evaluating every recipe is the expensive part (a few hundred ms): done once, then again only when
+-- prices, recipes or settings change. Bag changes only recount what you can make.
+local evalCache
+local function Candidates(prof)
+    evalCache = evalCache or {}
+    if evalCache[prof] then return evalCache[prof] end
+    local rules = ns.Craft.Rules()
+    local out = {}
+    for _, rec in ipairs(Q.RecipesOf(prof)) do
+        local ev = ns.Craft.GetEval(rec)
+        if rec.pid and not rec.enchant and ev and ev.profit and not ev.unsold and not ev.whiteGear and not ev.infoPending
+            and ev.profit >= (rules.minProfit or 0) and (ev.margin or 0) * 100 >= (rules.minMargin or 0) then
+            local verdict, perDay, demand = Q.DemandVerdict(rec, ev, rules)
+            if verdict == "queue" then out[#out + 1] = { rec = rec, ev = ev, perDay = perDay, demand = demand } end
+        end
+    end
+    evalCache[prof] = out
+    return out
+end
+function RT.ResetProfitable() evalCache = nil end
+-- Prices (scan), recipes (a profession window read) and settings (minimum profit, margin, demand, Master Chef).
+for _, e in ipairs({ "PRICES_CHANGED", "LEDGER_READY", "RECIPES_CHANGED", "SETTINGS_CHANGED" }) do
+    ns.On(e, function() evalCache = nil; RT.Refresh() end)
+end
+
+-- { { prof, who = {keys}, rows = { { rec, ev, perDay, demand, key, can } }, best }, ... } best first.
+function RT.Profitable()
+    local groups = {}
+    for prof in pairs(ns.db.recipes or {}) do
+        local who = Knowers(prof)
+        if #who > 0 then
+            local rows = {}
+            for _, c in ipairs(Candidates(prof)) do
+                -- The character who can make it the most times (vendor-only materials: no limit).
+                local bestKey, bestN = who[1], nil
+                for _, k in ipairs(who) do
+                    local n = CanMake(c.rec, k)
+                    if n == nil then bestKey, bestN = k, nil; break end
+                    if not bestN or n > bestN then bestKey, bestN = k, n end
+                end
+                rows[#rows + 1] = { rec = c.rec, ev = c.ev, perDay = c.perDay or c.ev.profit, demand = c.demand, key = bestKey, can = bestN }
+            end
+            if #rows > 0 then
+                -- What you can make right now first (vendor materials count as available), then the rest.
+                table.sort(rows, function(a, b)
+                    local ca, cb = a.can == nil or a.can > 0, b.can == nil or b.can > 0
+                    if ca ~= cb then return ca end
+                    return (a.perDay or 0) > (b.perDay or 0)
+                end)
+                groups[#groups + 1] = { prof = prof, who = who, rows = rows, best = rows[1].perDay or 0 }
+            end
+        end
+    end
+    table.sort(groups, function(a, b) return a.best > b.best end)
+    return groups
+end
+if ns.Profile then RT.Profitable = ns.Profile.Wrap("Today:Profitable", RT.Profitable) end
 
 -- ------------------------------------------------------------ interface
 function RT.Status(text)
@@ -471,8 +586,9 @@ function RT.Status(text)
     if ns.Mail and ns.Mail.SendStatus then ns.Mail.SendStatus(text) end
 end
 
+local Draw -- defined after Build
 local function Build()
-    frame = CreateFrame("Frame", "ImpotPointGouvRoutine", UIParent)
+    frame = CreateFrame("Frame", "ImpotPointGouvToday", UIParent)
     frame:SetSize(W, H)
     frame:SetPoint("CENTER", 250, 0)
     frame:SetFrameStrata("HIGH")
@@ -483,403 +599,137 @@ local function Build()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     T.Surface(frame, C.window, 14, { 1, 1, 1, 0.09 })
-    ns.Theme.CloseOnEscape(_G["ImpotPointGouvRoutine"])
+    if T.CloseOnEscape then T.CloseOnEscape(frame) end -- Esc without Blizzard's tables (#33)
     frame:SetToplevel(true)
-    if ns.Setup then ns.Setup.AttachBanner(frame) end
 
     local icon = frame:CreateTexture(nil, "ARTWORK")
     icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(26, 26); icon:SetPoint("TOPLEFT", 14, -12)
-    local title = T.Text(frame, 15, { bold = true, text = Tr("Routine") }); title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, 1)
-    frame.roles = T.Text(frame, 12, { bold = true, color = C.muted }); frame.roles:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 8, -2)
+    local title = T.Text(frame, 15, { bold = true, text = Tr("Today") }); title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, 1)
+    frame.sub = T.Text(frame, 11, { color = C.muted }); frame.sub:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 8, -2)
+    frame.sub:SetWidth(W - 100)
     local close = T.CloseButton(frame, function() frame:Hide() end); close:SetPoint("TOPRIGHT", -8, -10)
 
-    frame.queueAll = T.Button(frame, Tr("Auto-fill all professions"), 180, 26, function()
-        Q.AutoQueue(true); RT.Refresh()
-    end)
-    frame.queueAll:SetPoint("TOPLEFT", 12, -50)
-    frame.queueAll.tooltip = Tr("Queues the profitable recipes of every profession of this character (open each profession once so the addon knows its recipes).")
-    frame.setBank = T.Button(frame, Tr("This is my bank"), 130, 26, function()
-        ns.db.settings.bankChar = Me(); RT.Refresh()
-    end)
-    frame.setBank:SetPoint("LEFT", frame.queueAll, "RIGHT", 6, 0)
-    frame.clear = T.Button(frame, Tr("Clear queue"), 100, 26, function() Q.Clear(); RT.Refresh() end)
-    frame.clear:SetPoint("LEFT", frame.setBank, "RIGHT", 6, 0)
-
-    -- To craft
-    local qc = CreateFrame("Frame", nil, frame)
-    T.Surface(qc, C.surface, 10)
-    qc:SetPoint("TOPLEFT", 12, -86); qc:SetPoint("TOPRIGHT", -12, -86)
-    qc:SetHeight(36 + QROWS * 22)
-    local qt = T.Text(qc, 12, { bold = true, text = Tr("To craft") }); qt:SetPoint("TOPLEFT", 14, -10)
-    frame.qsum = T.Text(qc, 11, { color = C.muted, justify = "RIGHT" }); frame.qsum:SetPoint("TOPRIGHT", -12, -11)
-    frame.qrows = {}
-    for i = 1, QROWS do
-        local r = CreateFrame("Frame", nil, qc)
-        r:SetHeight(22)
-        r:SetPoint("TOPLEFT", 8, -30 - (i - 1) * 22); r:SetPoint("TOPRIGHT", -8, -30 - (i - 1) * 22)
-        r:EnableMouse(true)
-        r.icon = r:CreateTexture(nil, "ARTWORK"); r.icon:SetSize(18, 18); r.icon:SetPoint("LEFT", 22, 0)
-        r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-        r.name = T.Text(r, 12); r.name:SetPoint("LEFT", 46, 0); r.name:SetWidth(178)
-        r.keep = ns.Keep.Button(r); r.keep:SetPoint("LEFT", 226, 0)
-        r.count = T.Text(r, 12, { bold = true, justify = "RIGHT" }); r.count:SetPoint("RIGHT", r, "LEFT", 302, 0); r.count:SetWidth(30)
-        r.profit = T.Text(r, 11, { justify = "RIGHT" }); r.profit:SetPoint("RIGHT", -4, 0)
-        r.chan = T.Text(r, 10, { bold = true, justify = "LEFT" }); r.chan:SetPoint("LEFT", r, "LEFT", 308, 0)
-        r:SetScript("OnEnter", function(self)
-            local c = self.craft
-            if not c or not c.rec.pid then return end
-            T.ItemTooltip(self, c.rec.pid)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddDoubleLine(Tr("Profession"), c.prof, 0.7, 0.7, 0.7, 1, 1, 1)
-            if c.ev and c.ev.profit then
-                GameTooltip:AddDoubleLine(Tr("Profit per craft"), ns.FormatMoney(c.ev.profit, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7)
-            end
-            GameTooltip:Show()
-        end)
-        r:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        frame.qrows[i] = r
-    end
-    frame.qempty = T.Text(qc, 12, { color = C.faint, justify = "CENTER", text = Tr("Nothing queued.") })
-    frame.qempty:SetPoint("CENTER", 0, -10)
-    frame.qoff = 0
-    qc:EnableMouseWheel(true)
-    qc:SetScript("OnMouseWheel", function(_, d)
-        frame.qoff = math.max(0, math.min(math.max(0, (frame.nq or 0) - QROWS), frame.qoff - d)); RT.Refresh()
-    end)
-
-    -- Shopping list
-    local list = CreateFrame("Frame", nil, frame)
-    T.Surface(list, C.surface, 10)
-    list:SetPoint("TOPLEFT", qc, "BOTTOMLEFT", 0, -10); list:SetPoint("TOPRIGHT", qc, "BOTTOMRIGHT", 0, -10)
-    list:SetHeight(46 + ROWS * 24)
-    local lt = T.Text(list, 12, { bold = true, text = Tr("Shopping list") }); lt:SetPoint("TOPLEFT", 14, -10)
-    frame.sum = T.Text(list, 11, { color = C.muted, justify = "RIGHT" }); frame.sum:SetPoint("TOPRIGHT", -12, -11)
-    local cols = { { "Need", 230 }, { "Here", 275 }, { "Others", 325 }, { "Buy", 370 } }
-    for _, c in ipairs(cols) do
-        local h = T.Text(list, 10, { bold = true, color = C.faint, justify = "RIGHT", text = c[1] })
-        h:SetPoint("TOPRIGHT", list, "TOPLEFT", c[2], -30); h:SetWidth(50)
+    local card = CreateFrame("Frame", nil, frame)
+    T.Surface(card, C.surface, 10)
+    card:SetPoint("TOPLEFT", 12, -50); card:SetPoint("BOTTOMRIGHT", -12, 36)
+    local heads = { { Tr("Can make"), 290 }, { Tr("Profit"), 360 }, { Tr("Per day"), W - 24 - 10 } }
+    for _, h in ipairs(heads) do
+        local t = T.Text(card, 10, { bold = true, color = C.faint, justify = "RIGHT", text = h[1] })
+        t:SetPoint("TOPRIGHT", card, "TOPLEFT", h[2], -10); t:SetWidth(70)
     end
     frame.rows = {}
     for i = 1, ROWS do
-        local r = CreateFrame("Frame", nil, list)
+        local r = CreateFrame("Frame", nil, card)
         r:SetHeight(24)
-        r:SetPoint("TOPLEFT", 8, -44 - (i - 1) * 24); r:SetPoint("TOPRIGHT", -8, -44 - (i - 1) * 24)
+        r:SetPoint("TOPLEFT", 8, -28 - (i - 1) * 24); r:SetPoint("TOPRIGHT", -8, -28 - (i - 1) * 24)
         r:EnableMouse(true)
-        r.check = r:CreateTexture(nil, "ARTWORK"); r.check:SetSize(16, 16); r.check:SetPoint("LEFT", 2, 0)
-        r.check:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
-        r.icon = r:CreateTexture(nil, "ARTWORK"); r.icon:SetSize(18, 18); r.icon:SetPoint("LEFT", 22, 0)
+        r.hl = T.Rounded(r, { 1, 1, 1, 0 }, 5, "BACKGROUND", 2)
+        r.icon = r:CreateTexture(nil, "ARTWORK"); r.icon:SetSize(18, 18); r.icon:SetPoint("LEFT", 6, 0)
         r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-        r.name = T.Text(r, 12); r.name:SetPoint("LEFT", 46, 0); r.name:SetWidth(160)
-        local function Col(x) local t = T.Text(r, 12, { justify = "RIGHT" }); t:SetPoint("RIGHT", r, "LEFT", x - 8, 0); t:SetWidth(46); return t end
-        r.need, r.here, r.others, r.buy = Col(230), Col(275), Col(325), Col(370)
-        r.src = T.Text(r, 10, { bold = true }); r.src:SetPoint("LEFT", 372, 0)
+        r.name = T.Text(r, 12); r.name:SetPoint("LEFT", 30, 0); r.name:SetWidth(210)
+        r.can = T.Text(r, 12, { justify = "RIGHT" }); r.can:SetPoint("RIGHT", r, "LEFT", 282, 0); r.can:SetWidth(60)
+        r.profit = T.Text(r, 11, { justify = "RIGHT" }); r.profit:SetPoint("RIGHT", r, "LEFT", 352, 0); r.profit:SetWidth(66)
+        r.day = T.Text(r, 11, { justify = "RIGHT", color = C.muted }); r.day:SetPoint("RIGHT", -2, 0); r.day:SetWidth(66)
         r:SetScript("OnEnter", function(self)
-            if not self.row then return end
-            T.ItemTooltip(self, self.row.id)
+            local d = self.data
+            if not d or not d.rec then return end
+            self.hl:SetColor({ 1, 1, 1, 0.04 })
+            T.ItemTooltip(self, d.rec.pid)
             GameTooltip:AddLine(" ")
-            for _, d in ipairs(self.row.detail or {}) do GameTooltip:AddDoubleLine(d[1], d[2], 0.7, 0.7, 0.7, 1, 1, 1) end
-            local mx = self.row.src == "ah" and Q.MaxPrice(self.row.id)
-            if mx then GameTooltip:AddDoubleLine(Tr("Buy at most at"), ns.FormatMoney(mx, { iconSize = 11 }) .. Tr(" each"), 0.88, 0.66, 0.24, 1, 1, 1) end
-            local ev = self.row.src == "ah" and Q.BreakEven(self.row.id)
-            if ev then GameTooltip:AddDoubleLine(Tr("You lose money above"), ns.FormatMoney(ev, { iconSize = 11 }) .. Tr(" each"), 0.93, 0.36, 0.32, 1, 1, 1) end
-            local vb = P.VendorBuy(self.row.id)
-            if vb and P.IsVendorItem(self.row.id) then
-                GameTooltip:AddDoubleLine(Tr("Vendor price"), ns.FormatMoney(vb, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1)
-                if self.row.cheaper then GameTooltip:AddLine(Tr("Cheaper at the AH right now: never bought above the vendor price."), 0.36, 0.82, 0.45, true) end
-            end
+            GameTooltip:AddDoubleLine(Tr("Profit per craft"), ns.FormatMoney(d.ev.profit, { sign = true, color = true, iconSize = 11 }), 0.7, 0.7, 0.7)
+            if d.demand then GameTooltip:AddDoubleLine(Tr("Sold per day (market)"), ("%.1f"):format(d.demand), 0.7, 0.7, 0.7, 1, 1, 1) end
+            if d.perDay then GameTooltip:AddDoubleLine(Tr("Expected profit per day"), ns.FormatMoney(d.perDay, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1) end
+            GameTooltip:AddDoubleLine(Tr("Sells at"), ns.ChannelLabel(d.ev.channel), 0.7, 0.7, 0.7, 1, 1, 1)
+            if d.key then GameTooltip:AddDoubleLine(Tr("Crafted by"), Colored(d.key), 0.7, 0.7, 0.7) end
             GameTooltip:Show()
         end)
-        r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
         frame.rows[i] = r
     end
-    frame.empty = T.Text(list, 12, { color = C.faint, justify = "CENTER", wrap = true,
-        text = Tr("Nothing to buy.") })
-    frame.empty:SetPoint("CENTER", 0, -10); frame.empty:SetWidth(360)
+    frame.empty = T.Text(card, 12, { color = C.faint, justify = "CENTER", wrap = true })
+    frame.empty:SetPoint("CENTER", 0, 0); frame.empty:SetWidth(W - 80)
     frame.off = 0
-    list:EnableMouseWheel(true)
-    list:SetScript("OnMouseWheel", function(_, d)
-        frame.off = math.max(0, math.min(math.max(0, (frame.n or 0) - ROWS), frame.off - d)); RT.Refresh()
+    card:EnableMouseWheel(true)
+    card:SetScript("OnMouseWheel", function(_, d)
+        frame.off = math.max(0, math.min(math.max(0, #(frame.lines or {}) - ROWS), frame.off - d * 2)); Draw()
     end)
 
-    -- Recipient (name editable if the short name is not enough for mail)
-    local nameLbl = T.Text(frame, 11, { color = C.muted, text = Tr("Send to:") })
-    frame.nameLbl = nameLbl
-    nameLbl:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 4, -12)
-    local eb = CreateFrame("EditBox", nil, frame)
-    eb:SetSize(150, 22); eb:SetPoint("LEFT", nameLbl, "RIGHT", 8, 0)
-    eb:SetAutoFocus(false); eb:SetFontObject(ChatFontNormal)
-    T.Surface(eb, C.surface2, 6)
-    eb:SetTextInsets(6, 6, 0, 0)
-    eb:SetScript("OnEnterPressed", function(self)
-        local text = (self:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
-        local key = frame.targetKey
-        local me = Me()
-        -- Bank not set yet (on the crafter): the typed name designates one of your characters.
-        if not key and Q.IsCrafter(me) and text ~= "" then
-            local low = text:lower()
-            for k, c in pairs(ns.db.chars) do
-                local n = (c.name or ""):lower()
-                if k ~= me and n ~= "" and (n == low or n:find(low, 1, true) == 1 or low:find(n, 1, true) == 1) then
-                    ns.db.settings.bankChar = k
-                    key = k
-                    break
-                end
-            end
-        end
-        if key and text ~= "" then
-            ns.db.settings.mailNames = ns.db.settings.mailNames or {}
-            -- Keeps the full name if it is longer than the known first name (e.g. "Raptout Dupont").
-            local ch = ns.db.chars[key]
-            local known = ch and (ch.full or ch.name) or ""
-            -- Keeps the most complete: the typed text if it contains a last name.
-            ns.db.settings.mailNames[key] = (text:find(" ") or #text >= #known) and text or known
-        end
-        self:ClearFocus(); RT.Refresh()
-    end)
-    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    frame.nameBox = eb
-
-    -- Suggestions: your characters (filtered by what is typed).
-    local sug = CreateFrame("Frame", nil, frame)
-    sug:SetPoint("TOPLEFT", eb, "BOTTOMLEFT", 0, -2)
-    sug:SetWidth(220)
-    sug:SetFrameLevel((eb:GetFrameLevel() or 1) + 20)
-    T.Surface(sug, C.surface2, 6, { 1, 1, 1, 0.12 })
-    sug.buttons = {}
-    sug:Hide()
-    local function Pick(key)
-        local me = Me()
-        local isCrafter = Q.IsCrafter(me)
-        -- On the crafter without a bank set: picking a character makes it the bank.
-        if isCrafter and not RT.Bank() and key ~= me then ns.db.settings.bankChar = key end
-        frame.targetKey = isCrafter and RT.Bank() or Q.Crafter()
-        eb:SetText(CharName(key) or "")
-        if frame.targetKey == key then
-            ns.db.settings.mailNames = ns.db.settings.mailNames or {}
-            ns.db.settings.mailNames[key] = CharName(key)
-        end
-        sug:Hide(); eb:ClearFocus(); RT.Refresh()
-    end
-    local function UpdateSuggestions()
-        local typed = (eb:GetText() or ""):lower()
-        local list = {}
-        for key, c in pairs(ns.db.chars) do
-            local name = CharName(key) or c.name or "?"
-            if key ~= Me() and (typed == "" or name:lower():find(typed, 1, true)) then
-                list[#list + 1] = { key = key, name = name, class = c.class, realm = c.realm }
-            end
-        end
-        table.sort(list, function(a, b) return a.name < b.name end)
-        for i = 1, math.max(#list, #sug.buttons) do
-            local b = sug.buttons[i]
-            if not b and list[i] then
-                b = CreateFrame("Button", nil, sug)
-                b:SetHeight(22)
-                b:SetPoint("TOPLEFT", 4, -4 - (i - 1) * 22); b:SetPoint("TOPRIGHT", -4, -4 - (i - 1) * 22)
-                b.hl = T.Rounded(b, { 1, 1, 1, 0 }, 5, "BACKGROUND", 2)
-                b.text = T.Text(b, 12); b.text:SetPoint("LEFT", 8, 0)
-                b:SetScript("OnEnter", function(self) self.hl:SetColor({ C.gold[1], C.gold[2], C.gold[3], 0.18 }) end)
-                b:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }) end)
-                b:SetScript("OnClick", function(self) Pick(self.key) end)
-                sug.buttons[i] = b
-            end
-            if b then
-                local e = list[i]
-                if e then
-                    b.key = e.key
-                    b.text:SetText(e.name)
-                    b.text:SetTextColor(ns.ClassColor(e.class))
-                    b:Show()
-                else
-                    b:Hide()
-                end
-            end
-        end
-        sug:SetHeight(8 + #list * 22)
-        sug:SetShown(#list > 0 and eb:HasFocus())
-    end
-    eb:SetScript("OnEditFocusGained", UpdateSuggestions)
-    eb:SetScript("OnTextChanged", function(_, user) if user then UpdateSuggestions() end end)
-    eb:SetScript("OnEditFocusLost", function() C_Timer.After(0.2, function() sug:Hide() end) end)
-    eb:SetScript("OnTabPressed", function()
-        local first = sug.buttons[1]
-        if sug:IsShown() and first and first:IsShown() then Pick(first.key) end
-    end)
-
-    frame.status = T.Text(frame, 11, { color = C.muted, wrap = true })
-    frame.status:SetPoint("TOPLEFT", nameLbl, "BOTTOMLEFT", 0, -12)
-    frame.status:SetPoint("RIGHT", frame, "RIGHT", -16, 0)
-
-    frame.a1 = T.Button(frame, "", 10, 34, nil)
-    frame.a1:SetPoint("BOTTOMLEFT", 12, 12); frame.a1:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -4, 12)
-    frame.a2 = T.Button(frame, "", 10, 34, nil)
-    frame.a2:SetPoint("BOTTOMLEFT", frame, "BOTTOM", 4, 12); frame.a2:SetPoint("BOTTOMRIGHT", -12, 12)
-    frame:SetScript("OnShow", function() RT.Refresh() end)
+    frame.status = T.Text(frame, 11, { color = C.muted, wrap = false })
+    frame.status:SetPoint("BOTTOMLEFT", 16, 14); frame.status:SetPoint("RIGHT", frame, "RIGHT", -16, 0)
+    frame:SetScript("OnShow", function() frame.lines = nil; Draw() end)
     frame:Hide()
 end
 
-local function SetAction(btn, label, fn, tip)
-    if not label then btn:Hide(); return end
-    btn.text:SetText(label)
-    btn:SetScript("OnClick", function(self) if fn and not self.disabled then fn() end end)
-    btn.tooltip = tip
-    btn:SetDisabled(false)
-    btn:Show()
+-- The list, flattened: a header line per profession, then its crafts.
+local function Lines()
+    local lines = {}
+    for _, g in ipairs(RT.Profitable()) do
+        local names = {}
+        for _, k in ipairs(g.who) do names[#names + 1] = Colored(k) end
+        lines[#lines + 1] = { head = true, text = Tr(g.prof) .. "   |cff8a877f" .. table.concat(names, ", ") .. "|r" }
+        for _, row in ipairs(g.rows) do lines[#lines + 1] = row end
+    end
+    return lines
 end
 
-function RT.Refresh()
+Draw = function()
     if not frame or not frame:IsShown() then return end
-    local me, bank, crafter = Me(), RT.Bank(), Q.Crafter()
-    local isBank, isCrafter = bank == me, Q.IsCrafter(me)
-    local function Colored(key, fallback)
-        local name = CharName(key)
-        if not name then return "|cffed5c52" .. fallback .. "|r" end
-        local c = ns.db.chars[key]
-        local r, g, b = ns.ClassColor(c and c.class)
-        return ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255), math.floor(g * 255), math.floor(b * 255), name)
-    end
-    local names = {}
-    for _, k in ipairs(Q.Crafters()) do names[#names + 1] = Colored(k, "?") end
-    frame.roles:SetText((Tr("|cffe0a83d%s|r  %s     |cffe0a83dBank|r  %s")):format(#names > 1 and "Crafters" or "Crafter",
-        #names > 0 and table.concat(names, ", ") or "|cffed5c52none|r", Colored(bank, "not set")))
-    frame.queueAll:SetShown(#Q.MyProfessions() > 0)
-    frame.setBank:SetShown(not isBank)
-
-    local plan = Q.Plan()
-    -- To craft (your recipes; intermediates are in the shopping list, "Craft" column)
-    local list = plan.visible or plan.crafts
-    frame.nq = #list
-    frame.qoff = math.min(frame.qoff, math.max(0, #list - QROWS))
-    for i, r in ipairs(frame.qrows) do
-        local c = list[frame.qoff + i]
-        r.craft = c
-        if c then
-            r.icon:SetTexture(c.rec.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-            r.name:SetText(c.inter and ("|cff9ad98c" .. c.name .. Tr("|r  |cff615f5c· reagent|r")) or c.name)
-            r.name:SetWidth(c.inter and 220 or 178)
-            r.keep:SetItem(not c.inter and c.rec.pid or nil)
-            r.count:SetText("×" .. c.n)
-            r.chan:SetText(c.inter and "" or ns.ChannelLabel(c.ev.channel))
-            r.profit:SetText((c.ev.profit and not c.inter) and
-                ns.FormatMoney(c.ev.profit * c.n, { sign = true, color = true, short = true, iconSize = 10 }) or "")
-            r:Show()
-        else
-            r:Hide()
-        end
-    end
-    frame.qempty:SetShown(#plan.crafts == 0)
-    frame.qsum:SetText(#plan.crafts > 0 and (Tr("profit %s")):format(
-        ns.FormatMoney(plan.profit, { sign = true, color = true, short = true, iconSize = 10 })) or "")
-
-    frame.n = #plan.shop
-    frame.off = math.min(frame.off, math.max(0, #plan.shop - ROWS))
-    local cost, missing = 0, 0
-    for _, row in ipairs(plan.shop) do
-        if row.buy > 0 then
-            missing = missing + 1
-            cost = cost + ((row.src == "vendor" and P.VendorBuy(row.id) or P.AHValue(row.id)) or 0) * row.buy
-        end
-    end
+    if not frame.lines then frame.lines = Lines() end
+    local lines = frame.lines
+    local last = ns.db.scan and ns.db.scan[ns.Realm()] and ns.db.scan[ns.Realm()].lastFull
+    frame.sub:SetText(Tr("Profitable crafts right now") .. (last and ("   ·   " .. (Tr("prices from %s ago")):format(ns.Prices.Ago(time() - last))) or ""))
+    frame.off = math.min(frame.off, math.max(0, #lines - ROWS))
     for i, r in ipairs(frame.rows) do
-        local row = plan.shop[frame.off + i]
-        r.row = row
-        if row then
-            local done = row.buy == 0
-            r.check:SetShown(done)
-            r.icon:SetTexture(row.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-            r.name:SetText(done and ("|cff8a877f" .. row.name .. "|r") or row.name)
-            r.need:SetText(row.need)
-            r.here:SetText(row.mine)
-            r.others:SetText(row.alts > 0 and ("|cffe0a83d" .. row.alts .. "|r") or "|cff615f5c0|r")
-            if row.src == "craft" then
-                r.buy:SetText((row.toCraft or 0) > 0 and ("|cff9ad98c" .. row.toCraft .. "|r") or "|cff5cd173✓|r")
-                r.check:SetShown((row.toCraft or 0) == 0)
-            else
-                r.buy:SetText(done and "|cff5cd173✓|r" or ("|cffed5c52" .. row.buy .. "|r"))
-            end
-            local mx = row.src == "ah" and Q.MaxPrice(row.id)
-            local src = row.src == "vendor" and "|cffe0a83dVendor|r" or row.src == "craft" and "|cff9ad98cCraft|r"
-                or (mx and ("|cff8cbff2≤" .. ns.FormatMoney(mx, { short = true, iconSize = 9 }) .. "|r") or "|cff8cbff2AH|r")
-            r.src:SetText(src)
+        local d = lines[frame.off + i]
+        r.data = d
+        if not d then
+            r:Hide()
+        elseif d.head then
+            r.icon:Hide(); r:SetAlpha(1)
+            r.name:SetPoint("LEFT", 8, 0); r.name:SetWidth(W - 60)
+            r.name:SetText("|cffe0a83d" .. d.text .. "|r")
+            r.can:SetText(""); r.profit:SetText(""); r.day:SetText("")
             r:Show()
         else
-            r:Hide()
+            r.icon:Show(); r.icon:SetTexture(d.rec.icon or ns.GetItemIcon(d.rec.pid) or "Interface\\Icons\\INV_Misc_QuestionMark")
+            r.name:SetPoint("LEFT", 30, 0); r.name:SetWidth(210)
+            r.name:SetText(d.rec.name)
+            r:SetAlpha((d.can == nil or d.can > 0) and 1 or 0.5) -- missing materials: dimmed
+            r.can:SetText(d.can == nil and "|cff8a877f" .. Tr("vendor") .. "|r" or d.can > 0 and ("×" .. d.can) or "|cff615f5c0|r")
+            r.profit:SetText(Short(d.ev.profit, true))
+            r.day:SetText(Short(d.perDay))
+            r:Show()
         end
     end
-    frame.empty:SetShown(#plan.shop == 0)
-    frame.sum:SetText(#plan.shop > 0 and (missing == 0 and "|cff5cd173all bought|r" or
-        (Tr("%d to buy  ·  ≈ %s")):format(missing, ns.FormatMoney(cost, { short = true, iconSize = 10 }))) or "")
+    frame.empty:SetShown(#lines == 0)
+    frame.empty:SetText(next(ns.db.recipes or {}) and Tr("Nothing profitable that sells right now. Scan the AH for fresh prices, or come back later.")
+        or Tr("Open each of your professions once so the addon knows your recipes."))
+end
+RT.Draw = Draw
 
-    -- Recipient depending on the context
-    frame.targetKey = isCrafter and bank or crafter
-    frame.nameLbl:SetText(isCrafter and "Send to (your bank):" or "Send to (your crafter):")
-    if not frame.nameBox:HasFocus() then frame.nameBox:SetText(CharName(frame.targetKey) or "") end
-
-    if merchantOpen then
-        local n = Q.VendorNeedCount()
-        SetAction(frame.a1, n > 0 and (Tr("Buy vendor reagents (%d)")):format(n) or "No vendor reagents needed here",
-            function() Q.BuyVendorNeeds(false); C_Timer.After(0.6, RT.Refresh) end,
-            "Buys from this vendor the reagents your craft queue still needs.")
-        frame.a1:SetDisabled(n == 0)
-        -- Crafts worth more at the vendor than at the AH.
-        local sellN = 0
-        for _, st in ipairs(BagStacks(VendorWant())) do sellN = sellN + st.count end
-        if sellN > 0 and not selling then
-            SetAction(frame.a2, (Tr("Sell to vendor (%d)")):format(sellN), RT.SellToVendor,
-                "Sells the crafts worth more at the vendor than at the AH, and what you bought as vendor flips. Your keep amounts stay in your bags.")
-        else
-            SetAction(frame.a2, nil)
-        end
-    elseif ahOpen then
-        frame.a1:SetDisabled(false)
-        SetAction(frame.a1, "Send list to Auctionator", RT.ExportAuctionator,
-            "Creates an Auctionator shopping list with the exact quantities. Then: Auctionator > Shopping > search it.")
-        SetAction(frame.a2, nil) -- buying is done with "Buy …" in the AH bar
-    elseif mailOpen then
-        -- Button greyed out when there is nothing to send; otherwise the number of items is shown.
-        local function SendBtn(btn, label, who, fn, tip, want)
-            local n = (not sending and who and who ~= Me()) and Pending(want) or 0
-            SetAction(btn, n > 0 and ("%s (%d)"):format(label, n) or (sending and "Sending…" or ("Nothing to send to " .. (CharName(who) or "?"))), fn, tip)
-            btn:SetDisabled(n == 0)
-        end
-        if isCrafter then
-            SendBtn(frame.a1, (Tr("Send crafts to %s")):format(CharName(bank) or "bank"), bank, RT.SendCrafts,
-                "Mails everything you crafted and your enchanting mats to your bank (keeps what the queue still needs and your keep amounts).",
-                CraftsWant())
-            SetAction(frame.a2, nil)
-        else
-            -- Bank: one button per crafter waiting for materials (the first 2; the others through the Send tab).
-            local targets = {}
-            for _, k in ipairs(Q.Crafters()) do
-                if k ~= me and Pending(ReagentsWant(k)) > 0 then targets[#targets + 1] = k end
-            end
-            local first = targets[1] or crafter
-            SendBtn(frame.a1, (Tr("Send reagents to %s")):format(CharName(first) or "crafter"), first,
-                function() RT.SendReagents(first) end, "Mails the reagents this crafter is missing for its queue.",
-                ReagentsWant(first))
-            if targets[2] then
-                local second = targets[2]
-                SendBtn(frame.a2, (Tr("Send reagents to %s")):format(CharName(second) or "crafter"), second,
-                    function() RT.SendReagents(second) end, "Mails the reagents this crafter is missing for its queue.",
-                    ReagentsWant(second))
-            elseif isBank or not next(MySendables()) then SetAction(frame.a2, nil)
-            else
-                SendBtn(frame.a2, (Tr("Send crafts to %s")):format(CharName(bank) or "bank"), bank, RT.SendCrafts,
-                    "Mails what this character crafted (and enchanting mats if it can disenchant) to your bank.", CraftsWant())
-            end
-        end
-    else
-        SetAction(frame.a1, nil); SetAction(frame.a2, nil)
-        if (frame.status:GetText() or "") == "" then
-            RT.Status(Tr("Open the AH, a mailbox or a vendor: the matching buttons appear here."))
-        end
-    end
+-- Something changed (bags, prices, recipes): rebuild the list shortly, once.
+function RT.Refresh()
+    vendorCache = nil
+    if not frame or not frame:IsShown() then return end
+    if frame.pending then return end
+    frame.pending = true
+    C_Timer.After(0.3, function()
+        frame.pending = false
+        if frame:IsShown() then frame.lines = nil; Draw() end
+    end)
 end
 
 function RT.Toggle()
     if not frame then Build() end
     frame:SetShown(not frame:IsShown())
     if frame:IsShown() then frame:Raise() end
+end
+
+function RT.Show()
+    if not frame then Build() end
+    frame.lines = nil
+    frame:Show(); frame:Raise()
+    Draw()
 end
 
 -- ------------------------------------------------------------ vendor bar
@@ -903,7 +753,7 @@ function RT.UpdateMerchantBar()
     end
     local nb = Q.VendorNeedCount()
     local ns2 = 0
-    for _, st in ipairs(BagStacks(VendorWant())) do ns2 = ns2 + st.count end
+    for _, st in ipairs(BagStacks(VendorWantCached())) do ns2 = ns2 + st.count end
     mbar.buy:SetShown(nb > 0); mbar.sell:SetShown(ns2 > 0 and not selling)
     mbar.buy.text:SetText((Tr("Buy queue reagents (%d)")):format(nb))
     mbar.sell.text:SetText((Tr("Sell to vendor (%d)")):format(ns2))
@@ -924,30 +774,9 @@ function RT.HasSomethingToSend()
     return false
 end
 
-local function AutoShow(anchor, forMail, force)
-    if ns.db.settings.routineAuto == false then return end
-    -- Only on the crafter and the bank: never while leveling another character.
-    local me = Me()
-    local hasFlips = ns.db.flipBought and next(ns.db.flipBought) ~= nil
-    -- Crafter: only if they have a queue running (not just leveling).
-    local crafting = Q.IsCrafter(me) and #Q.Plan(me).crafts > 0
-    if me ~= RT.Bank() and not crafting and not (force and hasFlips) then return end
-    -- The mailbox has its own send buttons (Send tab): no automatic opening.
-    if forMail then return end
-    local hasQueue = next(ns.db.queue or {}) ~= nil
-    if not force and not hasQueue and not (forMail and RT.HasSomethingToSend()) then return end
-    if not frame then Build() end
-    if anchor and anchor:IsShown() then
-        frame:ClearAllPoints()
-        frame:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 10, 0)
-    end
-    frame:Show()
-    RT.Refresh()
-end
-
 -- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
-if ns.Profile then ns.Profile.Frame(ev, "Routine") end
+if ns.Profile then ns.Profile.Frame(ev, "Today") end
 for _, e in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "MAIL_SHOW", "MAIL_CLOSED", "MAIL_SEND_SUCCESS",
     "MAIL_FAILED", "BAG_UPDATE_DELAYED", "MERCHANT_SHOW", "MERCHANT_CLOSED", "UI_ERROR_MESSAGE" }) do
     pcall(ev.RegisterEvent, ev, e)
@@ -956,15 +785,10 @@ ev:SetScript("OnEvent", function(_, event, ...)
     if not ns.db then return end
     if event == "AUCTION_HOUSE_SHOW" then
         ahOpen = true
-        C_Timer.After(0.3, function() AutoShow(AuctionHouseFrame or AuctionFrame) end)
     elseif event == "MERCHANT_SHOW" then
         merchantOpen = true
+        vendorCache = nil
         C_Timer.After(0.3, RT.UpdateMerchantBar)
-        C_Timer.After(0.3, function()
-            if Q.VendorNeedCount() > 0 then AutoShow(MerchantFrame)
-            elseif #BagStacks(VendorWant()) > 0 then AutoShow(MerchantFrame, false, true)
-            else RT.Refresh() end
-        end)
     elseif event == "MERCHANT_CLOSED" then
         merchantOpen = false; RT.Refresh()
     elseif event == "AUCTION_HOUSE_CLOSED" then
@@ -973,7 +797,6 @@ ev:SetScript("OnEvent", function(_, event, ...)
         mailOpen = true
         local c = ns.db.chars[Me()]
         if c then c.lastMail = time() end
-        C_Timer.After(0.3, function() AutoShow(_G.ImpotPointGouvMailFrame or MailFrame, true) end)
     elseif event == "MAIL_CLOSED" then
         mailOpen = false
         if sending then sending = nil; RT.Status(Tr("Mailbox closed: sending stopped.")) end
@@ -1002,6 +825,7 @@ ev:SetScript("OnEvent", function(_, event, ...)
             RT.Refresh()
         end
     elseif event == "BAG_UPDATE_DELAYED" then
+        vendorCache = nil
         if frame and frame:IsShown() then C_Timer.After(0.3, RT.Refresh) end
         if merchantOpen then C_Timer.After(0.3, RT.UpdateMerchantBar) end
     end
