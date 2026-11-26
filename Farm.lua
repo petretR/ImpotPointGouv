@@ -1,7 +1,8 @@
 -- ImpotPointGouv: what is worth farming now, for any player (Market tab, "Farm").
 -- Candidates: raw materials that anyone can loot or that your gathering professions collect (cloth,
--- meat & fish, leather, ore, herbs, elemental, enchanting mats), plus the raw reagents of the recipes
--- your characters know. Rare drops are left out on purpose: only these item types are considered.
+-- meat & fish, leather, ore, herbs, elemental), plus the raw reagents of the recipes your characters know.
+-- Rare drops are left out on purpose: only these item types are considered. Anything a recipe makes
+-- (Golden Rod, bolts, cured hides…) is crafted, not farmed, and enchanting mats come from disenchanting.
 -- Each candidate gets: price, 7-day trend against the 30-day usual price, units sold per day, the stock
 -- listed and how it moves, and (when you farmed it yourself) gold per hour and the best zone, from the
 -- loot log and the time spent per zone.
@@ -15,8 +16,20 @@ ns.Farm = F
 F.RAW = {
     [5] = { "any", Tr("Cloth") }, [8] = { "any", Tr("Meat & fish") }, [10] = { "any", Tr("Elemental") },
     [6] = { "skinning", Tr("Leather") }, [7] = { "mining", Tr("Metal & Stone") }, [9] = { "herbalism", Tr("Herb") },
-    [12] = { "enchanting", Tr("Enchanting") },
 }
+
+-- Items made by a recipe (any profession, from the recipe data and the recipes you know).
+local crafted
+local function Crafted()
+    if crafted then return crafted end
+    crafted = {}
+    for _, t in pairs(ns.Data and ns.Data.allRecipes or {}) do if t[1] then crafted[t[1]] = true end end
+    for _, recipes in pairs(ns.db.recipes or {}) do
+        for _, r in pairs(recipes) do if r.p then crafted[r.p] = true end end
+    end
+    return crafted
+end
+function F.ResetCrafted() crafted = nil end
 -- Profession skill lines and names (English and French clients) of the gathering-like professions.
 local LINES = { [393] = "skinning", [186] = "mining", [182] = "herbalism", [356] = "fishing", [333] = "enchanting" }
 local NAMES = {
@@ -118,7 +131,7 @@ function F.List(mineOnly)
     for id, e in pairs(ns.db.prices and ns.db.prices[ns.Realm()] or {}) do
         if type(id) == "number" and e.cur then
             local classID, subID = Instant(id)
-            local raw = classID == 7 and F.RAW[subID]
+            local raw = classID == 7 and not Crafted()[id] and F.RAW[subID] or nil
             local mine = raw and can[raw[1]] or false
             if raw and (not mineOnly or mine or known[id]) then
                 local st = P.Stats and P.Stats(id)

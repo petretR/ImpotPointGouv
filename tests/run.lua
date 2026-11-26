@@ -577,17 +577,25 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     Assert(st.log[#st.log].partial, "partial answer flagged")
     Assert(marketCalls == 0, "a partial scan does not feed the Market tab's sales")
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
+end)
+
 Check("farm view: what my professions collect, trends, gold per hour", function()
     local F, P, S = ns.Farm, ns.Prices, ns.Store
     local inst, stats, ahv, days = C_Item.GetItemInfoInstant, P.Stats, P.AHValue, S.Days
     local chars, loot, zt, prices = ns.db.chars, ns.db.loot, ns.db.zt, ns.db.prices
     local realm = ns.Realm()
     -- 784001 leather (skinning), 784002 herb (herbalism), 784003 cloth (anyone).
-    local types = { [784001] = { 7, 6 }, [784002] = { 7, 9 }, [784003] = { 7, 5 } }
+    -- 784004 a crafted metal part (Golden Rod), 784005 an enchanting mat: never "farm".
+    local types = { [784001] = { 7, 6 }, [784002] = { 7, 9 }, [784003] = { 7, 5 }, [784004] = { 7, 7 }, [784005] = { 7, 12 } }
+    local recipes = ns.db.recipes
+    ns.db.recipes = { Blacksmithing = { ["Golden Rod"] = { p = 784004, r = {} } } }
+    F.ResetCrafted()
     C_Item.GetItemInfoInstant = function(id) local t = types[id] or { 15, 0 }; return id, "", "", "", "icon", t[1], t[2] end
     ns.db.chars = { ["Player-1"] = { name = "Skinner", profs = { { name = "Skinning", line = 393 } } } }
-    ns.db.prices = { [realm] = { [784001] = { cur = 2000, qty = 300 }, [784002] = { cur = 1500, qty = 900 }, [784003] = { cur = 50, qty = 5000 } } }
-    P.Stats = function(id) return ({ [784001] = { sales = 40, med = 2200 }, [784002] = { sales = 30, med = 1500 }, [784003] = { sales = 200, med = 50 } })[id] end
+    ns.db.prices = { [realm] = { [784001] = { cur = 2000, qty = 300 }, [784002] = { cur = 1500, qty = 900 }, [784003] = { cur = 50, qty = 5000 },
+        [784004] = { cur = 1500, qty = 50 }, [784005] = { cur = 4000, qty = 50 } } }
+    P.Stats = function(id) return ({ [784001] = { sales = 40, med = 2200 }, [784002] = { sales = 30, med = 1500 }, [784003] = { sales = 200, med = 50 },
+        [784004] = { sales = 50, med = 1500 }, [784005] = { sales = 50, med = 4000 } })[id] end
     P.AHValue = function(id) return ns.db.prices[realm][id].cur end
     local today = math.floor(time() / 86400)
     S.Days = function(e)
@@ -607,10 +615,11 @@ Check("farm view: what my professions collect, trends, gold per hour", function(
     Assert(ids[784001].hot, "leather: price up, sells, stock down -> farm now")
     Assert(list[1].id == 784001, "farm now first")
     Assert(math.abs(ids[784001].gph - 30 * 2000 * 0.95) < 1, "30 skins in 1 h at 20s")
-    Assert(#F.List(false) == 3, "everything when not limited to my professions")
+    Assert(#F.List(false) == 3, "everything when not limited to my professions, but no crafted part and no enchanting mat")
     Assert(F.WowheadURL(8170):find("forever/item=8170", 1, true), "Wowhead link")
     C_Item.GetItemInfoInstant, P.Stats, P.AHValue, S.Days = inst, stats, ahv, days
-    ns.db.chars, ns.db.loot, ns.db.zt, ns.db.prices = chars, loot, zt, prices
+    ns.db.chars, ns.db.loot, ns.db.zt, ns.db.prices, ns.db.recipes = chars, loot, zt, prices, recipes
+    F.ResetCrafted()
 end)
 
 Check("queue profitable: demand decides, not the margin alone", function()
@@ -662,6 +671,8 @@ Check("repost advice: one line in the tooltip, and in Auctionator's post confirm
     Assert(sale:GetConfirmationMessage() == nil, "no advice: no confirmation")
     TR.PostAdvice = orig
     _G.AuctionHouseFrame = nil
+end)
+
 Check("no file replaces a Blizzard global table (it would taint the game's own UI)", function()
     for line in toc:gmatch("[^\r\n]+") do
         local f = line:match("^%s*([^#%s][^%s]*%.lua)%s*$")

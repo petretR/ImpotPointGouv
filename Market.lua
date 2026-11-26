@@ -496,8 +496,7 @@ function M.BuildPage(page)
     page.mine = T.Button(page, Tr("Only what I can farm"), 150, 26, function()
         page.mineOnly = not page.mineOnly; ns.db.settings.farmMineOnly = page.mineOnly; page.offset = 0; page:Refresh()
     end, "pill")
-    page.mine:SetPoint("RIGHT", prev, "LEFT", -18, 0)
-    page.mine.tooltip = Tr("Your characters' professions decide: Skinning for leather, Mining for ore, Herbalism for herbs, Enchanting for its mats; cloth, meat, fish and elemental for everyone.")
+    page.mine.tooltip = Tr("Your characters' professions decide: Skinning for leather, Mining for ore, Herbalism for herbs; cloth, meat, fish and elemental for everyone.")
     page.fb.flip.tooltip = Tr("Listed well below their usual price and selling regularly: buy and relist (after 5 % cut and deposit).")
     page.fb.vcraft.tooltip = Tr("Recipes (all professions) whose result sells to a vendor for more than its materials cost at the AH. The ones you can craft now come first.")
     page.fb.vflip.tooltip = Tr("Listed below what a vendor pays for them: buy, then sell at any vendor. Risk-free while the price holds.")
@@ -505,6 +504,10 @@ function M.BuildPage(page)
     local list = CreateFrame("Frame", nil, page)
     T.Surface(list, C.surface, 10)
     list:SetPoint("TOPLEFT", 0, -46); list:SetPoint("BOTTOMRIGHT", 0, 0)
+    -- In the list's header row, right side (the title and the filters leave no room above).
+    page.mine:SetSize(150, 22)
+    page.mine:SetPoint("TOPRIGHT", list, "TOPRIGHT", -8, -3)
+    page.mine:SetFrameLevel((list:GetFrameLevel() or 1) + 5)
     local heads = { { "Item", "LEFT", 44 }, { "Price", "RIGHT", -470 }, { "Sold / day", "RIGHT", -370 },
         { "Gold / day", "RIGHT", -250 }, { "Listed", "RIGHT", -160 }, { "", "RIGHT", -14 } }
     page.heads = {}

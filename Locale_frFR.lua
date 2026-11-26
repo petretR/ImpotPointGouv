@@ -464,15 +464,8 @@ ns.AddLocale("frFR", {
     ["Your key %s only disenchants"] = "Ta touche %s ne fait que désenchanter",
 
     -- Farm.lua
-    ["Cloth"] = "Tissu",
     ["Copy the link (Ctrl+C):"] = "Copie le lien (Ctrl+C) :",
-    ["Elemental"] = "Élémentaire",
-    ["Enchanting"] = "Enchantement",
     ["Farm"] = "Farm",
-    ["Herb"] = "Herbe",
-    ["Leather"] = "Cuir",
-    ["Meat & fish"] = "Viande & poisson",
-    ["Metal & Stone"] = "Métal & pierre",
 
     -- Market.lua
     ["  ·  loading %d items…"] = "  ·  chargement de %d objets…",
@@ -540,7 +533,7 @@ ns.AddLocale("frFR", {
     ["What is worth farming now: raw materials anyone can loot or your gathering professions collect, and the reagents of your recipes. Rising prices with falling stock come first."] = "Ce qui vaut le coup d'être farmé maintenant : les matières que tout le monde peut looter ou que tes métiers de récolte ramassent, et les composants de tes recettes. Les prix qui montent avec un stock qui baisse passent en premier.",
     ["You / hour"] = "Toi / heure",
     ["You made"] = "Tu as gagné",
-    ["Your characters' professions decide: Skinning for leather, Mining for ore, Herbalism for herbs, Enchanting for its mats; cloth, meat, fish and elemental for everyone."] = "Les métiers de tes persos décident : Dépeçage pour le cuir, Minage pour le minerai, Herboristerie pour les herbes, Enchantement pour ses composants ; tissu, viande, poisson et élémentaire pour tout le monde.",
+    ["Your characters' professions decide: Skinning for leather, Mining for ore, Herbalism for herbs; cloth, meat, fish and elemental for everyone."] = "Les métiers de tes persos décident : Dépeçage pour le cuir, Minage pour le minerai, Herboristerie pour les herbes ; tissu, viande, poisson et élémentaire pour tout le monde.",
     ["Your skill"] = "Ta compétence",
 
     -- Stock.lua
@@ -768,8 +761,8 @@ ns.AddLocale("frFR", {
     ["  |cffed5c52above your max %s: not profitable anymore!|r"] = "  |cffed5c52au-dessus de ton max %s : plus rentable !|r",
     ["Max items per post (gear, bags)"] = "Objets max par mise en vente (équipement, sacs)",
     ["Medium"] = "Moyenne",
-    ["Short"] = "Courte",
     ["Raw materials (cloth, leather, ore, meat & fish, herbs, elemental, enchanting): what is worth farming."] = "Matières premières (tissu, cuir, minerai, viande et poisson, herbes, élémentaire, enchantement) : ce qui vaut la peine d'être farmé.",
+    ["Short"] = "Courte",
     ["sold %d/%d"] = "vendu %d/%d",
     ["Stock target: starts at 2 (gear: 1), +2 when it sells, ×2 when everything sells within an hour, −2 when it doesn't. Capped by your budget."] = "Stock visé : commence à 2 (équipement : 1), +2 quand ça se vend, ×2 quand tout part en moins d'une heure, −2 quand ça ne se vend pas. Limité par ton budget.",
 })
