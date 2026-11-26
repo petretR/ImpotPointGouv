@@ -153,18 +153,9 @@ end
 -- Wowhead page of an item (WoW Forever database).
 function F.WowheadURL(id) return ("https://www.wowhead.com/forever/item=%d"):format(id) end
 
--- Never assign StaticPopupDialogs itself: replacing the global taints every Blizzard popup
--- (logout, Esc menu, vendor confirmations…). Only add our entry to the existing table.
-StaticPopupDialogs["IMPOTPOINTGOUV_URL"] = {
-    text = "%s", button1 = OKAY or "OK", hasEditBox = true, editBoxWidth = 320,
-    timeout = 0, whileDead = true, hideOnEscape = true,
-    OnShow = function(self, data)
-        local eb = self.editBox or self.EditBox
-        if eb and data then eb:SetText(data); eb:HighlightText(); eb:SetFocus() end
-    end,
-    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-    EditBoxOnEnterPressed = function(self) self:GetParent():Hide() end,
-}
+-- Copy box for the link: the addon's own dialog (a Blizzard popup taints the game's code, #33).
 function F.ShowURL(id)
-    if StaticPopup_Show then StaticPopup_Show("IMPOTPOINTGOUV_URL", Tr("Copy the link (Ctrl+C):"), nil, F.WowheadURL(id)) end
+    local T = ns.Theme
+    if not T.Dialog then return end
+    T.Dialog({ text = Tr("Copy the link (Ctrl+C):"), input = true, default = F.WowheadURL(id), accept = OKAY or "OK", noCancel = true })
 end
