@@ -231,6 +231,7 @@ local function OnLoot(text)
             log[#log + 1] = { t = time(), c = Key(), id = id, n = tonumber(n) or 1, z = TR.Zone(), s = src,
                               qu = q, il = il, vs = vs, i = link:match("%[(.-)%]") }
             if #log > MAX_LOOT then tremove(log, 1) end
+            if src == "c" and ns.MailRules then ns.MailRules.Reset() end
             return
         end
     end

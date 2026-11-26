@@ -103,6 +103,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
 | `Routine.lua`, `Next.lua`, `Preview.lua` | Routine window, next-action key, checklist before batch actions |
 | `Mail.lua` | Mailbox (Inbox / Send tabs) |
+| `MailRules.lua` | Mail rules: what goes to which character (engine, no UI) |
 | `Destroy.lua` | Disenchanting |
 | `Inventory.lua`, `Trainer.lua`, `Report.lua`, `Setup.lua` | Multi-character inventory, trainer pattern value, report, setup guide |
 

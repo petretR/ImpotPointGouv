@@ -21,6 +21,7 @@ Theme.lua
 Chart.lua
 UI.lua
 Mail.lua
+MailRules.lua
 PriceStore.lua
 Prices.lua
 Craft.lua
