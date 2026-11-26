@@ -295,7 +295,7 @@ function T.CloseOnEscape(f)
     end
 end
 
--- T.Dialog{ text = "...", input = true|nil, default = "", accept = "OK", cancel = "Cancel", onAccept = fn(text) }
+-- T.Dialog{ text = "...", input = true|nil, default = "", accept = "OK", cancel = "Cancel", noCancel = true|nil, onAccept = fn(text) }
 local dialog
 function T.Dialog(o)
     if not dialog then
@@ -329,6 +329,7 @@ function T.Dialog(o)
     d.text:SetText(o.text or "")
     d.ok.text:SetText(o.accept or OKAY or "OK")
     d.cancel.text:SetText(o.cancel or CANCEL or "Cancel")
+    d.cancel:SetShown(not o.noCancel)
     d.onAccept = o.onAccept
     d.eb:SetShown(o.input and true or false)
     d.eb:SetText(o.default or "")

@@ -577,6 +577,8 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     Assert(st.log[#st.log].partial, "partial answer flagged")
     Assert(marketCalls == 0, "a partial scan does not feed the Market tab's sales")
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
+end)
+
 Check("no Blizzard table is touched (it taints the Esc menu, popups and bank purchases)", function()
     for line in toc:gmatch("[^\r\n]+") do
         local f = line:match("^%s*([^#%s][^%s]*%.lua)%s*$")
