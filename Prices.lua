@@ -438,8 +438,14 @@ end
 local scan -- current state
 local bar  -- interface bar at the AH
 
+-- One compact row: icon, Scan, then the status line; the bar is as wide as its text.
+local function FitBar()
+    if not bar then return end
+    local w = 8 + 22 + 8 + bar.scan:GetWidth() + 10 + ((bar.status.GetUnboundedStringWidth and bar.status:GetUnboundedStringWidth()) or bar.status:GetStringWidth() or 0) + 14
+    bar:SetWidth(math.max(220, math.min(790, w)))
+end
 local function Status(text)
-    if bar then bar.status:SetText(text or "") end
+    if bar then bar.status:SetText(text or ""); FitBar() end
 end
 P.Status = Status
 function P.Bar() return bar end
@@ -754,19 +760,19 @@ local function BuildBar()
     local host = AuctionHouseFrame or AuctionFrame
     if bar or not host then return end
     bar = CreateFrame("Frame", nil, host)
-    bar:SetSize(790, 60)
+    bar:SetSize(400, 38)
     bar:SetPoint("BOTTOMLEFT", host, "TOPLEFT", 80, 4)
     bar:SetFrameLevel((host:GetFrameLevel() or 1) + 5)
     T.Surface(bar, C.window, 10, { 1, 1, 1, 0.09 })
     local icon = bar:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(22, 22); icon:SetPoint("TOPLEFT", 10, -8)
+    icon:SetTexture(ns.MEDIA .. "icon.tga"); icon:SetSize(22, 22); icon:SetPoint("LEFT", 8, 0)
     bar.scan = T.Button(bar, Tr("Scan"), 96, 26, function() P.Scan() end)
     bar.scan:SetPoint("LEFT", icon, "RIGHT", 8, 0)
     bar.scan.tooltip = Tr("Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes.")
-    -- Status line under the buttons: what just happened, or what the addon is preparing.
+    -- Status line next to the button: what just happened, or what the addon is preparing.
     bar.status = T.Text(bar, 11, { color = C.muted })
-    bar.status:SetPoint("BOTTOMLEFT", 40, 8)
-    bar.status:SetPoint("RIGHT", -10, 0)
+    bar.status:SetPoint("LEFT", bar.scan, "RIGHT", 10, 0)
+    bar.status:SetPoint("RIGHT", -12, 0)
     bar.status:SetWordWrap(false)
     local n = 0
     for _ in pairs(DB()) do n = n + 1 end
@@ -778,10 +784,9 @@ local function BuildBar()
         txt = txt .. "  ·  " .. (ls.partial and "|cffe08a52" or "") .. (Tr("%d auctions")):format(ls.read or 0)
             .. (ls.partial and (" (" .. Tr("partial") .. ")|r") or "")
     end
-    -- The market needs a full scan every session: remind it.
-    if not last or time() - last > 2 * 3600 then txt = txt .. Tr("  ·  |cffe0a83dclick Scan (Market tab needs one per session)|r") end
     bar.status:SetText(txt)
     UpdateBar()
+    FitBar()
     ns.Fire("AH_BAR_READY", bar)
 end
 

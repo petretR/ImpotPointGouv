@@ -23,6 +23,9 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Lists: By recipe / Flat list moved next to the Auctionator button.
 - Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
 
+### Removed
+- AH: the Buy reagents, Post and Cancel undercut buttons next to Scan, and the "Selling at the AH" settings that went with them. Buying and posting stay with the AH or Auctionator; the addon keeps the shopping list and the prices. The AH bar shrinks to one compact row: the Scan button and its status line. The "click Scan" reminder is gone: the bar already says how long ago the last full scan was.
+
 ### Fixed
 - Mail: sending part of a stack for two different items at once now splits them one after the other, so the game does not refuse the second split.
 - Mail: the "Collect only" buttons no longer try to take items when your bags are full (they waited 4 s on each mail); they take the gold and stop.
