@@ -169,7 +169,7 @@ local function Build()
     f:SetScript("OnDragStart", function() f:StartMoving() end)
     f:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
     T.Surface(f, C.window, 14, { 1, 1, 1, 0.09 })
-    tinsert(UISpecialFrames, "ImpotPointGouvHistory")
+    ns.Theme.CloseOnEscape(_G["ImpotPointGouvHistory"])
     local close = T.CloseButton(f, function() f:Hide() end)
     close:SetPoint("TOPRIGHT", -10, -10)
 

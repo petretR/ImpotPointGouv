@@ -483,7 +483,7 @@ local function Build()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     T.Surface(frame, C.window, 14, { 1, 1, 1, 0.09 })
-    tinsert(UISpecialFrames, "ImpotPointGouvRoutine")
+    ns.Theme.CloseOnEscape(_G["ImpotPointGouvRoutine"])
     frame:SetToplevel(true)
     if ns.Setup then ns.Setup.AttachBanner(frame) end
 

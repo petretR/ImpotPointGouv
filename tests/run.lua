@@ -577,6 +577,28 @@ Check("full scan waits for item data, logs its size and flags a partial answer",
     Assert(st.log[#st.log].partial, "partial answer flagged")
     Assert(marketCalls == 0, "a partial scan does not feed the Market tab's sales")
     C_AuctionHouse, C_Item.DoesItemExistByID = saved, savedItem
+Check("no Blizzard table is touched (it taints the Esc menu, popups and bank purchases)", function()
+    for line in toc:gmatch("[^\r\n]+") do
+        local f = line:match("^%s*([^#%s][^%s]*%.lua)%s*$")
+        if f and not f:find("^libs") then
+            local src = assert(io.open((f:gsub("\\", "/")))):read("*a"):gsub("%-%-[^\n]*", "")
+            for _, pat in ipairs({ "UISpecialFrames", "StaticPopupDialogs", "StaticPopup_Show", "\nGameTooltip%s*=" }) do
+                Assert(not src:find(pat), f .. " uses " .. pat)
+            end
+        end
+    end
+    -- Esc closes the addon's windows by itself, and the dialog runs its callback.
+    local T = ns.Theme
+    local f = CreateFrame("Frame")
+    T.CloseOnEscape(f)
+    f:Show()
+    f._scripts.OnKeyDown(f, "ESCAPE")
+    Assert(not f:IsShown(), "Esc closes the window")
+    local got
+    local d = T.Dialog({ text = "Name?", input = true, onAccept = function(text) got = text end })
+    d.eb.GetText = function() return "My list" end
+    d.ok._scripts.OnClick(d.ok)
+    Assert(got == "My list", "dialog returns the text typed")
 end)
 
 Check("farm view: what my professions collect, trends, gold per hour", function()

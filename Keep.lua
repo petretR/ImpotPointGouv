@@ -43,7 +43,7 @@ local function Build()
         b:SetPoint("TOPLEFT", x, -88)
     end
     pop:Hide()
-    tinsert(UISpecialFrames, "ImpotPointGouvKeep")
+    ns.Theme.CloseOnEscape(_G["ImpotPointGouvKeep"])
 end
 
 function K.Edit(id, anchor)

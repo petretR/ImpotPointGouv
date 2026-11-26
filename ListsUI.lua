@@ -187,7 +187,7 @@ local function Popup(anchor, entries)
             if self:IsMouseOver(8, -8, -8, 8) then away = 0 else away = away + el end
             if away > 1.2 then self:Hide() end
         end)
-        tinsert(UISpecialFrames, "ImpotPointGouvListMenu")
+        ns.Theme.CloseOnEscape(_G["ImpotPointGouvListMenu"])
     end
     for _, b in ipairs(pop.btns) do b:Hide() end
     for i, e in ipairs(entries) do
@@ -216,31 +216,25 @@ end
 
 LU.Popup = Popup
 
-StaticPopupDialogs["IMPOTPOINTGOUV_NEWLIST"] = {
-    text = Tr("Name of the new list:"), button1 = OKAY or "OK", button2 = CANCEL or "Cancel",
-    hasEditBox = true, maxLetters = 40, timeout = 0, whileDead = true, hideOnEscape = true,
-    OnAccept = function(self, data)
-        local eb = self.editBox or self.EditBox
-        local name = eb and eb:GetText()
+-- New list: asks its name (the addon's own dialog, not a Blizzard popup), then adds the item if any.
+local function NewListDialog(id)
+    T.Dialog({ text = Tr("Name of the new list:"), input = true, onAccept = function(name)
         if not name or name:match("^%s*$") then name = nil end
+        if name then name = name:sub(1, 40) end
         local i = LS.NewCustom(name)
-        if data and data.id then LS.AddToCustom(i, data.id) end
+        if id then LS.AddToCustom(i, id) end
         LU.select = "my_" .. i
         if ns.UI then ns.UI.Refresh() end
-    end,
-    EditBoxOnEnterPressed = function(self)
-        local p = self:GetParent()
-        StaticPopupDialogs["IMPOTPOINTGOUV_NEWLIST"].OnAccept(p, p.data)
-        p:Hide()
-    end,
-}
+    end })
+end
+LU.NewListDialog = NewListDialog
 
 local function AddToListMenu(id)
     local entries = {}
     for i, cl in ipairs(ns.db.lists or {}) do
         entries[#entries + 1] = { Tr("Add to ") .. cl.name, function() LS.AddToCustom(i, id); ns.UI.Refresh() end }
     end
-    entries[#entries + 1] = { "Add to a new list…", function() StaticPopup_Show("IMPOTPOINTGOUV_NEWLIST", nil, nil, { id = id }) end, color = C.gold }
+    entries[#entries + 1] = { "Add to a new list…", function() NewListDialog(id) end, color = C.gold }
     return entries
 end
 
@@ -288,7 +282,7 @@ function LU.BuildPage(page)
         b:SetScript("OnClick", function(self, button)
             local it = self.item
             if not it then return end
-            if it.new then StaticPopup_Show("IMPOTPOINTGOUV_NEWLIST"); return end
+            if it.new then NewListDialog(); return end
             if it.header then
                 page.collapsed[it.key] = not page.collapsed[it.key] or nil
                 page:Refresh()

@@ -125,7 +125,7 @@ local function Build()
         if S.Remaining() == 0 then win:Hide() else OpenChars() end
     end, "primary")
     win.chars:SetPoint("BOTTOMRIGHT", -12, 12)
-    tinsert(UISpecialFrames, "ImpotPointGouvSetup")
+    ns.Theme.CloseOnEscape(_G["ImpotPointGouvSetup"])
     win:SetScript("OnShow", function() S.Refresh() end)
     win:Hide()
 end

@@ -66,6 +66,7 @@ ns.AddLocale("frFR", {
     ["Double when sold out within"] = "Doubler si tout part en moins de",
     ["Each item scanned here also updates Auctionator's price, so its tooltip stays in sync."] = "Chaque objet scanné ici met aussi à jour le prix d'Auctionator : son infobulle reste synchronisée.",
     ["Each rank gives cooking recipes a 10 % chance of one more result: margins and leveling routes count it on average."] = "Chaque rang donne aux recettes de cuisine 10 % de chance d'un résultat en plus : les marges et les routes de leveling en tiennent compte en moyenne.",
+    ["Erase all"] = "Tout effacer",
     ["everything you hold"] = "tout ce que tu possèdes",
     ["farmed %s · trading %s · crafted %s"] = "farmé %s · revente %s · crafté %s",
     ["Farmed or looted"] = "Farmé ou looté",
