@@ -614,23 +614,31 @@ end
 
 -- "buy" | "sell" | "farm" | nil, plus a short reason.
 function LS.Verdict(e, st)
+    -- A crafted item is never "farmed": with nobody selling it, it is a chance for whoever crafts it.
+    local crafted = e.kind == "product"
+    local canCraft = crafted and ns.Craft and ns.Craft.ProducerOf and ns.Craft.ProducerOf(e.id) ~= nil
     if not st or not st.med then
-        if e.kind == "product" or e.uses >= 2 then return "farm", "never seen at the AH" end
-        return nil, "not scanned yet"
+        if crafted then return nil, Tr("never seen at the AH") end
+        if e.uses >= 2 then return "farm", Tr("never seen at the AH") end
+        return nil, Tr("not scanned yet")
     end
     local cur = st.cur
-    if not cur or (st.qty or 0) == 0 then return "farm", "none listed right now" end
+    if not cur or (st.qty or 0) == 0 then
+        if canCraft then return "craft", Tr("nobody sells it right now and you know the recipe") end
+        if crafted then return nil, Tr("nobody sells it right now") end
+        return "farm", Tr("none listed right now")
+    end
     -- Enough history: 4 price points spread over 5 days of the last week or more.
     local enough = (st.n or 0) >= 4 and (st.days or 0) >= 5
     local max = LS.BuyMax(st)
-    if enough and max and cur <= max then return "buy", "well under its usual price" end
+    if enough and max and cur <= max then return "buy", Tr("well under its usual price") end
     if max and cur <= max then
         return nil, (Tr("cheap today, but only %d days of prices this week: wait for more scans")):format(st.days or 0)
     end
     if enough and st.high and cur >= st.high and cur >= st.med * 1.1 and LS.Have(e.id) > 0 then
-        return "sell", "above its usual price and you have some"
+        return "sell", Tr("above its usual price and you have some")
     end
-    if (st.cv or 0) > 0.35 and enough then return nil, "unstable price" end
+    if (st.cv or 0) > 0.35 and enough then return nil, Tr("unstable price") end
     return nil
 end
 

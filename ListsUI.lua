@@ -19,6 +19,7 @@ local VERDICT = {
     buy  = { "BUY",  { 0.361, 0.820, 0.451, 1 } },
     sell = { "SELL", { 0.878, 0.659, 0.239, 1 } },
     farm = { "FARM", { 0.45, 0.68, 0.95, 1 } },
+    craft = { "CRAFT", { 0.60, 0.85, 0.55, 1 } },
 }
 
 local DrawRouteRow
@@ -51,7 +52,7 @@ function LU.FmtCooldown(secs)
 end
 
 -- Value of a column for an item (list view): name, price, volatility, sales, listed, owned, verdict.
-local VERDICT_RANK = { buy = 3, sell = 2, farm = 1 }
+local VERDICT_RANK = { buy = 4, sell = 3, craft = 2, farm = 1 }
 function LU.ListValue(key, id, st, verdict)
     if key == "name" then return P.Name(id):lower() end
     if key == "have" then return LS.Have(id) end
@@ -837,7 +838,7 @@ function LU.BuildPage(page)
                     r.tag:SetTextColor(unpack(craft and VERDICT.buy[2] or C.gold))
                 elseif v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2]))
                 elseif st and st.med then r.tag:SetText(Tr("normal")); r.tag:SetTextColor(unpack(C.faint))
-                else r.tag:SetText("") end
+                else r.tag:SetText("|cff615f5c—|r") end
                 if row.merchant then
                     -- Vendor supply: vendor price, no curve or AH verdict.
                     -- Sales / day and quantity listed stay shown when the item also sells at the AH.
@@ -939,7 +940,7 @@ function LU.BuildPage(page)
                 data[#data + 1] = row
             end
         end
-        local order = { buy = 1, sell = 2, farm = 3 }
+        local order = { buy = 1, sell = 2, craft = 3, farm = 4 }
         table.sort(data, function(a, b)
             local oa, ob = order[a.verdict] or 4, order[b.verdict] or 4
             if oa ~= ob then return oa < ob end
