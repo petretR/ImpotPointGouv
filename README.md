@@ -73,6 +73,7 @@ English and French, picked automatically from the game client language. Translat
 | `/ipg lists` | Lists tab, plus a check of the recipe data the game provides |
 | `/ipg list` | Routine window |
 | `/ipg de` | Disenchant window |
+| `/ipg profit` | Show or hide the profit next to each recipe in the profession window (off when ForeverRecipes shows its own) |
 | `/ipg item <item>` | Price history of an item (link, id or name); `/ipg price` does the same |
 | `/ipg sold` | Vendor sales of the last 7 days, and what was worth more at the AH |
 | `/ipg report` | 30-day test report per item |

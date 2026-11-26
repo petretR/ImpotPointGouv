@@ -856,7 +856,7 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
     elseif msg == "diag" then
         ns.Craft.Diag()
     elseif msg == "profit" then
-        ns.db.settings.inlineProfit = ns.db.settings.inlineProfit == false
+        ns.db.settings.inlineProfit = not ns.Craft.InlineProfit()
         ns.Print(Tr("profit in the recipe list ") .. (ns.db.settings.inlineProfit and "shown." or "hidden."))
     elseif msg == "courrier" or msg == "mail" then
         ns.db.settings.mailOverlay = ns.db.settings.mailOverlay == false
