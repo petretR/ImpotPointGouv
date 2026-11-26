@@ -558,6 +558,12 @@ local function BuildSettings(page)
     Toggle(1, "White gear: vendor price only", function() return R().ignoreWhiteGear end,
         function(v) R().ignoreWhiteGear = v end, "White gear rarely sells at the AH.")
 
+    Head(2, "Legacy talents")
+    Stepper(2, "Master Chef rank", function() return st().masterChef or 0 end, function(v)
+        st().masterChef = math.max(0, math.min(5, v))
+        if ns.Route and ns.Route.ResetRecipes then ns.Route.ResetRecipes() end
+        ns.Fire("PRICES_CHANGED")
+    end, 1, plain, "Each rank gives cooking recipes a 10 % chance of one more result: margins and leveling routes count it on average.")
     Head(2, "Selling at the AH")
     Stepper(2, "Stock target cap", function() return R().maxQty end, Clamp("maxQty", 1, 1000), 10, plain,
         "Highest stock the adaptive target can reach for an item that sells well.")

@@ -286,7 +286,7 @@ function LS.YieldOf(id)
         local t = it and it.s and D.allRecipes and D.allRecipes[it.s]
         y = (t and t[1] == id and t[6]) or DataMade(id)
     end
-    return (y and y > 0) and y or 1
+    return ((y and y > 0) and y or 1) * ns.YieldBonus(id)
 end
 
 -- Readable quantity: whole numbers as is, otherwise at most two decimals (0.5, 0.33).

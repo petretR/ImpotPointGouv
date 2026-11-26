@@ -411,6 +411,21 @@ end
 
 -- AH "commodity" item (bought by quantity, without picking the listing): in practice, what stacks.
 -- (GetItemCommodityStatus expects a bag slot, not an ID: unusable here.)
+-- Extra results from crafting talents (WoW Forever Legacy talent Master Chef: 10 % chance per rank
+-- of one more result on a cooking recipe). Returns the average multiplier for an item made by a recipe.
+local cookingProducts
+function ns.YieldBonus(id)
+    local rank = ns.db and ns.db.settings and ns.db.settings.masterChef or 0
+    if rank <= 0 or not id then return 1 end
+    if not cookingProducts then
+        cookingProducts = {}
+        for _, t in pairs((ns.Data and ns.Data.allRecipes) or {}) do
+            if t[2] == 6 and t[1] and t[1] ~= 0 then cookingProducts[t[1]] = true end
+        end
+    end
+    return cookingProducts[id] and (1 + 0.1 * rank) or 1
+end
+
 function ns.IsCommodity(id)
     local stack = select(8, ns.GetItemInfo(id))
     return stack == nil or stack > 1

@@ -413,6 +413,8 @@ function CR.Evaluate(rec)
     end
     local ahv = P.AHValue(rec.pid)
     local vs = P.VendorSell(rec.pid)
+    -- Average items per craft, extra results from talents included (Master Chef).
+    local made = (rec.made or 1) * ns.YieldBonus(rec.pid)
     -- White (or grey) gear: does not sell at the AH, only the vendor price is kept.
     -- Bags, armor kits and materials (not equippable) keep their AH value.
     local _, _, quality, _, _, _, _, _, equipLoc, _, _, _, _, bindType = ns.GetItemInfo(rec.pid)
@@ -442,10 +444,10 @@ function CR.Evaluate(rec)
     if ev.units14 > 0 then chance = math.max(0.1, math.min(1, ev.sold14 / ev.units14)) end
     ev.sellChance = chance
     ev.depositRisk = CR.DepositFor(pname) * (1 - chance) / chance -- average lost deposits before a sale
-    ev.ahNet = ahv and (ahv * (1 - AH_CUT) - ev.depositRisk) * rec.made
-    ev.vendorNet = vs and vs * rec.made
+    ev.ahNet = ahv and (ahv * (1 - AH_CUT) - ev.depositRisk) * made
+    ev.vendorNet = vs and vs * made
     local de = P.DisenchantValue(rec.pid)
-    ev.deNet = de and de * rec.made
+    ev.deNet = de and de * made
     ev.listed = P.Entry(rec.pid) and P.Entry(rec.pid).qty
     if ev.ahNet and (not ev.vendorNet or ev.ahNet >= ev.vendorNet) then
         ev.value, ev.channel = ev.ahNet, "ah"

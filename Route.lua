@@ -54,7 +54,8 @@ function RO.Recipes(prof)
     local code, out = RO.AL_PROF[prof], {}
     for spell, t in pairs((ns.Data or {}).allRecipes or {}) do
         if t[2] == code then
-            local r = { spell = spell, out = t[1] ~= 0 and t[1] or nil, o = t[3], y = t[4], g = t[5], n = t[6] or 1,
+            local r = { spell = spell, out = t[1] ~= 0 and t[1] or nil, o = t[3], y = t[4], g = t[5],
+                n = (t[6] or 1) * ns.YieldBonus(t[1] ~= 0 and t[1] or nil),
                 pat = t[7] ~= 0 and t[7] or nil, est = t[8] == 1, mats = {} }
             r.cd = RO.IsCooldown(spell, prof, r.out)
             for i = 9, #t, 2 do r.mats[#r.mats + 1] = { t[i], t[i + 1] or 1 } end
@@ -189,6 +190,7 @@ end
 -- at the latest every 10 min (learned recipes, trainer). Switching lists no longer recomputes.
 local routeCache, routeVer = {}, 0
 function RO.Invalidate() routeVer = routeVer + 1 end
+function RO.ResetRecipes() cache = {}; RO.Invalidate() end
 for _, ev in ipairs({ "PRICES_CHANGED", "CHARS_CHANGED", "LISTS_CHANGED", "INVENTORY_CHANGED" }) do ns.On(ev, RO.Invalidate) end
 
 -- Computes the route. opts: { noAH = bool, from = skill, sell = { ah = bool, vendor = bool, de = bool } }
