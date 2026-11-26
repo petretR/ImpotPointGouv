@@ -753,7 +753,7 @@ function M.BuildSend(f)
     local right = Card(p)
     right:SetPoint("TOPLEFT", pad + 270, -14); right:SetPoint("BOTTOMRIGHT", -pad, 16)
     local rt = T.Text(right, 12, { bold = true, text = Tr("Your bags") }); rt:SetPoint("TOPLEFT", 14, -10)
-    local rh = T.Text(right, 11, { color = C.faint, text = Tr("click to add / remove · − / + or type the quantity") })
+    local rh = T.Text(right, 11, { color = C.faint, text = Tr("click to add · right-click to remove · − / + or type the quantity") })
     rh:SetPoint("TOPRIGHT", -14, -11)
     p.rows = {}
     for i = 1, 13 do
@@ -799,9 +799,11 @@ function M.BuildSend(f)
             GameTooltip:Show()
         end)
         r.qty:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        r:SetScript("OnClick", function(self)
+        r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        r:SetScript("OnClick", function(self, button)
             if not self.item then return end
-            if basket[self.item.id] then basket[self.item.id] = nil else basket[self.item.id] = self.item.count end
+            if button == "RightButton" then basket[self.item.id] = nil
+            elseif basket[self.item.id] then basket[self.item.id] = nil else basket[self.item.id] = self.item.count end
             M.DrawSend()
         end)
         r:SetScript("OnEnter", function(self)
@@ -1065,10 +1067,32 @@ function M.SetTab(tab)
     end
 end
 
+-- Items attached to the game's own send form (right-click in the bags while the mailbox is open)
+-- would be invisible behind this window: they move into the basket, where they show checked and a
+-- click removes them. Not while the addon itself is filling a mail.
+function M.AdoptAttachments()
+    if not (GetSendMailItem and ClearSendMail) then return 0 end
+    if ns.Routine and ns.Routine.IsSending and ns.Routine.IsSending() then return 0 end
+    local n = 0
+    for i = 1, (ATTACHMENTS_MAX_SEND or 12) do
+        local _, itemID, _, count = GetSendMailItem(i)
+        if itemID then
+            basket[itemID] = (basket[itemID] or 0) + (count or 1)
+            n = n + 1
+        end
+    end
+    if n > 0 then
+        ClearSendMail()
+        if frame and frame.send and frame.send:IsShown() then C_Timer.After(0, M.DrawSend) end
+    end
+    return n
+end
+M._basket = basket
+
 -- ------------------------------------------------------------ events
 local ev = CreateFrame("Frame")
 if ns.Profile then ns.Profile.Frame(ev, "Mail") end
-for _, e in ipairs({ "MAIL_SHOW", "MAIL_CLOSED", "MAIL_INBOX_UPDATE", "UI_ERROR_MESSAGE", "BAG_UPDATE" }) do
+for _, e in ipairs({ "MAIL_SHOW", "MAIL_CLOSED", "MAIL_INBOX_UPDATE", "UI_ERROR_MESSAGE", "BAG_UPDATE", "MAIL_SEND_INFO_UPDATE" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 local queued
@@ -1087,6 +1111,8 @@ ev:SetScript("OnEvent", function(_, event, ...)
         if run then Finish("Mailbox closed, collection interrupted.") end
         if frame then frame:Hide(); if frame.reopen then frame.reopen:Hide() end end
         BlizzardVisible(true)
+    elseif event == "MAIL_SEND_INFO_UPDATE" then
+        if frame and frame:IsShown() then M.AdoptAttachments() end
     elseif event == "UI_ERROR_MESSAGE" then
         local a, b = ...
         local msg = type(b) == "string" and b or a
