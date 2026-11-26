@@ -42,6 +42,11 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Craft queue: one refresh after a series of bag changes instead of one per change (selling 20 items at a vendor froze the game 50 ms each time).
 - Setup guide: a profession just learned (skill under 5, e.g. Cooking 1 on a new alt) no longer asks to be opened; levelling it opens the window anyway.
 - Mail, Send tab: clicking one of your characters under "To" now enables the Send button right away (it stayed greyed until something else changed).
+- Lists: the 7-day bars are proportional to the price, so a 10 % drop no longer looks like a crash; days without a scan show as a faint dash.
+- Lists, cooldown view: the Cooldown and Per day columns no longer overlap.
+- Lists: an item with nothing to do shows "normal" in the Verdict column (with the reason in its tooltip) instead of a blank, and the green count next to a list says what it counts when you hover it (items under their usual price).
+- Lists: BUY and SELL need prices from at least 5 days of the last week. With only 2 or 3 days of scans (or scans that missed listings, before the full scan fix), the "usual" price was too high and almost everything showed BUY; the tooltip now says it is cheap today but needs more scans.
+- Lists: a crafted item is no longer marked FARM. When nobody sells it, it shows CRAFT if one of your characters knows the recipe (a chance to sell it), otherwise nothing; FARM stays for materials. The verdict reasons are translated.
 - Mail: sending part of a stack for two different items at once now splits them one after the other, so the game does not refuse the second split.
 - Mail: the "Collect only" buttons no longer try to take items when your bags are full (they waited 4 s on each mail); they take the gold and stop.
 - Overview: the Stock value card now matches the Stock tab. It updates when your bags change and when the game loads item prices it did not have yet.

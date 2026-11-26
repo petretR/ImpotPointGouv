@@ -19,6 +19,7 @@ local VERDICT = {
     buy  = { "BUY",  { 0.361, 0.820, 0.451, 1 } },
     sell = { "SELL", { 0.878, 0.659, 0.239, 1 } },
     farm = { "FARM", { 0.45, 0.68, 0.95, 1 } },
+    craft = { "CRAFT", { 0.60, 0.85, 0.55, 1 } },
 }
 
 local DrawRouteRow
@@ -51,7 +52,7 @@ function LU.FmtCooldown(secs)
 end
 
 -- Value of a column for an item (list view): name, price, volatility, sales, listed, owned, verdict.
-local VERDICT_RANK = { buy = 3, sell = 2, farm = 1 }
+local VERDICT_RANK = { buy = 4, sell = 3, craft = 2, farm = 1 }
 function LU.ListValue(key, id, st, verdict)
     if key == "name" then return P.Name(id):lower() end
     if key == "have" then return LS.Have(id) end
@@ -271,10 +272,18 @@ function LU.BuildPage(page)
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b:SetScript("OnEnter", function(self)
             if self.item and not self.item.new then self.hl:SetColor({ 1, 1, 1, 0.05 }) end
-            if self.item and self.item.list and self.item.list.info then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:AddLine(Tr(self.item.list.title), 1, 1, 1)
-                GameTooltip:AddLine(self.item.list.info, 0.75, 0.75, 0.75, true); GameTooltip:Show()
-            end end)
+            local it = self.item
+            if not it or it.new then return end
+            local info = it.list and it.list.info
+            if not info and (it.deals or 0) == 0 then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(Tr(it.list and it.list.title or it.header), 1, 1, 1)
+            if info then GameTooltip:AddLine(info, 0.75, 0.75, 0.75, true) end
+            if (it.deals or 0) > 0 then
+                GameTooltip:AddLine((Tr("● %d: under their usual price right now (BUY)")):format(it.deals), 0.36, 0.82, 0.45, true)
+            end
+            GameTooltip:Show()
+        end)
         b:SetScript("OnLeave", function(self) GameTooltip:Hide(); page:DrawSide() end)
         b:SetScript("OnClick", function(self, button)
             local it = self.item
@@ -610,7 +619,10 @@ function LU.BuildPage(page)
                 for k = 1, math.min(10, #names) do GameTooltip:AddDoubleLine("  " .. names[k][1], "×" .. LS.FmtQty(names[k][2]), 0.8, 0.8, 0.8, 0.6, 0.6, 0.6) end
                 if #names > 10 then GameTooltip:AddLine(("  +%d"):format(#names - 10), 0.6, 0.6, 0.6) end
             end
-            if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6) end
+            if row.why then GameTooltip:AddLine(row.why, 0.6, 0.6, 0.6, true)
+            elseif not row.verdict and st and st.med then
+                GameTooltip:AddLine(Tr("Normal price: not cheap enough to buy, not high enough to sell."), 0.6, 0.6, 0.6, true)
+            end
             GameTooltip:AddLine(Tr("Click: price history"), 0.88, 0.66, 0.24)
             local rl = {}
             for _, r2 in ipairs(LS.ROLES) do if e.roles[r2[1]] then rl[#rl + 1] = Tr(r2[2]) end end
@@ -770,12 +782,13 @@ function LU.BuildPage(page)
                 r.usual:SetText(Money(st and st.med))
                 -- curve bars
                 local sp = st and st.spark or {}
-                local lo, hi
-                for k = 1, 7 do local v = sp[k]; if v then lo = lo and math.min(lo, v) or v; hi = hi and math.max(hi, v) or v end end
+                -- Heights proportional to the price (a 10 % drop looks like 10 %), days without a scan as a faint dash.
+                local hi
+                for k = 1, 7 do local v = sp[k]; if v then hi = hi and math.max(hi, v) or v end end
                 for k = 1, 7 do
                     local t, v = r.bars[k], sp[k]
                     if v then
-                        local h = (hi and hi > lo) and (3 + 13 * (v - lo) / (hi - lo)) or 8
+                        local h = math.max(3, 16 * v / hi)
                         t:SetHeight(h)
                         if k == 7 then t:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.95) else t:SetVertexColor(1, 1, 1, 0.22) end
                         t:Show()
@@ -786,6 +799,7 @@ function LU.BuildPage(page)
                 r.vol:SetText((st and (st.n or 0) >= 4 and (st.cv or 0) > 0.35) and UNSTABLE_ICON or "")
                 r.sales:SetText(st and st.sales and (st.sales >= 10 and ("%d"):format(math.floor(st.sales + 0.5)) or ("%.1f"):format(st.sales)) or "|cff615f5c—|r")
                 r.listed:SetText(st and st.qty and (st.qty >= 10000 and ("%dk"):format(math.floor(st.qty / 1000)) or tostring(st.qty)) or "|cff615f5c—|r")
+                r.sales:ClearAllPoints(); r.sales:SetPoint("RIGHT", self.cdView and -200 or -170, 0)
                 if self.cdView then
                     -- Cooldown and gain per day on the recipe row; nothing on its materials.
                     if row.head then
@@ -822,7 +836,9 @@ function LU.BuildPage(page)
                     local craft = row.choice.best == "craft"
                     r.tag:SetText(craft and Tr("CRAFT") or Tr("BUY IT"))
                     r.tag:SetTextColor(unpack(craft and VERDICT.buy[2] or C.gold))
-                elseif v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2])) else r.tag:SetText("") end
+                elseif v and VERDICT[v] then r.tag:SetText(Tr(VERDICT[v][1])); r.tag:SetTextColor(unpack(VERDICT[v][2]))
+                elseif st and st.med then r.tag:SetText(Tr("normal")); r.tag:SetTextColor(unpack(C.faint))
+                else r.tag:SetText("|cff615f5c—|r") end
                 if row.merchant then
                     -- Vendor supply: vendor price, no curve or AH verdict.
                     -- Sales / day and quantity listed stay shown when the item also sells at the AH.
@@ -904,7 +920,7 @@ function LU.BuildPage(page)
             { "LEFT", 14 }, { "LEFT", 112 }, { "RIGHT", -300 }, { "RIGHT", -300 },
             { "RIGHT", -278 }, { "TOPLEFT", -252 }, { "RIGHT", -22 } }
             or { { "LEFT", 38 }, { "RIGHT", -402 }, { "RIGHT", -330 }, { "TOPLEFT", -316 },
-            { "RIGHT", -176 }, { "RIGHT", -120 }, { "RIGHT", -82 } }
+            { "RIGHT", cdView and -206 or -176 }, { "RIGHT", -120 }, { "RIGHT", -82 } }
         for k = 1, 7 do
             local h, pos = self.heads[k], HP[k]
             h:ClearAllPoints()
@@ -924,7 +940,7 @@ function LU.BuildPage(page)
                 data[#data + 1] = row
             end
         end
-        local order = { buy = 1, sell = 2, farm = 3 }
+        local order = { buy = 1, sell = 2, craft = 3, farm = 4 }
         table.sort(data, function(a, b)
             local oa, ob = order[a.verdict] or 4, order[b.verdict] or 4
             if oa ~= ob then return oa < ob end

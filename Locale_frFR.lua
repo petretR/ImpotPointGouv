@@ -262,6 +262,7 @@ ns.AddLocale("frFR", {
     ["Scan stopped."] = "Scan arrêté.",
     ["Scan"] = "Scan",
     ["Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes."] = "Scanne tout l'hôtel des ventes (prix de tout + onglet Marché). Le jeu l'autorise toutes les 15 minutes.",
+    ["usual"] = "habituel",
 
     -- Craft.lua
     ["  ·  recipes read: "] = "  ·  recettes lues : ",
@@ -576,6 +577,7 @@ ns.AddLocale("frFR", {
     [" (Showing the usual raid enchanting materials until the game provides the exact recipes.)"] = " (Matériaux d'enchantement de raid habituels, en attendant les recettes exactes du jeu.)",
     ["%s: nothing left under %s (or over your budget)."] = "%s : plus rien sous %s (ou au-delà de ton budget).",
     ["%s: the price moved above your limit, nothing bought."] = "%s : le prix a dépassé ta limite, rien acheté.",
+    ["above its usual price and you have some"] = "au-dessus de son prix habituel et tu en as",
     ["Agility"] = "Agilité",
     ["Alchemy"] = "Alchimie",
     ["Alchemy: transmutes"] = "Alchimie : transmutations",
@@ -584,6 +586,7 @@ ns.AddLocale("frFR", {
     ["Bought %d× %s for %s."] = "Acheté %d× %s pour %s.",
     ["Buy %d× %s for %s (%s each, limit %s)? Click Confirm."] = "Acheter %d× %s pour %s (%s l'unité, limite %s) ? Clique sur Confirmer.",
     ["Caster"] = "Caster",
+    ["cheap today, but only %d days of prices this week: wait for more scans"] = "pas cher aujourd'hui, mais seulement %d jours de prix cette semaine : attends d'autres scans",
     ["Checking live listings of %s under %s…"] = "Vérification des annonces de %s sous %s…",
     ["Cloaks, trinkets, relics"] = "Capes, bijoux, reliques",
     ["CONSUMES & ENCHANTS"] = "CONSOS ET ENCHANTEMENTS",
@@ -600,8 +603,13 @@ ns.AddLocale("frFR", {
     ["Melee"] = "Mêlée",
     ["Misc"] = "Divers",
     ["MY LISTS"] = "MES LISTES",
+    ["never seen at the AH"] = "jamais vu à l'HV",
+    ["nobody sells it right now and you know the recipe"] = "personne n'en vend en ce moment et tu connais la recette",
+    ["nobody sells it right now"] = "personne n'en vend en ce moment",
+    ["none listed right now"] = "aucun en vente en ce moment",
     ["not available"] = "non disponible",
     ["Not enough price history yet: scan this list a few times first."] = "Pas encore assez d'historique de prix : scanne cette liste quelques fois d'abord.",
+    ["not scanned yet"] = "pas encore scanné",
     ["Only stackable items can be bought from here: use the AH for gear."] = "Seuls les objets empilables s'achètent d'ici : passe par l'HV pour l'équipement.",
     ["Plate"] = "Plaques",
     ["PRE-BIS CRAFTS"] = "PRÉ-BIS CRAFTÉS",
@@ -619,7 +627,9 @@ ns.AddLocale("frFR", {
     ["test, Living Crown — pattern tooltip: "] = "test, Living Crown — infobulle du patron : ",
     ["test, Living Crown — recipe data: "] = "test, Living Crown — données de recette : ",
     ["Transmute — best today: %s%s"] = "Transmutation — la meilleure aujourd'hui : %s%s",
+    ["unstable price"] = "prix instable",
     ["Weapons & shields"] = "Armes et boucliers",
+    ["well under its usual price"] = "bien sous son prix habituel",
     ["|cffe0a83dcooldowns ready:|r "] = "|cffe0a83drecharges prêtes :|r ",
 
     -- ListsUI.lua
@@ -679,6 +689,8 @@ ns.AddLocale("frFR", {
     ["No AH patterns"] = "Sans patron HV",
     ["No price history yet: scan this list at the AH."] = "Pas encore d'historique : scanne cette liste à l'HV.",
     ["No route yet: scan the AH (full scan) so the materials get a price."] = "Pas encore de route : fais un scan complet de l'HV pour que les composants aient un prix.",
+    ["Normal price: not cheap enough to buy, not high enough to sell."] = "Prix normal : pas assez bas pour acheter, pas assez haut pour vendre.",
+    ["normal"] = "normal",
     ["Nothing matches these filters."] = "Rien ne correspond à ces filtres.",
     ["Now"] = "Actuel",
     ["Open the auction house to scan this list."] = "Ouvre l'hôtel des ventes pour scanner cette liste.",
@@ -704,7 +716,6 @@ ns.AddLocale("frFR", {
     ["Used in:"] = "Utilisé dans :",
     ["Usual price (7 days)"] = "Prix habituel (7 jours)",
     ["Usual"] = "Habituel",
-    ["usual"] = "habituel",
     ["Value what you craft at its AH price minus the 5% cut (liquid markets only)."] = "Valorise ce que tu craftes à son prix HV moins les 5 % de l'HV (marchés liquides seulement).",
     ["Value what you craft at its merchant price: guaranteed, no limit."] = "Valorise ce que tu craftes à son prix marchand : garanti, sans limite.",
     ["Value what you craft at what disenchanting it gives (green, blue and purple gear only)."] = "Valorise ce que tu craftes à ce que donne son désenchantement (équipement vert, bleu et violet seulement).",
@@ -712,6 +723,7 @@ ns.AddLocale("frFR", {
     ["Volatility"] = "Volatilité",
     ["You have"] = "Tu en as",
     ["→ Auctionator"] = "→ Auctionator",
+    ["● %d: under their usual price right now (BUY)"] = "● %d : sous leur prix habituel en ce moment (ACHETER)",
 
     -- History.lua
     ["%d scans that day"] = "%d scans ce jour-là",
@@ -762,7 +774,9 @@ ns.AddLocale("frFR", {
     ["Max items per post (gear, bags)"] = "Objets max par mise en vente (équipement, sacs)",
     ["Medium"] = "Moyenne",
     ["Raw materials (cloth, leather, ore, meat & fish, herbs, elemental, enchanting): what is worth farming."] = "Matières premières (tissu, cuir, minerai, viande et poisson, herbes, élémentaire, enchantement) : ce qui vaut la peine d'être farmé.",
+    ["Scans the whole auction house (prices of everything + Market tab). The game allows it every 15 minutes: in between, it scans only your professions' reagents and crafts."] = "Scanne tout l'hôtel des ventes (prix de tout + onglet Marché). Le jeu l'autorise toutes les 15 minutes : entre deux, seuls les composants et crafts de tes métiers sont scannés.",
     ["Short"] = "Courte",
     ["sold %d/%d"] = "vendu %d/%d",
     ["Stock target: starts at 2 (gear: 1), +2 when it sells, ×2 when everything sells within an hour, −2 when it doesn't. Capped by your budget."] = "Stock visé : commence à 2 (équipement : 1), +2 quand ça se vend, ×2 quand tout part en moins d'une heure, −2 quand ça ne se vend pas. Limité par ton budget.",
+    ["The game requires one click per search: click Continue."] = "Le jeu exige un clic par recherche : clique sur Continuer.",
 })
