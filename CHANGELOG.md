@@ -39,6 +39,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - AH purchases by buyout were sometimes logged under the wrong item (the last one searched, e.g. the item Auctionator looked up while you posted). The item now comes from the listing you bought.
 - Overview: Top AH sales lists 5 items, so the last one no longer runs into the version number.
 - Price history: the chart tooltip showed "Listed" twice.
+- Setup guide: a profession just learned (skill under 5, e.g. Cooking 1 on a new alt) no longer asks to be opened; levelling it opens the window anyway.
 - Mail, Send tab: clicking one of your characters under "To" now enables the Send button right away (it stayed greyed until something else changed).
 - Mail: sending part of a stack for two different items at once now splits them one after the other, so the game does not refuse the second split.
 - Mail: the "Collect only" buttons no longer try to take items when your bags are full (they waited 4 s on each mail); they take the gold and stop.
