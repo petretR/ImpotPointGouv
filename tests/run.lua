@@ -670,6 +670,13 @@ Check("queue profitable: demand decides, not the margin alone", function()
     -- Your own sales come first.
     P.Stats = function() return nil end
     Assert(Q.DemandVerdict(rec, { channel = "ah", profit = 2000, listed = 5, sold7 = 14 }, rules) == "queue", "own sales: queue")
+    -- Gear: the market's "sold" counts expired auctions too; without your own sales, only a test craft.
+    local gi = ns.GetItemInfo
+    ns.GetItemInfo = function(id) if id == 780002 then return "Gloves", nil, 2, 50, 40, "Armor", "Leather", 1, "INVTYPE_HAND" end return gi(id) end
+    With(40)
+    Assert(Q.DemandVerdict({ pid = 780002, name = "Gloves", made = 1 }, { channel = "ah", profit = 3000, listed = 100 }, rules) == "test",
+        "gear with market sales only: a test craft")
+    ns.GetItemInfo = gi
     -- Vendor crafts are not gated by AH demand.
     Assert(Q.DemandVerdict(rec, { channel = "vendor", profit = 300 }, rules) == "queue", "vendor craft")
     P.Stats = stats
@@ -695,6 +702,58 @@ Check("repost advice: one line in the tooltip, and in Auctionator's post confirm
     Assert(sale:GetConfirmationMessage() == nil, "no advice: no confirmation")
     TR.PostAdvice = orig
     _G.AuctionHouseFrame = nil
+end)
+
+Check("Today: profitable crafts that sell, by profession, with how many you can make", function()
+    local TD, Q, CR, P = ns.Today, ns.Queue, ns.Craft, ns.Prices
+    Assert(TD and ns.Routine == TD, "Today replaces Routine (old name kept for the mailbox)")
+    local me = UnitGUID("player")
+    local recipes, profChars, inv = ns.db.recipes, ns.db.profChars, ns.db.inv
+    local rOf, eval, verdict, vend = Q.RecipesOf, CR.GetEval, Q.DemandVerdict, P.IsVendorItem
+    -- "Stew" is known by me only; the alt has Cooking but not this recipe.
+    ns.db.recipes = { Cooking = { Stew = { k = { [me] = true } }, Pie = {}, Soup = {} } }
+    ns.db.profChars = { Cooking = { [me] = true, ["Player-alt"] = true } }
+    local chars = ns.db.chars
+    ns.db.chars = setmetatable({ ["Player-alt"] = { name = "Alt" } }, { __index = chars })
+    ns.db.inv = { [me] = { bags = { [791100] = 7 }, bank = {} } }
+    -- a: profitable and sells; b: profitable, nobody buys it; c: loses money.
+    local recs = {
+        { name = "Stew", pid = 791001, reagents = { { id = 791100, n = 2 }, { id = 791101, n = 1 } } },
+        { name = "Pie", pid = 791002, reagents = {} },
+        { name = "Soup", pid = 791003, reagents = {} },
+    }
+    local evs = { [791001] = { profit = 500, margin = 0.5, channel = "ah" }, [791002] = { profit = 900, margin = 0.6, channel = "ah" },
+        [791003] = { profit = -100, margin = -0.1, channel = "ah" } }
+    Q.RecipesOf = function() return recs end
+    CR.GetEval = function(rec) return evs[rec.pid] end
+    Q.DemandVerdict = function(rec) if rec.pid == 791002 then return "nodemand", 0 end return "queue", 1500, 12 end
+    P.IsVendorItem = function(id) return id == 791101 end
+    local groups = TD.Profitable()
+    Q.RecipesOf, CR.GetEval, Q.DemandVerdict, P.IsVendorItem = rOf, eval, verdict, vend
+    ns.db.recipes, ns.db.profChars, ns.db.inv = recipes, profChars, inv
+    ns.db.chars = chars
+    Assert(#groups == 1 and groups[1].prof == "Cooking", "one profession")
+    Assert(#groups[1].who == 1 and groups[1].who[1] == me, "only the character who knows the recipe, not every cook")
+    local rows = groups[1].rows
+    Assert(#rows == 1 and rows[1].rec.pid == 791001, "only the profitable craft that sells")
+    Assert(rows[1].can == 3, "7 of the 2-per-craft material, the vendor one doesn't limit: 3 crafts, got " .. tostring(rows[1].can))
+    -- A setting changes: the list is evaluated again (not kept until the next scan).
+    local calls = 0
+    CR.GetEval = function(rec) calls = calls + 1; return evs[rec.pid] end
+    Q.RecipesOf = function() return recs end
+    Q.DemandVerdict = function(rec) if rec.pid == 791002 then return "nodemand", 0 end return "queue", 1500, 12 end
+    ns.db.recipes, ns.db.profChars = { Cooking = { a = {} } }, { Cooking = { [me] = true } }
+    TD.ResetProfitable()
+    TD.Profitable()
+    TD.Profitable() -- cached: no new evaluation
+    ns.Fire("SETTINGS_CHANGED")
+    TD.Profitable()
+    Q.RecipesOf, CR.GetEval, Q.DemandVerdict = rOf, eval, verdict
+    ns.db.recipes, ns.db.profChars = recipes, profChars
+    Assert(calls == 6, "evaluated again after a settings change (3 + 3), got " .. calls)
+    TD.Show()
+    Assert(rawget(_G, "ImpotPointGouvToday"):IsShown(), "window opens")
+    rawget(_G, "ImpotPointGouvToday"):Hide()
 end)
 
 Check("no file replaces a Blizzard global table (it would taint the game's own UI)", function()
@@ -833,6 +892,29 @@ Check("several AH sale mails paid in one gold change are each recorded as a sale
     local a, b = ns.db.tx[n0 + 1], ns.db.tx[n0 + 2]
     Assert(a and b and a.k == "ah_sale" and b.k == "ah_sale", "two sales, got " .. tostring(a and a.k) .. " / " .. tostring(b and b.k))
     Assert(a.i == "Cured Rugged Hide" and a.a == 505542 and b.i == "Black Dragonscale", "each with its item and amount")
+end)
+
+Check("vendor list: an item unchecked once is never proposed again", function()
+    local TD = ns.Today
+    bags[0] = { { itemID = 782001, stackCount = 19 }, { itemID = 782002, stackCount = 1 } }
+    ns.db.flipBought = { [782001] = 19, [782002] = 1 }
+    local use = C_Container.UseContainerItem
+    C_Container.UseContainerItem = function(bag, slot) bags[bag][slot] = nil end -- sold
+    Fire("MERCHANT_SHOW"); RunTimers(1)
+    TD.SellToVendor()
+    local win = rawget(_G, "ImpotPointGouvPreview")
+    Assert(win and win:IsShown() and #win.data == 2, "vendor list shows both items")
+    for _, r in ipairs(win.data) do if r.id == 782001 then r.checked = false end end
+    win.ok._scripts.OnClick(win.ok)
+    RunTimers(3)
+    Assert(TD.VendorKept()[782001] and not TD.VendorKept()[782002], "the unchecked item is kept")
+    bags[0] = { { itemID = 782001, stackCount = 19 } }
+    TD.SellToVendor()
+    Assert(not win:IsShown(), "nothing left to propose")
+    Fire("MERCHANT_CLOSED")
+    ns.db.flipBought, ns.db.settings.vendorKeep = nil, nil
+    C_Container.UseContainerItem = use
+    bags[0] = {}
 end)
 
 

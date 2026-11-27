@@ -917,7 +917,7 @@ function M.QuickFill(kind)
         end
     end
     local want = kind == "crafts" and RT.CraftsWant() or (key and RT.ReagentsWant(key) or {})
-    -- Whole stacks that fit in the wanted quantity (same rule as the Routine).
+    -- Whole stacks that fit in the wanted quantity (same rule as Today).
     for _, st in ipairs(RT.BagStacks(want)) do basket[st.id] = (basket[st.id] or 0) + st.count end
     if key then p.to:SetText(RT.CharName(key) or "") end
     p.status:SetText(next(basket) and "" or (kind == "crafts" and "Nothing to send to your bank." or "Your crafter needs nothing from these bags."))

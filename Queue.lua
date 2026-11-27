@@ -136,6 +136,7 @@ function RecipesOf(prof)
     end
     return list
 end
+Q.RecipesOf = function(prof) return RecipesOf(prof) end
 
 -- Fills the queue with profitable recipes, aiming at a target stock.
 -- allProfs = true: all the character's professions (otherwise only the open profession).
@@ -376,7 +377,13 @@ end
 -- whose demand is unknown), "nodemand" or "flooded". Also returns the expected profit per day.
 function Q.DemandVerdict(rec, ev, rules)
     if ev.channel ~= "ah" then return "queue", ev.profit or 0 end
-    local d = Q.Demand(rec, ev)
+    local d, src = Q.Demand(rec, ev)
+    -- Gear: the market estimate counts every auction that disappears, and crafted gear expires a lot
+    -- (leveling crafts posted again and again). Only your own sales prove it sells; otherwise one test.
+    if d and src == "market" and IsSingle(rec.pid) then
+        local c = Cycle(ns.db.items[rec.pid] or rec.name, time() - 14 * 86400)
+        if c.sold == 0 then return (c.posted > 0) and "nodemand" or "test", 0 end
+    end
     if d == nil then
         local c = Cycle(ns.db.items[rec.pid] or rec.name, time() - 14 * 86400)
         if c.posted > 0 and c.sold == 0 then return "nodemand", 0 end
@@ -470,7 +477,8 @@ function Q.AutoQueue(allProfs)
         if c.cost > 0 then n = math.min(n, math.floor(left / c.cost)) end
         if n < c.runs then cut = true end
         if n > 0 then
-            db[c.k] = { prof = c.prof, name = c.name, n = n, auto = true, owner = me, test = c.test or nil }
+            db[c.k] = { prof = c.prof, name = c.name, n = n, auto = true, owner = me, test = c.test or nil,
+                perDay = (c.perDay > 0 and c.perDay < math.huge) and c.perDay or nil }
             left = left - n * c.cost
             added = added + 1
         end
@@ -568,7 +576,8 @@ function Q.Plan(owner)
         local rec = (owner == "*" or e.owner == owner) and RecFrom(e.prof, e.name)
         if rec then
             local ev = CR.GetEval(rec)
-            plan.crafts[#plan.crafts + 1] = { key = k, prof = e.prof, name = e.name, n = e.n, rec = rec, ev = ev, auto = e.auto, owner = e.owner }
+            plan.crafts[#plan.crafts + 1] = { key = k, prof = e.prof, name = e.name, n = e.n, rec = rec, ev = ev, auto = e.auto, owner = e.owner,
+                test = e.test, perDay = e.perDay }
             for _, rg in ipairs(rec.reagents) do if rg.id then Need(rg.id, rg.n * e.n) end end
             plan.cost = plan.cost + (ev.cost or 0) * e.n
             plan.revenue = plan.revenue + (ev.value or 0) * e.n

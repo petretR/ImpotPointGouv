@@ -61,7 +61,7 @@ local function Build()
         local chosen = {}
         for _, row in ipairs(win.data or {}) do if row.checked then chosen[#chosen + 1] = row end end
         win:Hide()
-        if #chosen > 0 and win.onConfirm then win.onConfirm(chosen) end
+        if (#chosen > 0 or win.opts.allowNone) and win.onConfirm then win.onConfirm(chosen) end
     end, "primary")
     win.ok:SetPoint("BOTTOMRIGHT", -12, 12)
     ns.Theme.CloseOnEscape(_G["ImpotPointGouvPreview"])
@@ -108,6 +108,6 @@ function PV.Draw()
     local txt = win.opts.total and win.opts.total(n, items, value)
         or ((Tr("%d item%s")):format(items, items == 1 and "" or "s") .. (value > 0 and ("  ·  " .. ns.FormatMoney(value, { iconSize = 11 })) or ""))
     win.total:SetText(txt)
-    win.ok.text:SetText(win.opts.confirm or "Confirm")
-    win.ok:SetDisabled(n == 0)
+    win.ok.text:SetText((n == 0 and win.opts.allowNone and win.opts.noneLabel) or win.opts.confirm or "Confirm")
+    win.ok:SetDisabled(n == 0 and not win.opts.allowNone)
 end

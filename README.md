@@ -56,7 +56,7 @@ Craft advisor next to the profession window, a craft queue per crafter with adap
 
 ### Mail & routine
 - Mailbox overlay: collect all (or only sales, purchases, expired…), Send tab with recipient autocomplete and attachment counter.
-- Routine window: send crafts to the bank, reagents to the crafter, buy vendor reagents, sell to vendor. Every batch action shows a checklist first.
+- Today window: the crafts worth doing right now, by profession. Profitable at current prices, with real demand, and how many times you can make each with the materials you hold. The vendor bar sells what pays more at a vendor and buys the queue's reagents; every batch action shows a checklist first.
 
 ### Disenchanting
 On enchanters only: lists the greens and blues in your bags (equipment sets excluded), one key press per item.
@@ -71,7 +71,7 @@ English and French, picked automatically from the game client language. Translat
 |---|---|
 | `/ipg` | Main window |
 | `/ipg lists` | Lists tab, plus a check of the recipe data the game provides |
-| `/ipg list` | Routine window |
+| `/ipg today` | Today window |
 | `/ipg de` | Disenchant window |
 | `/ipg profit` | Show or hide the profit next to each recipe in the profession window (off when ForeverRecipes shows its own) |
 | `/ipg item <item>` | Price history of an item (link, id or name); `/ipg price` does the same |
@@ -104,7 +104,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Origins.lua` | Where sold items came from (farmed, bought, crafted), rebuilt from the logs |
 | `History.lua` | Price history window: one point per scan, daily summaries, key numbers |
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |
-| `Routine.lua`, `Next.lua`, `Preview.lua` | Routine window, next-action key, checklist before batch actions |
+| `Today.lua`, `Next.lua`, `Preview.lua` | Today window, next-action key, checklist before batch actions |
 | `Mail.lua` | Mailbox (Inbox / Send tabs) |
 | `MailRules.lua` | Mail rules: what goes to which character (engine, no UI) |
 | `Destroy.lua` | Disenchanting |

@@ -725,7 +725,7 @@ function M.BuildPage(page)
         if vf then
             local list, t = M.Flips()
             self.data = list
-            self.sub:SetText(t and ((Tr("last scan %s ago  ·  %d flip%s  ·  buy, then Routine > Sell to vendor")):format(
+            self.sub:SetText(t and ((Tr("last scan %s ago  ·  %d flip%s  ·  buy, then Today > Sell at a vendor")):format(
                 P.Ago(time() - t), #list, #list == 1 and "" or "s")) or "no full scan yet")
             self.empty:SetText(t and "Nothing listed below vendor price in your last scan." or "Click Scan at the auction house first.")
             self.empty:SetShown(#list == 0)

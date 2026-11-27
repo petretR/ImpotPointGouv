@@ -535,7 +535,7 @@ local function BuildSettings(page)
     local function Toggle(col, label, get, set, tip)
         local yy = Row(col, label, tip)
         local b
-        b = T.Button(cols[col], "", 64, 24, function() set(not get()); page:Refresh() end, "pill")
+        b = T.Button(cols[col], "", 64, 24, function() set(not get()); page:Refresh(); ns.Fire("SETTINGS_CHANGED") end, "pill")
         b:SetPoint("TOPRIGHT", -16, yy)
         page.items[#page.items + 1] = function() b.text:SetText(get() and Tr("On") or Tr("Off")); b:SetSelected(get()) end
     end
@@ -544,9 +544,9 @@ local function BuildSettings(page)
         local yy = Row(col, label, tip)
         local v = T.Text(cols[col], 12, { bold = true, justify = "CENTER" }); v:SetWidth(76)
         v:SetPoint("TOPRIGHT", -44, yy - 4)
-        local minus = T.Button(cols[col], "−", 24, 24, function() set(get() - step); page:Refresh() end)
+        local minus = T.Button(cols[col], "−", 24, 24, function() set(get() - step); page:Refresh(); ns.Fire("SETTINGS_CHANGED") end)
         minus:SetPoint("RIGHT", v, "LEFT", -2, 0)
-        local plus = T.Button(cols[col], "+", 24, 24, function() set(get() + step); page:Refresh() end)
+        local plus = T.Button(cols[col], "+", 24, 24, function() set(get() + step); page:Refresh(); ns.Fire("SETTINGS_CHANGED") end)
         plus:SetPoint("TOPRIGHT", -16, yy)
         page.items[#page.items + 1] = function() v:SetText(fmt(get())) end
     end
@@ -558,8 +558,6 @@ local function BuildSettings(page)
     local st = function() return ns.db.settings end
 
     Head(1, "General")
-    Toggle(1, "Routine opens by itself", function() return st().routineAuto ~= false end,
-        function(v) st().routineAuto = v end, "On your bank and crafters only, at the AH and vendors.")
     Toggle(1, "ImpotPointGouv mailbox", function() return st().mailOverlay ~= false end,
         function(v) st().mailOverlay = v end, "Replaces Blizzard's mailbox window with ours.")
     Toggle(1, "Minimap button", function() return not st().minimap.hide end,
@@ -599,6 +597,19 @@ local function BuildSettings(page)
     Head(2, "Data")
     local setupB = T.Button(cols[2], Tr("Setup guide"), 140, 28, function() ns.Setup.Show() end)
     setupB:SetPoint("TOPLEFT", 16, y[2]); y[2] = y[2] - 38
+    -- Items you chose to keep from the vendor: how many, and a button to propose them again.
+    local kept = T.Button(cols[2], "", 140, 28, function()
+        if ns.db.settings.vendorKeep then wipe(ns.db.settings.vendorKeep) end
+        page:Refresh()
+    end)
+    kept:SetPoint("TOPLEFT", 16, y[2]); y[2] = y[2] - 38
+    kept.tooltip = Tr("Items you unchecked in the vendor list are never offered there again. Click to offer them again.")
+    page.items[#page.items + 1] = function()
+        local n = 0
+        for _ in pairs(ns.db.settings.vendorKeep or {}) do n = n + 1 end
+        kept.text:SetText((Tr("Kept items: %d")):format(n))
+        kept:SetDisabled(n == 0)
+    end
     local reset = T.Button(cols[2], Tr("Reset all data"), 140, 28, function()
         T.Dialog({ text = Tr("ImpotPointGouv: erase all history (transactions, charts, characters)?\nThis cannot be undone."),
             accept = Tr("Erase all"), onAccept = function() L.Reset(); ns.Print(Tr("history erased. The tax office starts over.")) end })
@@ -646,11 +657,11 @@ local function Build()
     local deB = T.Button(header, Tr("Disenchant"), 96, 26, function() ns.Destroy.Toggle() end)
     deB:SetPoint("RIGHT", close, "LEFT", -10, 0)
     deB.tooltip = Tr("Disenchant the greens in your bags, one key press each.")
-    local rtB = T.Button(header, Tr("Routine"), 84, 26, function() ns.Routine.Toggle() end)
+    local rtB = T.Button(header, Tr("Today"), 84, 26, function() ns.Today.Toggle() end)
     rtB:SetPoint("RIGHT", deB, "LEFT", -6, 0)
-    -- Disenchant only on an enchanter character; otherwise Routine takes its place.
+    -- Disenchant only on an enchanter character; otherwise Today takes its place.
     frame.deB, frame.rtB, frame.closeB = deB, rtB, close
-    rtB.tooltip = Tr("Your daily loop: craft queue, shopping list, Auctionator export, mail buttons.")
+    rtB.tooltip = Tr("The crafts worth doing right now, by profession.")
 
     local tabDefs = {
         { "bilan", "Overview" }, { "lists", "Lists" }, { "market", "Market" }, { "stock", "Stock" }, { "tx", "History" },
@@ -790,7 +801,7 @@ function UI.Menu(anchor)
         T.Surface(menu, C.window, 10, { 1, 1, 1, 0.12 })
         local entries = {
             { "Overview", function() UI.Toggle("bilan") end },
-            { "Routine (shopping list)", function() ns.Routine.Toggle() end },
+            { "Today (profitable crafts)", function() ns.Today.Toggle() end },
             { "Disenchant", function() ns.Destroy.Toggle() end },
             { "Transactions", function() UI.Toggle("tx") end },
             { "Lists (watch, buy, farm)", function() UI.Toggle("lists") end },
@@ -835,8 +846,8 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
     elseif msg == "vendor" then
         ns.db.settings.autoVendorBuy = ns.db.settings.autoVendorBuy == false
         ns.Print(Tr("auto-buy of vendor reagents ") .. (ns.db.settings.autoVendorBuy and "on." or "off."))
-    elseif msg == "list" or msg == "routine" then
-        ns.Routine.Toggle()
+    elseif msg == "today" or msg == "list" or msg == "routine" then
+        ns.Today.Toggle()
     elseif msg == "lists" or msg == "listes" then
         UI.Toggle("lists"); ns.Lists.Diag()
     elseif msg:match("^price") or msg:match("^prix") then
