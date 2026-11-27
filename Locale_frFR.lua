@@ -107,6 +107,7 @@ ns.AddLocale("frFR", {
     ["Routine opens by itself"] = "La Routine s'ouvre toute seule",
     ["Routine"] = "Routine",
     ["Sales"] = "Ventes",
+    ["Search an item and see how its price moved."] = "Chercher un objet et voir l'évolution de son prix.",
     ["Selling at the AH"] = "Vente à l'HV",
     ["Settings"] = "Réglages",
     ["Setup guide"] = "Guide de configuration",
@@ -755,7 +756,6 @@ ns.AddLocale("frFR", {
     ["stable"] = "stable",
     ["Units gone"] = "Unités parties",
     ["Units listed"] = "Unités ajoutées",
-    ["usage: /ipg item <item link, id or name>"] = "usage : /ipg item <lien, id ou nom de l'objet>",
     ["Usual "] = "Habituel ",
     ["usual range "] = "fourchette habituelle ",
     ["vendor price"] = "prix marchand",
@@ -769,6 +769,10 @@ ns.AddLocale("frFR", {
     ["Within 10% of the lowest"] = "À moins de 10 % du moins cher",
     ["~%s sold/day"] = "~%s vendus/jour",
 
+    -- Search.lua
+    ["Item name, or shift-click an item"] = "Nom de l'objet, ou maj-clic sur un objet",
+    ["No item with a price matches. Prices come from your AH scans."] = "Aucun objet avec un prix ne correspond. Les prix viennent de tes scans HV.",
+
     -- Unused
     ["  |cffed5c52%d%% above usual!|r"] = "  |cffed5c52%d%% au-dessus de l'habituel !|r",
     ["  |cffed5c52above your max %s: not profitable anymore!|r"] = "  |cffed5c52au-dessus de ton max %s : plus rentable !|r",
@@ -781,4 +785,5 @@ ns.AddLocale("frFR", {
     ["sold %d/%d"] = "vendu %d/%d",
     ["Stock target: starts at 2 (gear: 1), +2 when it sells, ×2 when everything sells within an hour, −2 when it doesn't. Capped by your budget."] = "Stock visé : commence à 2 (équipement : 1), +2 quand ça se vend, ×2 quand tout part en moins d'une heure, −2 quand ça ne se vend pas. Limité par ton budget.",
     ["The game requires one click per search: click Continue."] = "Le jeu exige un clic par recherche : clique sur Continuer.",
+    ["usage: /ipg item <item link, id or name>"] = "usage : /ipg item <lien, id ou nom de l'objet>",
 })

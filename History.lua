@@ -553,18 +553,10 @@ end
 function H.Command(arg)
     arg = arg or ""
     local id = tonumber(arg) or tonumber(arg:match("item:(%d+)"))
-    if not id and arg ~= "" then
-        local want, partial = arg:lower(), nil
-        for iid, n in pairs(ns.db.items or {}) do
-            if type(n) == "string" then
-                local ln = n:lower()
-                if ln == want then id = iid; break end
-                if not partial and ln:find(want, 1, true) then partial = iid end
-            end
-        end
-        id = id or partial
-    end
-    if id then H.Show(id) else ns.Print(Tr("usage: /ipg item <item link, id or name>")) end
+    if id then H.Show(id); return end
+    -- A name: one clear match opens it, otherwise the search shows the choices.
+    local hits = arg ~= "" and ns.Search.Find(arg, 2) or {}
+    if hits[1] and (hits[1].rank == 0 or #hits == 1) then H.Show(hits[1].id) else ns.Search.Open(nil, arg) end
 end
 
 ns.On("PRICES_CHANGED", function() if H.frame and H.frame:IsShown() then H.dirty = true end end)
