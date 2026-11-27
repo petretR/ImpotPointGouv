@@ -377,7 +377,13 @@ end
 -- whose demand is unknown), "nodemand" or "flooded". Also returns the expected profit per day.
 function Q.DemandVerdict(rec, ev, rules)
     if ev.channel ~= "ah" then return "queue", ev.profit or 0 end
-    local d = Q.Demand(rec, ev)
+    local d, src = Q.Demand(rec, ev)
+    -- Gear: the market estimate counts every auction that disappears, and crafted gear expires a lot
+    -- (leveling crafts posted again and again). Only your own sales prove it sells; otherwise one test.
+    if d and src == "market" and IsSingle(rec.pid) then
+        local c = Cycle(ns.db.items[rec.pid] or rec.name, time() - 14 * 86400)
+        if c.sold == 0 then return (c.posted > 0) and "nodemand" or "test", 0 end
+    end
     if d == nil then
         local c = Cycle(ns.db.items[rec.pid] or rec.name, time() - 14 * 86400)
         if c.posted > 0 and c.sold == 0 then return "nodemand", 0 end

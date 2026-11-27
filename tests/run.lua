@@ -670,6 +670,13 @@ Check("queue profitable: demand decides, not the margin alone", function()
     -- Your own sales come first.
     P.Stats = function() return nil end
     Assert(Q.DemandVerdict(rec, { channel = "ah", profit = 2000, listed = 5, sold7 = 14 }, rules) == "queue", "own sales: queue")
+    -- Gear: the market's "sold" counts expired auctions too; without your own sales, only a test craft.
+    local gi = ns.GetItemInfo
+    ns.GetItemInfo = function(id) if id == 780002 then return "Gloves", nil, 2, 50, 40, "Armor", "Leather", 1, "INVTYPE_HAND" end return gi(id) end
+    With(40)
+    Assert(Q.DemandVerdict({ pid = 780002, name = "Gloves", made = 1 }, { channel = "ah", profit = 3000, listed = 100 }, rules) == "test",
+        "gear with market sales only: a test craft")
+    ns.GetItemInfo = gi
     -- Vendor crafts are not gated by AH demand.
     Assert(Q.DemandVerdict(rec, { channel = "vendor", profit = 300 }, rules) == "queue", "vendor craft")
     P.Stats = stats
@@ -703,8 +710,11 @@ Check("Today: profitable crafts that sell, by profession, with how many you can 
     local me = UnitGUID("player")
     local recipes, profChars, inv = ns.db.recipes, ns.db.profChars, ns.db.inv
     local rOf, eval, verdict, vend = Q.RecipesOf, CR.GetEval, Q.DemandVerdict, P.IsVendorItem
-    ns.db.recipes = { Cooking = { a = {}, b = {}, c = {} } }
-    ns.db.profChars = { Cooking = { [me] = true } }
+    -- "Stew" is known by me only; the alt has Cooking but not this recipe.
+    ns.db.recipes = { Cooking = { Stew = { k = { [me] = true } }, Pie = {}, Soup = {} } }
+    ns.db.profChars = { Cooking = { [me] = true, ["Player-alt"] = true } }
+    local chars = ns.db.chars
+    ns.db.chars = setmetatable({ ["Player-alt"] = { name = "Alt" } }, { __index = chars })
     ns.db.inv = { [me] = { bags = { [791100] = 7 }, bank = {} } }
     -- a: profitable and sells; b: profitable, nobody buys it; c: loses money.
     local recs = {
@@ -721,7 +731,9 @@ Check("Today: profitable crafts that sell, by profession, with how many you can 
     local groups = TD.Profitable()
     Q.RecipesOf, CR.GetEval, Q.DemandVerdict, P.IsVendorItem = rOf, eval, verdict, vend
     ns.db.recipes, ns.db.profChars, ns.db.inv = recipes, profChars, inv
+    ns.db.chars = chars
     Assert(#groups == 1 and groups[1].prof == "Cooking", "one profession")
+    Assert(#groups[1].who == 1 and groups[1].who[1] == me, "only the character who knows the recipe, not every cook")
     local rows = groups[1].rows
     Assert(#rows == 1 and rows[1].rec.pid == 791001, "only the profitable craft that sells")
     Assert(rows[1].can == 3, "7 of the 2-per-craft material, the vendor one doesn't limit: 3 crafts, got " .. tostring(rows[1].can))

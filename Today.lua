@@ -548,22 +548,37 @@ for _, e in ipairs({ "PRICES_CHANGED", "LEDGER_READY", "RECIPES_CHANGED", "SETTI
 end
 
 -- { { prof, who = {keys}, rows = { { rec, ev, perDay, demand, key, can } }, best }, ... } best first.
+-- Characters who know this very recipe (pattern, formula…), not just the profession.
+local function RecipeKnowers(prof, rec, profWho)
+    local saved = ns.db.recipes[prof] and ns.db.recipes[prof][rec.name]
+    if not (saved and saved.k and next(saved.k)) then return profWho end -- older data: the profession
+    local out = {}
+    for _, k in ipairs(profWho) do if saved.k[k] then out[#out + 1] = k end end
+    return out
+end
+
 function RT.Profitable()
     local groups = {}
     for prof in pairs(ns.db.recipes or {}) do
-        local who = Knowers(prof)
-        if #who > 0 then
-            local rows = {}
+        local profWho = Knowers(prof)
+        if #profWho > 0 then
+            local rows, who, inGroup = {}, {}, {}
             for _, c in ipairs(Candidates(prof)) do
+                local knowers = RecipeKnowers(prof, c.rec, profWho)
                 -- The character who can make it the most times (vendor-only materials: no limit).
-                local bestKey, bestN = who[1], nil
-                for _, k in ipairs(who) do
+                local bestKey, bestN = knowers[1], nil
+                for _, k in ipairs(knowers) do
+                    if not inGroup[k] then inGroup[k] = true; who[#who + 1] = k end
                     local n = CanMake(c.rec, k)
                     if n == nil then bestKey, bestN = k, nil; break end
                     if not bestN or n > bestN then bestKey, bestN = k, n end
                 end
-                rows[#rows + 1] = { rec = c.rec, ev = c.ev, perDay = c.perDay or c.ev.profit, demand = c.demand, key = bestKey, can = bestN }
+                if bestKey then
+                    rows[#rows + 1] = { rec = c.rec, ev = c.ev, perDay = c.perDay or c.ev.profit, demand = c.demand,
+                        key = bestKey, can = bestN, prof = prof }
+                end
             end
+            table.sort(who)
             if #rows > 0 then
                 -- What you can make right now first (vendor materials count as available), then the rest.
                 table.sort(rows, function(a, b)
@@ -632,6 +647,7 @@ local function Build()
         r.day = T.Text(r, 11, { justify = "RIGHT", color = C.muted }); r.day:SetPoint("RIGHT", -2, 0); r.day:SetWidth(66)
         r:SetScript("OnEnter", function(self)
             local d = self.data
+            if d and d.mat then T.ItemTooltip(self, d.id); GameTooltip:Show(); return end
             if not d or not d.rec then return end
             self.hl:SetColor({ 1, 1, 1, 0.04 })
             T.ItemTooltip(self, d.rec.pid)
@@ -641,14 +657,24 @@ local function Build()
             if d.perDay then GameTooltip:AddDoubleLine(Tr("Expected profit per day"), ns.FormatMoney(d.perDay, { iconSize = 11 }), 0.7, 0.7, 0.7, 1, 1, 1) end
             GameTooltip:AddDoubleLine(Tr("Sells at"), ns.ChannelLabel(d.ev.channel), 0.7, 0.7, 0.7, 1, 1, 1)
             if d.key then GameTooltip:AddDoubleLine(Tr("Crafted by"), Colored(d.key), 0.7, 0.7, 0.7) end
+            GameTooltip:AddLine(Tr("Click: the materials to buy"), 0.88, 0.66, 0.24)
             GameTooltip:Show()
         end)
         r:SetScript("OnLeave", function(self) self.hl:SetColor({ 1, 1, 1, 0 }); GameTooltip:Hide() end)
+        -- Click a craft: show or hide its materials (what to buy).
+        r:SetScript("OnMouseUp", function(self)
+            local d = self.data
+            if not (d and d.rec and d.prof) then return end
+            local k = d.prof .. "\001" .. d.rec.name
+            frame.expanded[k] = not frame.expanded[k] or nil
+            frame.lines = nil; Draw()
+        end)
         frame.rows[i] = r
     end
     frame.empty = T.Text(card, 12, { color = C.faint, justify = "CENTER", wrap = true })
     frame.empty:SetPoint("CENTER", 0, 0); frame.empty:SetWidth(W - 80)
     frame.off = 0
+    frame.expanded = {}
     card:EnableMouseWheel(true)
     card:SetScript("OnMouseWheel", function(_, d)
         frame.off = math.max(0, math.min(math.max(0, #(frame.lines or {}) - ROWS), frame.off - d * 2)); Draw()
@@ -667,7 +693,19 @@ local function Lines()
         local names = {}
         for _, k in ipairs(g.who) do names[#names + 1] = Colored(k) end
         lines[#lines + 1] = { head = true, text = Tr(g.prof) .. "   |cff8a877f" .. table.concat(names, ", ") .. "|r" }
-        for _, row in ipairs(g.rows) do lines[#lines + 1] = row end
+        for _, row in ipairs(g.rows) do
+            lines[#lines + 1] = row
+            -- Clicked: its materials from the AH (vendor ones left out), what you hold and what to buy.
+            if frame.expanded[g.prof .. "\001" .. row.rec.name] then
+                for _, rg in ipairs(row.rec.reagents or {}) do
+                    if rg.id and (rg.n or 0) > 0 and not P.IsVendorItem(rg.id) then
+                        local have = I.CharCount(row.key, rg.id)
+                        lines[#lines + 1] = { mat = true, id = rg.id, need = rg.n, have = have,
+                            buy = math.max(0, rg.n - have), price = P.AHValue(rg.id) }
+                    end
+                end
+            end
+        end
     end
     return lines
 end
@@ -684,6 +722,17 @@ Draw = function()
         r.data = d
         if not d then
             r:Hide()
+        elseif d.mat then
+            -- Material of the craft above: per craft, what you hold, what to buy and its AH price.
+            r:SetAlpha(1)
+            r.icon:Show(); r.icon:SetTexture(ns.GetItemIcon(d.id) or "Interface\\Icons\\INV_Misc_QuestionMark")
+            r.icon:SetPoint("LEFT", 30, 0)
+            r.name:SetPoint("LEFT", 54, 0); r.name:SetWidth(186)
+            r.name:SetText(("|cffb8b3a8%d× %s|r"):format(d.need, P.Name(d.id)))
+            r.can:SetText(d.buy > 0 and ("|cffed5c52" .. (Tr("buy %d")):format(d.buy) .. "|r") or ("|cff5cd173" .. (Tr("have %d")):format(d.have) .. "|r"))
+            r.profit:SetText(d.price and ("|cff8a877f" .. Short(d.price) .. "|r") or "")
+            r.day:SetText("")
+            r:Show()
         elseif d.head then
             r.icon:Hide(); r:SetAlpha(1)
             r.name:SetPoint("LEFT", 8, 0); r.name:SetWidth(W - 60)
@@ -691,6 +740,7 @@ Draw = function()
             r.can:SetText(""); r.profit:SetText(""); r.day:SetText("")
             r:Show()
         else
+            r.icon:SetPoint("LEFT", 6, 0)
             r.icon:Show(); r.icon:SetTexture(d.rec.icon or ns.GetItemIcon(d.rec.pid) or "Interface\\Icons\\INV_Misc_QuestionMark")
             r.name:SetPoint("LEFT", 30, 0); r.name:SetWidth(210)
             r.name:SetText(d.rec.name)
