@@ -650,6 +650,11 @@ local function Build()
     rtB:SetPoint("RIGHT", deB, "LEFT", -6, 0)
     -- Disenchant only on an enchanter character; otherwise Routine takes its place.
     frame.deB, frame.rtB, frame.closeB = deB, rtB, close
+    local seB = T.Button(header, "", 30, 26, function(self) ns.Search.Toggle(self) end)
+    seB:SetPoint("RIGHT", rtB, "LEFT", -6, 0)
+    local mag = seB:CreateTexture(nil, "OVERLAY")
+    mag:SetTexture("Interface\\Common\\UI-Searchbox-Icon"); mag:SetSize(14, 14); mag:SetPoint("CENTER", 0, -1)
+    seB.tooltip = Tr("Search an item and see how its price moved.")
     rtB.tooltip = Tr("Your daily loop: craft queue, shopping list, Auctionator export, mail buttons.")
 
     local tabDefs = {
@@ -830,6 +835,8 @@ SlashCmdList.IMPOTPOINTGOUV = function(msg)
     msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     local itemArg = msg:match("^item%s+(.+)$")
     if itemArg or msg == "item" then ns.History.Command(itemArg); return end
+    local searchArg = msg:match("^search%s+(.+)$")
+    if searchArg or msg == "search" then ns.History.Command(searchArg); return end
     if msg == "tx" or msg == "transactions" then UI.Toggle("tx")
     elseif msg == "persos" or msg == "chars" then UI.Toggle("chars")
     elseif msg == "vendor" then

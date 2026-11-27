@@ -835,6 +835,23 @@ Check("several AH sale mails paid in one gold change are each recorded as a sale
     Assert(a.i == "Cured Rugged Hide" and a.a == 505542 and b.i == "Black Dragonscale", "each with its item and amount")
 end)
 
+Check("item search: accents ignored, best match first, only priced items, UI opens", function()
+    local SR, realm = ns.Search, ns.Realm()
+    local items, prices = ns.db.items, ns.db.prices
+    ns.db.items = { [790001] = "Thick Leather Ammo Pouch", [790002] = "Thick Leather", [790003] = "Heavy Thick Leather",
+        [790004] = "Écaille de tortue", [790005] = "Thick Leather Gloves" }
+    ns.db.prices = { [realm] = { [790001] = { cur = 1 }, [790002] = { cur = 1 }, [790003] = { cur = 1 }, [790004] = { cur = 1 } } }
+    local hits = SR.Find("thick leather")
+    Assert(#hits == 3, "3 priced matches, got " .. #hits)
+    Assert(hits[1].id == 790002 and hits[2].id == 790001 and hits[3].id == 790003, "exact, then prefix, then word")
+    Assert(SR.Find("ECAILLE")[1].id == 790004 and SR.Find("écaille")[1].id == 790004, "accents and case ignored")
+    Assert(#SR.Find("  ") == 0 and #SR.Find("gloves") == 0, "blank text, unpriced item: nothing")
+    SR.Open(nil, "thick")
+    Assert(_G.ImpotPointGouvSearch and _G.ImpotPointGouvSearch:IsShown(), "search window open")
+    _G.ImpotPointGouvSearch:Hide()
+    ns.db.items, ns.db.prices = items, prices
+end)
+
 
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then os.exit(1) end

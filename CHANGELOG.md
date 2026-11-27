@@ -6,6 +6,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 ## [Unreleased]
 
 ### Added
+- Item search: the magnifier in the window header (or `/ipg search`) finds any item with a price on your realm as you type, accents ignored, with its price and 7-day change. Enter or click opens its price history; shift-click an item to search it.
 - Settings: Master Chef rank (WoW Forever Legacy talent, 0 to 5). Cooking margins, Queue profitable and the Cooking leveling route count its extra results on average (+10 % per rank).
 - Mail: rules, like TSM's mailing operations. A rule sends a kind of item (Leather, Herb, Food & Drink, Flask… the game's item types), the items you crafted, one of your lists or one item to one of your characters, keeping a number on the sender. In the Send tab, "By rules" selects everything that matches for the recipient with the most items; check and Send. "Rules…" opens the editor (first matching rule wins, a character never mails itself).
 - Overview: the Sales card splits your AH sales by origin: farmed or looted, trading profit (resold minus what you paid) and crafted; hover for the detail. Rebuilt from the logs already kept (oldest units sold first, mail between your characters keeps the origin, a craft uses up its reagents); items owned before tracking count as farmed.
