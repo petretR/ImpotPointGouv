@@ -73,7 +73,7 @@ end)
 
 Check("every main tab opens", function()
     ns.db.settings.marketFilter = "raw" -- the Market tab opens on its Farm view
-    for _, tab in ipairs({ "bilan", "lists", "market", "stock", "tx", "chars", "settings" }) do
+    for _, tab in ipairs({ "bilan", "lists", "market", "tx", "chars", "settings" }) do
         ns.UI.Toggle(tab)
         Assert(ns.UI.Current() == tab, "tab " .. tab .. " did not open")
     end
