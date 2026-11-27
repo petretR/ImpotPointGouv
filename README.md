@@ -46,10 +46,7 @@ Recipe materials come from the game itself, so they stay correct for WoW Forever
 What sells across the whole AH (estimated from full scans), what is worth farming, AH flips, vendor flips (listings below what a vendor pays), and **vendor crafts**: every recipe of every profession whose result sells to a vendor for more than its materials cost at the AH, with the profit per craft, how many crafts the current listings allow, the skill needed and where to learn it.
 
 ### Price history
-Click any item in Lists, Market or Stock (or type `/ipg item <item>` or `/ipg price <item>`) to open its price history: the lowest listing (bait listings skipped) and the market price (average of the cheapest 15–30 %), from 1 day to All, with the units gone and newly listed at each scan. The usual price range shows as a band and the vendor price as a dotted line. Four key numbers: vs vendor or usual price, last 4 days, since the first scan, AH supply. Below the curve: usual price, usual range, volatility, estimated sales per day, vendor price and the verdict. Items in your lists get one point per scan for 7 days and a daily summary for 2 years; every other item one point per day. Shift-click links the item in chat.
-
-### Stock tab
-Everything you own, on every character: bags, bank, warband bank, mail, AH listings and items in the mail to your characters. Each item is valued at its AH price after the 5 % cut or its vendor price, whichever is higher (soulbound items: vendor price only). Sort by name, quantity, unit value or total; filter AH-valued, vendor-valued or unpriced items. The Overview "Stock value" card uses the same numbers; click it to open the tab.
+Click any item in Lists or Market (or type `/ipg item <item>` or `/ipg price <item>`) to open its price history: the lowest listing (bait listings skipped) and the market price (average of the cheapest 15–30 %), from 1 day to All, with the units gone and newly listed at each scan. The usual price range shows as a band and the vendor price as a dotted line. Four key numbers: vs vendor or usual price, last 4 days, since the first scan, AH supply. Below the curve: usual price, usual range, volatility, estimated sales per day, vendor price and the verdict. Items in your lists get one point per scan for 7 days and a daily summary for 2 years; every other item one point per day. Shift-click links the item in chat.
 
 ### Crafting
 Craft advisor next to the profession window, a craft queue per crafter with adaptive stock targets and a budget cap, shopping list across all your characters, one key to craft the next recipe then disenchant.
@@ -100,7 +97,7 @@ Load order: see `ImpotPointGouv.toc`. All files share the `ns` table (`local _, 
 | `Prices.lua` | AH scans, price history and stats (usual price, low/high, volatility, sales/day) |
 | `Farm.lua` | Farm view: raw materials worth farming for your professions, trends, your gold per hour |
 | `Market.lua` | Market tab (what sells, flips, vendor crafts) |
-| `Stock.lua` | Stock tab: everything you own and its value |
+| `Stock.lua` | Value of everything you own (Overview "Stock value" card) |
 | `Origins.lua` | Where sold items came from (farmed, bought, crafted), rebuilt from the logs |
 | `History.lua` | Price history window: one point per scan, daily summaries, key numbers |
 | `Craft.lua`, `Queue.lua`, `Keep.lua` | Craft advisor, craft queue, quantities to keep |

@@ -52,7 +52,7 @@ local function CardTitle(card, text)
 end
 
 -- ------------------------------------------------------------ Overview page
--- Stock value: everything all your characters own, valued like the Stock tab (see Stock.lua).
+-- Stock value: everything all your characters own (see Stock.lua).
 function UI.StockValue()
     return ns.Stock.Value()
 end
@@ -119,17 +119,6 @@ local function BuildBilan(page)
                 GameTooltip:AddDoubleLine(Tr("   trading profit"), M(og.trading), 1, 1, 1, 1, 1, 1)
                 GameTooltip:AddDoubleLine(Tr("Crafted"), M(og.crafted), 1, 1, 1, 1, 1, 1)
                 GameTooltip:AddLine(Tr("Oldest units are sold first. Items owned before the addon tracked them count as farmed."), 0.6, 0.6, 0.6, true)
-                GameTooltip:Show()
-            end)
-            card:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        end
-        if i == 3 then
-            -- Click: the Stock tab (item by item detail).
-            card:EnableMouse(true)
-            card:SetScript("OnMouseUp", function() UI.Toggle("stock") end)
-            card:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-                GameTooltip:AddLine(Tr("Click: see every item in the Stock tab"), 0.88, 0.66, 0.24)
                 GameTooltip:Show()
             end)
             card:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -653,7 +642,7 @@ local function Build()
     rtB.tooltip = Tr("Your daily loop: craft queue, shopping list, Auctionator export, mail buttons.")
 
     local tabDefs = {
-        { "bilan", "Overview" }, { "lists", "Lists" }, { "market", "Market" }, { "stock", "Stock" }, { "tx", "History" },
+        { "bilan", "Overview" }, { "lists", "Lists" }, { "market", "Market" }, { "tx", "History" },
         { "chars", "Characters" }, { "settings", "Settings" },
     }
     local x = 226
@@ -680,7 +669,6 @@ local function Build()
     Page("tx", BuildTransactions)
     Page("chars", BuildCharacters)
     Page("market", ns.Market.BuildPage)
-    Page("stock", ns.Stock.BuildPage)
     Page("lists", ns.ListsUI.BuildPage)
     Page("settings", BuildSettings)
 

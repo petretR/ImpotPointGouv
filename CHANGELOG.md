@@ -32,6 +32,7 @@ Every pull request adds its lines under **Unreleased**; a release pull request t
 - Leveling route: clicking an alternative uses that recipe for the step's skill range. "Reset my choices" clears these picks.
 
 ### Removed
+- The Stock tab. The Overview's "Stock value" card keeps the same total (everything you own, valued at the AH after the cut or at a vendor, whichever is higher); it is no longer clickable.
 - AH: the Buy reagents, Post and Cancel undercut buttons next to Scan, and the "Selling at the AH" settings that went with them. Buying and posting stay with the AH or Auctionator; the addon keeps the shopping list and the prices. The AH bar shrinks to one compact row: the Scan button and its status line. The "click Scan" reminder is gone: the bar already says how long ago the last full scan was.
 
 ### Fixed
